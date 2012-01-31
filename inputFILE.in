@@ -1,0 +1,44 @@
+&VARIABLES
+ DT      =  0.2		!time-step
+ BETA    =  100.0	!inverse T
+ U       =  2.0		!Hubbard U correlation
+EFIELD= 0.02
+VPD= 0.0
+ TS      =  1.0		!hopping amplitude
+NSTEP= 200
+ NLOOP   =  4		!# of DMFT loops
+ EQNLOOP =  10		!# of DMFT loops in the  EQ solution
+/
+!
+!
+&FLAGS
+ IRDEQ        =  FF	!associated EQ solution flag
+ METHOD       =  ipt   	!Solution method: IPT/SPT
+ UPDATE_WFFTW =  FF	!flag to update WF using FFT algorithm
+ SOLVE_WFFTW  =  FF	!flag to solve KB equations using FFT algorithm
+/
+!
+!
+&PARAMETERS
+ L	 =  2048	!Just a Large number
+ LMU	 =  2048	!# of deg. of freedom in BATH
+ LKREDUCED= 100		!# of k-points in reduced BZ
+ EMIN    = -20.0	!half-width of the bath (min. Energy)
+ EPS     =  0.05		!broadening
+ T0	 =  0.d0	!turn on istant of Electric field
+ T1	 =  100.d0	!turn off istant of Electric field
+/
+!
+!
+&LATTICEN
+ NX      = 10		!# of k-points along x-axis
+ NY      = 10		!# of k-points along y-axis
+/
+!
+!
+&QUENCH
+ IQUENCH =  FF		!Quench flag
+ BETA0   =  100.0	!quenched inverse T
+ XMU0    =  0.0		!quenched chemical potential
+ U0      =  6.0		!quenched Hubbard correlation
+/
