@@ -5,21 +5,20 @@
 !     AUTHORS  : Adriano Amaricci
 !#####################################################################
 MODULE VARS_GLOBAL
-  !LIBRARY: put here all the LIBS in common
+  !SciFor library
   USE COMMON_VARS
   USE GREENFUNX
   USE CHRONOBAR
   USE VECTORS
   USE SQUARE_LATTICE
   USE IOTOOLS
-  USE SLPLOT
-  USE SLREAD
   USE FFTGF
   USE SPLINE
   USE TOOLS
-  !Local:
-  !USE ELECTRIC_FIELD
   implicit none
+
+  !Version revision
+  include "revision.inc"
 
   !Gloabl  variables
   !=========================================================
@@ -145,6 +144,9 @@ contains
     integer          :: i
     logical,optional :: printf
     logical          :: control
+
+    call version(revision)
+
     allocate(help_buffer(59))
     help_buffer=([&
          'NAME',&
@@ -237,7 +239,6 @@ contains
     write(*,*)""
     if(present(printf).AND.printf.eq..true.)call dump_input_file("used.")
 
-    xmu    = 0.d0
     !SET OMP THREADS NUMBER
     call omp_set_num_threads(omp_num_threads)
 

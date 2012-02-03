@@ -5,7 +5,7 @@ program getDATA
   USE FUNX_NEQ
   USE DLPLOT
   implicit none
-  integer                                :: i,j,ik,loop,narg,iarg,k,m,ia,ir,irel,iave
+  integer                                :: i,j,ik,loop,narg,iarg,k,ia,ir,irel,iave
   character(len=16)                      :: DIR
   character(len=4)                       :: char
   complex(8),dimension(:,:),allocatable  :: locGret,Sret,impGret,G0ret
@@ -403,10 +403,10 @@ contains
     end forall
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
     call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ;    gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)
-    call splot(dir//"/locGless_t.ipt",t(-nstep:nstep),gf%less%t,TT)
-    call splot(dir//"/locGgtr_t.ipt",t(-nstep:nstep),gf%gtr%t,TT)
-    call splot(dir//"/locGret_t.ipt",t(-nstep:nstep),gf%ret%t,TT)
-    call splot(dir//"/locGret_realw.ipt",wr,gf%ret%w,TT)
+    call splot(dir//"/locGless_t.ipt",t(-nstep:nstep),gf%less%t,append=TT)
+    call splot(dir//"/locGgtr_t.ipt",t(-nstep:nstep),gf%gtr%t,append=TT)
+    call splot(dir//"/locGret_t.ipt",t(-nstep:nstep),gf%ret%t,append=TT)
+    call splot(dir//"/locGret_realw.ipt",wr,gf%ret%w,append=TT)
     call splot(dir//"/locDOS.ipt",wr,-aimag(gf%ret%w)/pi)
 
     forall(i=0:nstep,j=0:nstep)

@@ -325,10 +325,10 @@ contains
     end forall
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
     call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ;  gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)
-    call splot("locGless_t.ipt",t,gf%less%t,TT)
-    call splot("locGgtr_t.ipt",t,gf%gtr%t,TT)
-    call splot("locGret_t.ipt",t,gf%ret%t,TT)
-    call splot("locGret_realw.ipt",wr,gf%ret%w,TT)
+    call splot("locGless_t.ipt",t,gf%less%t,append=TT)
+    call splot("locGgtr_t.ipt",t,gf%gtr%t,append=TT)
+    call splot("locGret_t.ipt",t,gf%ret%t,append=TT)
+    call splot("locGret_realw.ipt",wr,gf%ret%w,append=TT)
     call splot("locDOS.ipt",wr,-aimag(gf%ret%w)/pi,append=TT)
     if(fchi)then
        call splot("locChi_11.data",chi(1,1,0:nstep,0:nstep))
