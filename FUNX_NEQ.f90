@@ -285,7 +285,7 @@ contains
     if(update_wfftw)then
        include "obtain_Gimp_equilibrium.f90"
     else
-       include "obtain_Gimp_non.equilibrium.f90"
+       include "obtain_Gimp_nonequilibrium.f90"
     endif
 
     !Save data:
