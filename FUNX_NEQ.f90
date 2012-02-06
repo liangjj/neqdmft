@@ -100,7 +100,7 @@ contains
     if(irdeq)then            !Read from equilibrium solution
        call read_init_seed()
        do ik=1,irdL             !2*L
-          en   = irdwr(ik)
+          en   = irdwr(ik)+xmu
           nless= fermi0(en,beta)
           ngtr = fermi0(en,beta)-1.d0
           A    = -aimag(irdG0w(ik))/pi*irdfmesh
@@ -119,13 +119,13 @@ contains
 
        if(equench)then
           do ik=1,Lk
-             en   = epsik(ik)
+             en   = epsik(ik)+xmu
              nless= fermi0(en,beta)
              ngtr = fermi0(en,beta)-1.d0
              do j=0,nstep
                 do i=0,nstep
                    intE=int_Ht(ik,i,j)
-                   peso=exp(-xi*intE)
+                   peso=exp(-xi*intE)*exp(-xi*xmu*t(i-j))
                    G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
                    G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
                 enddo
@@ -135,7 +135,7 @@ contains
        else
 
           do ik=1,Lk
-             en   = epsik(ik)
+             en   = epsik(ik)+xmu
              nless= fermi0(en,beta)
              ngtr = fermi0(en,beta)-1.d0
              A    = wt(ik)
@@ -195,7 +195,7 @@ contains
   subroutine get_sigma()
     integer                               :: i,j,itau
 
-    !Get SIgma:
+    !Get Sigma:
     call msg("Get Sigma(t,t')")
     forall(i=0:nstep,j=0:nstep)
        Sless(i,j) = (U**2)*(G0less(i,j)**2)*G0gtr(j,i)
@@ -285,7 +285,7 @@ contains
     if(update_wfftw)then
        include "obtain_Gimp_equilibrium.f90"
     else
-       include "obtain_Gimp_non.equilibrium.f90"
+       include "obtain_Gimp_nonequilibrium.f90"
     endif
 
     !Save data:

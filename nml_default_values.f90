@@ -1,10 +1,11 @@
   !     Variables:
-  dt      = 0.157080
-  beta    = 100.0
-  U       = 6.0
-  Efield  = 0.0
-  Vpd     = 0.0
-  ts      = 1.0
+  dt      = 0.1d0
+  beta    = 100.d0
+  U       = 6.d0
+  Efield  = 0.d0
+  Vpd     = 0.d0
+  ts      = 1.d0
+  xmu     = 0.d0
   nstep   = 50
   nloop   = 30
   eps_error= 1.d-4
@@ -36,7 +37,7 @@
   Lkreduced  = 200
   wbath      = 10.0
   bath_type  = "constant"
-  eps        = 0.05d0
+  eps        = 0.01d0
   irdG0file  = "eqG0w.restart"
   irdnkfile  = "eqnk.restart"
   omp_num_threads =1      

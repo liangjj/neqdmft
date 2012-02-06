@@ -8,7 +8,7 @@
   call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep)  ;  sf%ret%w=dt*sf%ret%w   ; call swap_fftrt2rw(sf%ret%w)   !swap because F(t) are not oscillating in this formalism:
   gf%ret%w = one/(one/gf0%ret%w - sf%ret%w)
   do i=1,2*nstep
-     w = wr(i)
+     w = wr(i)+xmu
      A=-aimag(gf%ret%w(i))/pi
      gf%less%w(i)= pi2*xi*fermi(w,beta)*A
      gf%gtr%w(i) = pi2*xi*(fermi(w,beta)-1.d0)*A

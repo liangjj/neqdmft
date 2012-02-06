@@ -29,7 +29,7 @@ contains
     call system("if [ ! -d BATH ]; then mkdir BATH; fi")
     call msg("Using "//trim(adjustl(trim(bath_type)))//" dissipative bath")
 
-    allocate(bath_epsik(Lmu),bath_dens(-Lw:Lw),wfreq(-Lw:Lw))
+    allocate(bath_epsik(Lmu),bath_dens(Lw),wfreq(Lw))
 
     !fake linear dispersion
     ebini=-Wbath/2.d0 ; de=Wbath/dble(Lmu)
@@ -37,25 +37,26 @@ contains
 
     select case(bath_type)
     case default
-       wfin=Wbath ; wini=-wfin
-       wfreq(-Lw:Lw)= linspace(wini,wfin,2*Lw+1,mesh=dw)
+       wfin  = Wbath ; wini=-wfin
+       wfreq = linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_constant_dos()
 
     case("bethe")
-       wfin=Wbath ; wini=-wfin
-       wfreq(-Lw:Lw)= linspace(wini,wfin,2*Lw+1,mesh=dw)
+       wfin  = Wbath ; wini=-wfin
+       wfreq = linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_bethe_dos()
 
     case("gaussian")
-       wfin=4.d0*Wbath ; wini=-wfin
-       wfreq(-Lw:Lw)= linspace(wini,wfin,2*Lw+1,mesh=dw)
+       wfin = 4.d0*Wbath ; wini=-wfin
+       wfreq= linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_gaussian_dos()
+
     end select
 
 
     S0less=zero ; S0gtr=zero
     do iw=-Lw,Lw
-       en   = wfreq(iw)
+       en   = wfreq(iw)+xmu
        nless= fermi0(en,beta)
        ngtr = fermi0(en,beta)-1.d0
        do i=-nstep,nstep
@@ -87,7 +88,7 @@ contains
     complex(8) :: gf,iw,zeta
 
     do i=-Lw,Lw
-       w=wfreq(i) ; zeta=cmplx(w,eps,8)       
+       w=wfreq(i)+xmu ; zeta=cmplx(w,eps,8)
        gf=zero
        do ik=1,Lmu
           gf=gf+one/(zeta-bath_epsik(ik))/dble(Lmu)
@@ -115,13 +116,13 @@ contains
     real(8)    :: w,sig,alpha
     complex(8) :: gf,zeta
 
-    bath_dens = exp(-0.5d0*(wfreq/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
-    !bath_dens = exp(-(wfreq/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
+    bath_dens = exp(-0.5d0*((wfreq+xmu)/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
+    !bath_dens = exp(-((wfreq+xmu)/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
 
     !    !!w/ erf in frquency space: coded from Abramowitz-Stegun
     ! do i=-Lw,Lw
-    !    w=wfreq(i)
-    !    !zeta=cmplx(w,eps,8)
+    !    !w=wfreq(i)
+    !    !zeta=cmplx(w+xmu,eps,8)
     !    !sig=aimag(zeta)/abs(dimag(zeta))
     !    !gf=-sig*xi*sqrt(pi)*wfun(zeta/Wbath)/Wbath
     !    !bath_dens(i)=-aimag(gf)/pi
@@ -147,7 +148,7 @@ contains
     complex(8) :: gf,zeta
 
     do i=-Lw,Lw
-       w=wfreq(i)
+       w=wfreq(i)+xmu
        zeta=cmplx(w,eps,8)
        gf=gfbether(w,zeta,wbath/2.d0)
        bath_dens(i)=-aimag(gf)/pi

@@ -5,6 +5,7 @@
      case("DT")		;read(nml_var%value,*)dt
      case("BETA")	;read(nml_var%value,*)beta
      case("U")		;read(nml_var%value,*)U
+     case("XMU")	;read(nml_var%value,*)xmu
      case("EFIELD")	;read(nml_var%value,*)Efield
      case("VPD")	;read(nml_var%value,*)Vpd
      case("TS")		;read(nml_var%value,*)ts

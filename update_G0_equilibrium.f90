@@ -8,7 +8,7 @@
   call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ; sf%ret%w=sf%ret%w*dt ; call swap_fftrt2rw(sf%ret%w)
   gf0%ret%w=one/(one/gf%ret%w + sf%ret%w)
   do i=1,2*nstep
-     w = wr(i)
+     w = wr(i)+xmu
      A = -aimag(gf0%ret%w(i))/pi
      An= A*fermi(w,beta)
      gf0%less%w(i)= pi2*xi*An

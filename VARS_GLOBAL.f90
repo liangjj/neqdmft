@@ -17,9 +17,12 @@ MODULE VARS_GLOBAL
   USE FFTGF
   USE SPLINE
   USE TOOLS
-  !Local:
-  !USE ELECTRIC_FIELD
+
   implicit none
+
+  !Version control
+  !=========================================================
+  include "revision.inc"
 
   !Gloabl  variables
   !=========================================================
@@ -126,7 +129,7 @@ MODULE VARS_GLOBAL
 
   !NAMELISTS:
   !=========================================================  
-  namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess
+  namelist/variables/dt,beta,xmu,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess
   namelist/Field/Ex,Ey,t0,t1,tau0,w0,field_profile
   namelist/latticeN/Nx,Ny
   namelist/parameters/L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,irdG0file,irdnkfile,omp_num_threads
@@ -145,6 +148,9 @@ contains
     integer          :: i
     logical,optional :: printf
     logical          :: control
+    
+    call version(revision)
+
     allocate(help_buffer(59))
     help_buffer=([&
          'NAME',&
@@ -237,7 +243,6 @@ contains
     write(*,*)""
     if(present(printf).AND.printf.eq..true.)call dump_input_file("used.")
 
-    xmu    = 0.d0
     !SET OMP THREADS NUMBER
     call omp_set_num_threads(omp_num_threads)
 
@@ -271,7 +276,7 @@ contains
     integer          :: i
     real(8)          :: ex
     if(char=='a')then
-       print '(A)', "Allocating the memory:"
+       write(*,"(A)",advance="no")"Allocating the memory:"
        allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
        allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
        allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
@@ -302,7 +307,7 @@ contains
 
 
     elseif(char=='d')then
-       print '(A)',"Deallocating:"
+       write(*,"(A)",advance="no")"Deallocating:"
        deallocate(G0gtr,G0less)
        deallocate(S0less,S0gtr)
        deallocate(Sgtr,Sless)
@@ -327,8 +332,8 @@ contains
        deallocate(exa)
 
     end if
-    print '(A)',"done" 
-    print '(A)', "" 
+    write(*,"(A)")"done" 
+    write(*,"(A)")
   end subroutine alloc_memory
 
 

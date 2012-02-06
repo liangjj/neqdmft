@@ -11,7 +11,7 @@ OBJS_OPT = VARS_GLOBAL_OPT.o ELECTRIC_FIELD_OPT.o BATH_OPT.o FUNX_NEQ_OPT.o KADA
 OBJS_DEB = VARS_GLOBAL_DEB.o ELECTRIC_FIELD_DEB.o BATH_DEB.o FUNX_NEQ_DEB.o KADANOFBAYM_DEB.o
 
 #=================STANDARD COMPILATION====================================
-all: 	$(OBJS)
+all: 	version $(OBJS)
 	@echo " ........... compile: normal ........... "
 	$(FC)  $(STD) $(OBJS) $(EXE).f90 -o $(DIREXE)/$(EXE) $(MODS) $(LIBS)
 	@echo " ...................... done .............................. "
@@ -22,7 +22,7 @@ all: 	$(OBJS)
 
 
 #================OPTIMIZED COMPILATION====================================
-opt: 	$(OBJS_OPT)
+opt: 	version $(OBJS_OPT)
 	@echo " ........... compile: optimized   ........... "
 	$(FC) $(OPT) $(OBJS_OPT) $(EXE).f90 -o $(DIREXE)/$(EXE) $(MODS) $(LIBS)
 	@echo " ...................... done .............................. "
@@ -33,7 +33,7 @@ opt: 	$(OBJS_OPT)
 
 
 #================DEBUGGIN COMPILATION=====================================
-debug: 	$(OBJS_DEB)
+debug: 	version $(OBJS_DEB)
 	@echo " ........... compile: debug   ........... "
 	$(FC) $(DEB) $(OBJS_DEB) $(EXE).f90 -o $(DIREXE)/$(EXE) $(MODS_DEB) $(LIBS_DEB)
 	@echo " ...................... done .............................. "
@@ -44,7 +44,7 @@ debug: 	$(OBJS_DEB)
 
 
 #==============DATA EXTRACTION======================================
-data: 	$(OBJS)
+data: 	version $(OBJS)
 	@echo " ........... compile: getdata ........... "
 	${FC} ${STD} $(OBJS) get_data_$(EXE).f90 -o ${DIREXE}/get_data_$(EXE) ${DSL_MODS} ${MODS} ${DSL_LIBS} ${X11} ${LIBS}
 	@echo ""
@@ -103,6 +103,8 @@ KADANOFBAYM_DEB.o: KADANOFBAYM.f90
 #=============CLEAN ALL===================================================
 clean: 
 	@echo "Cleaning:"
-	@rm -f *.mod
-	@rm -f *.o
-	@rm -f *~
+	@rm -f *.mod *.o *~ revision.inc
+
+
+#=============REVISION ===================================================
+include $(HOME)/lib/version.mk

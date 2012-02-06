@@ -325,10 +325,10 @@ contains
     end forall
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
     call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ;  gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)
-    call splot("locGless_t.ipt",t,gf%less%t,TT)
-    call splot("locGgtr_t.ipt",t,gf%gtr%t,TT)
-    call splot("locGret_t.ipt",t,gf%ret%t,TT)
-    call splot("locGret_realw.ipt",wr,gf%ret%w,TT)
+    call splot("locGless_t.ipt",t,gf%less%t,append=TT)
+    call splot("locGgtr_t.ipt",t,gf%gtr%t,append=TT)
+    call splot("locGret_t.ipt",t,gf%ret%t,append=TT)
+    call splot("locGret_realw.ipt",wr,gf%ret%w,append=TT)
     call splot("locDOS.ipt",wr,-aimag(gf%ret%w)/pi,append=TT)
     if(fchi)then
        call splot("locChi_11.data",chi(1,1,0:nstep,0:nstep))
@@ -364,10 +364,10 @@ contains
           kt = kgrid(ix,iy)-Ak
           vel= square_lattice_velocity(kt)
           do j=0,nstep
-             chi_pm(1,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%x*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
-             chi_pm(1,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%y*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
-             chi_pm(2,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%x*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
-             chi_pm(2,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%y*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
+             chi_pm(1,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%x*wt(ik)*dimag(GkretF(i,j)*Gkless(j,i))
+             chi_pm(1,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%y*wt(ik)*dimag(GkretF(i,j)*Gkless(j,i))
+             chi_pm(2,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%x*wt(ik)*dimag(GkretF(i,j)*Gkless(j,i))
+             chi_pm(2,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%y*wt(ik)*dimag(GkretF(i,j)*Gkless(j,i))
           enddo
        enddo
     enddo
@@ -426,10 +426,11 @@ contains
     real(8) :: en,mu,invtemp
     call msg("Building initial conditions:")
     call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
-    mu=xmu
-    invtemp=beta
-    if(iquench)mu=xmu0
-    if(iquench)invtemp=beta0
+    mu=xmu ; invtemp=beta
+    if(iquench)then
+       mu=xmu0 ; invtemp=beta0
+    endif
+
     if(irdeq)then
        icGkless = xi*irdNk
     else
@@ -438,7 +439,7 @@ contains
           Icgkless(ik) = xi*fermi0(en,invtemp)
        enddo
     endif
-    call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),aimag(icGkless(1:Lk)))
+    call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),dimag(icGkless(1:Lk)))
     return
   end subroutine build_ic
 
@@ -503,7 +504,7 @@ contains
     j=ik2iy(ik)
     Ak=Afield(tbar,Ek)
     kt=kgrid(i,j) - Ak
-    Hbar=square_lattice_dispersion(kt)
+    Hbar=square_lattice_dispersion(kt)!-xmu
   end function Hbar
 
 
@@ -572,7 +573,7 @@ contains
     gf%ret%w=zero
     do i=1,2*nstep
        w=wr(i)
-       zetan=cmplx(w,eps,8)-sf%ret%w(i) !-eqsbfret(i)
+       zetan=cmplx(w,eps,8)+xmu-sf%ret%w(i) !-eqsbfret(i)
        do ik=1,Lk
           gf%ret%w(i)=gf%ret%w(i)+wt(ik)/(zetan-epsik(ik))
        enddo
@@ -598,7 +599,7 @@ contains
     do ik=1,Lk
        funcM=zero
        do i=1,L
-          w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigma(i)
+          w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) +xmu -sigma(i)
           funcM(i)=one/(zetan - epsik(ik))
        enddo
        call fftgf_iw2tau(funcM,funcT,beta)
