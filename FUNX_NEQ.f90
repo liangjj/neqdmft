@@ -100,7 +100,7 @@ contains
     if(irdeq)then            !Read from equilibrium solution
        call read_init_seed()
        do ik=1,irdL             !2*L
-          en   = irdwr(ik)+xmu
+          en   = irdwr(ik)-xmu
           nless= fermi0(en,beta)
           ngtr = fermi0(en,beta)-1.d0
           A    = -aimag(irdG0w(ik))/pi*irdfmesh
@@ -119,13 +119,13 @@ contains
 
        if(equench)then
           do ik=1,Lk
-             en   = epsik(ik)+xmu
+             en   = epsik(ik)
              nless= fermi0(en,beta)
              ngtr = fermi0(en,beta)-1.d0
              do j=0,nstep
                 do i=0,nstep
                    intE=int_Ht(ik,i,j)
-                   peso=exp(-xi*intE)*exp(-xi*xmu*t(i-j))
+                   peso=exp(-xi*intE)*exp(xi*xmu*t(i-j))
                    G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
                    G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
                 enddo
@@ -135,7 +135,7 @@ contains
        else
 
           do ik=1,Lk
-             en   = epsik(ik)+xmu
+             en   = epsik(ik)-xmu
              nless= fermi0(en,beta)
              ngtr = fermi0(en,beta)-1.d0
              A    = wt(ik)
@@ -156,8 +156,15 @@ contains
     call get_sigma 
 
     !Save data:
-    call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-    call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
+    call splot("guessG0less.data",G0less(0:nstep,0:nstep),t(0:nstep))
+    call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep),t(0:nstep))
+    forall(i=0:nstep,j=0:nstep)
+       gf0%ret%t(i-j)  = heaviside(t(i)-t(j))*(G0gtr(i,j)   - G0less(i,j))
+    end forall
+    if(heaviside(0.d0)==1.d0)gf0%ret%t(0)=gf0%ret%t(0)/2.d0 !; gf0%ret%t(0)=-xi
+    call fftgf_rt2rw(gf0%ret%t,gf0%ret%w,nstep) ;    gf0%ret%w=gf0%ret%w*dt ; call swap_fftrt2rw(gf0%ret%w)
+    call splot("guessG0ret_realw.ipt",wr,gf0%ret%w)
+    call splot("guessG0less_t.ipt",t(-nstep:nstep),gf0%less%t(-nstep:nstep))
 
   contains
 
@@ -193,7 +200,7 @@ contains
   !PURPOSE  : BUild the 2^nd IPT sigma functions:
   !+-------------------------------------------------------------------+
   subroutine get_sigma()
-    integer                               :: i,j,itau
+    integer                    :: i,j,itau
 
     !Get Sigma:
     call msg("Get Sigma(t,t')")
@@ -201,6 +208,7 @@ contains
        Sless(i,j) = (U**2)*(G0less(i,j)**2)*G0gtr(j,i)
        Sgtr (i,j) = (U**2)*(G0gtr(i,j)**2)*G0less(j,i)
     end forall
+
 
     !Get impurity GF and use SPT method if required
     call obtain_Gimp
@@ -216,6 +224,16 @@ contains
     !Save data:
     call splot("Sless.data",Sless(0:nstep,0:nstep))
     call splot("Sgtr.data",Sgtr(0:nstep,0:nstep))
+
+
+    forall(i=0:nstep,j=0:nstep)
+       sf%ret%t(i-j)  = heaviside(t(i)-t(j))*(Sgtr(i,j)   - Sless(i,j))
+    end forall
+    if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0 !; gf0%ret%t(0)=-xi
+    call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ;    sf%ret%w=sf%ret%w*dt ; call swap_fftrt2rw(sf%ret%w)
+    call splot("firstSigmaret_realw.ipt",wr,sf%ret%w,append=TT)
+
+
     return
   end subroutine Get_Sigma
 

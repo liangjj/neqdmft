@@ -10,7 +10,7 @@ module BATH
   implicit none
   private
   integer,parameter                :: Lw=1024 !# of frequencies
-  real(8),allocatable,dimension(:) :: bath_dens,bath_epsik,wfreq
+  real(8),allocatable,dimension(:) :: bath_dens,wfreq
   public                           :: get_Bath
 
 contains
@@ -21,7 +21,7 @@ contains
   !+-------------------------------------------------------------------+
   subroutine get_Bath()
     integer          :: iw,i
-    real(8)          :: en,w,ebini,de,dw,wfin,wini
+    real(8)          :: en,w,dw,wfin,wini
     complex(8)       :: peso
     real(8)          :: ngtr,nless,arg
 
@@ -29,20 +29,16 @@ contains
     call system("if [ ! -d BATH ]; then mkdir BATH; fi")
     call msg("Using "//trim(adjustl(trim(bath_type)))//" dissipative bath")
 
-    allocate(bath_epsik(Lmu),bath_dens(Lw),wfreq(Lw))
-
-    !fake linear dispersion
-    ebini=-Wbath/2.d0 ; de=Wbath/dble(Lmu)
-    forall(i=1:Lmu)bath_epsik(i)=ebini + real(i,8)*de
+    allocate(bath_dens(Lw),wfreq(Lw))
 
     select case(bath_type)
     case default
-       wfin  = Wbath ; wini=-wfin
+       wfin  = 2.d0*Wbath ; wini=-wfin
        wfreq = linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_constant_dos()
 
     case("bethe")
-       wfin  = Wbath ; wini=-wfin
+       wfin  = 2.d0*Wbath ; wini=-wfin
        wfreq = linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_bethe_dos()
 
@@ -56,7 +52,7 @@ contains
 
     S0less=zero ; S0gtr=zero
     do iw=-Lw,Lw
-       en   = wfreq(iw)+xmu
+       en   = wfreq(iw)
        nless= fermi0(en,beta)
        ngtr = fermi0(en,beta)-1.d0
        do i=-nstep,nstep
@@ -80,20 +76,15 @@ contains
 
 
   !+-----------------------------------------------------------------+
-  !PURPOSE  : Build BATH dispersion arrays \epsilon_bath(\ka) = bath_epski(i)
+  !PURPOSE  : Build constant BATH 
   !+-----------------------------------------------------------------+
   subroutine get_bath_constant_dos()
-    integer    :: i,ik
+    integer    :: i
     real(8)    :: w
-    complex(8) :: gf,iw,zeta
 
     do i=-Lw,Lw
-       w=wfreq(i)+xmu ; zeta=cmplx(w,eps,8)
-       gf=zero
-       do ik=1,Lmu
-          gf=gf+one/(zeta-bath_epsik(ik))/dble(Lmu)
-       enddo
-       bath_dens(i)=-aimag(gf)/pi
+       w=wfreq(i)
+       bath_dens(i)= heaviside(Wbath-abs(w))/(2.d0*Wbath)
     enddo
 
   end subroutine get_bath_constant_dos

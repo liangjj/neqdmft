@@ -397,8 +397,8 @@ contains
        do i=0,nstep
           Ak = Afield(t(i),Ek)
           kt = kgrid(ix,iy)-Ak
-          eab(1)=2*ts*cos(kt%x)
-          eab(2)=2*ts*cos(kt%y)
+          eab(1)=2.d0*ts*cos(kt%x)
+          eab(2)=2.d0*ts*cos(kt%y)
           chi_dia(1,1,i)=chi_dia(1,1,i)+2.d0*wt(ik)*eab(1)*xi*Gkless(i,i)
           chi_dia(2,2,i)=chi_dia(2,2,i)+2.d0*wt(ik)*eab(2)*xi*Gkless(i,i)
        enddo
@@ -456,7 +456,6 @@ contains
     integer :: ik,itau
     Gkless(0,0)=icGkless(ik)
     Gkgtr(0,0) =icGkless(ik)-xi
-    return
   end subroutine read_ic
 
 
@@ -500,11 +499,10 @@ contains
     real(8)      :: tbar
     type(vect2D) :: kt,Ak
     tbar=t(istep) + dt/2.d0
-    i=ik2ix(ik)
-    j=ik2iy(ik)
+    i=ik2ix(ik) ; j=ik2iy(ik)
     Ak=Afield(tbar,Ek)
     kt=kgrid(i,j) - Ak
-    Hbar=square_lattice_dispersion(kt)!-xmu
+    Hbar=square_lattice_dispersion(kt)-xmu
   end function Hbar
 
 
