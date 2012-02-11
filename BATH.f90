@@ -10,7 +10,7 @@ module BATH
   implicit none
   private
   integer,parameter                :: Lw=1024 !# of frequencies
-  real(8),allocatable,dimension(:) :: bath_dens,bath_epsik,wfreq
+  real(8),allocatable,dimension(:) :: bath_dens,wfreq
   public                           :: get_Bath
 
 contains
@@ -21,7 +21,7 @@ contains
   !+-------------------------------------------------------------------+
   subroutine get_Bath()
     integer          :: iw,i
-    real(8)          :: en,w,ebini,de,dw,wfin,wini
+    real(8)          :: en,w,dw,wfin,wini
     complex(8)       :: peso
     real(8)          :: ngtr,nless,arg
 
@@ -29,27 +29,24 @@ contains
     call system("if [ ! -d BATH ]; then mkdir BATH; fi")
     call msg("Using "//trim(adjustl(trim(bath_type)))//" dissipative bath")
 
-    allocate(bath_epsik(Lmu),bath_dens(-Lw:Lw),wfreq(-Lw:Lw))
-
-    !fake linear dispersion
-    ebini=-Wbath/2.d0 ; de=Wbath/dble(Lmu)
-    forall(i=1:Lmu)bath_epsik(i)=ebini + real(i,8)*de
+    allocate(bath_dens(Lw),wfreq(Lw))
 
     select case(bath_type)
     case default
-       wfin=Wbath ; wini=-wfin
-       wfreq(-Lw:Lw)= linspace(wini,wfin,2*Lw+1,mesh=dw)
+       wfin  = 2.d0*Wbath ; wini=-wfin
+       wfreq = linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_constant_dos()
 
     case("bethe")
-       wfin=Wbath ; wini=-wfin
-       wfreq(-Lw:Lw)= linspace(wini,wfin,2*Lw+1,mesh=dw)
+       wfin  = 2.d0*Wbath ; wini=-wfin
+       wfreq = linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_bethe_dos()
 
     case("gaussian")
-       wfin=4.d0*Wbath ; wini=-wfin
-       wfreq(-Lw:Lw)= linspace(wini,wfin,2*Lw+1,mesh=dw)
+       wfin = 4.d0*Wbath ; wini=-wfin
+       wfreq= linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_gaussian_dos()
+
     end select
 
 
@@ -79,20 +76,15 @@ contains
 
 
   !+-----------------------------------------------------------------+
-  !PURPOSE  : Build BATH dispersion arrays \epsilon_bath(\ka) = bath_epski(i)
+  !PURPOSE  : Build constant BATH 
   !+-----------------------------------------------------------------+
   subroutine get_bath_constant_dos()
-    integer    :: i,ik
+    integer    :: i
     real(8)    :: w
-    complex(8) :: gf,iw,zeta
 
     do i=-Lw,Lw
-       w=wfreq(i) ; zeta=cmplx(w,eps,8)       
-       gf=zero
-       do ik=1,Lmu
-          gf=gf+one/(zeta-bath_epsik(ik))/dble(Lmu)
-       enddo
-       bath_dens(i)=-aimag(gf)/pi
+       w=wfreq(i)
+       bath_dens(i)= heaviside(Wbath-abs(w))/(2.d0*Wbath)
     enddo
 
   end subroutine get_bath_constant_dos
@@ -115,13 +107,13 @@ contains
     real(8)    :: w,sig,alpha
     complex(8) :: gf,zeta
 
-    bath_dens = exp(-0.5d0*(wfreq/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
-    !bath_dens = exp(-(wfreq/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
+    bath_dens = exp(-0.5d0*((wfreq+xmu)/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
+    !bath_dens = exp(-((wfreq+xmu)/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
 
     !    !!w/ erf in frquency space: coded from Abramowitz-Stegun
     ! do i=-Lw,Lw
-    !    w=wfreq(i)
-    !    !zeta=cmplx(w,eps,8)
+    !    !w=wfreq(i)
+    !    !zeta=cmplx(w+xmu,eps,8)
     !    !sig=aimag(zeta)/abs(dimag(zeta))
     !    !gf=-sig*xi*sqrt(pi)*wfun(zeta/Wbath)/Wbath
     !    !bath_dens(i)=-aimag(gf)/pi
@@ -147,7 +139,7 @@ contains
     complex(8) :: gf,zeta
 
     do i=-Lw,Lw
-       w=wfreq(i)
+       w=wfreq(i)+xmu
        zeta=cmplx(w,eps,8)
        gf=gfbether(w,zeta,wbath/2.d0)
        bath_dens(i)=-aimag(gf)/pi
