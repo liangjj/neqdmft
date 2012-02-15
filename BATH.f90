@@ -25,18 +25,11 @@ contains
     complex(8)       :: peso
     real(8)          :: ngtr,nless,arg
 
-    print '(A)',"Get Bath:"
+    call msg("Get Bath. Type: "//bold_green(trim(adjustl(trim(bath_type))))//" dissipative bath")
     call system("if [ ! -d BATH ]; then mkdir BATH; fi")
-    call msg("Using "//trim(adjustl(trim(bath_type)))//" dissipative bath")
-
     allocate(bath_dens(Lw),wfreq(Lw))
 
-    select case(bath_type)
-    case default
-       wfin  = 2.d0*Wbath ; wini=-wfin
-       wfreq = linspace(wini,wfin,Lw,mesh=dw)
-       call get_bath_constant_dos()
-
+    select case(trim(adjustl(trim(bath_type))))
     case("bethe")
        wfin  = 2.d0*Wbath ; wini=-wfin
        wfreq = linspace(wini,wfin,Lw,mesh=dw)
@@ -47,11 +40,19 @@ contains
        wfreq= linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_gaussian_dos()
 
+    case ("constant")
+       wfin  = 2.d0*Wbath ; wini=-wfin
+       wfreq = linspace(wini,wfin,Lw,mesh=dw)
+       call get_bath_constant_dos()
+
+    case default
+       call abort("Bath type:"//trim(adjustl(trim(bath_type)))//" not supported. Accepted values are: constant,gaussian,bethe.")
+
     end select
 
 
     S0less=zero ; S0gtr=zero
-    do iw=-Lw,Lw
+    do iw=1,Lw
        en   = wfreq(iw)
        nless= fermi0(en,beta)
        ngtr = fermi0(en,beta)-1.d0
@@ -63,8 +64,7 @@ contains
     enddo
     call splot("BATH/S0less_t.ipt",t,S0less)
     call splot("BATH/S0gtr_t.ipt",t,S0gtr)
-    call splot("DOSbath.lattice",wfreq,bath_dens)
-    call system("mv *.lattice BATH/ 2>/dev/null")
+    call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
   end subroutine get_Bath
 
 
@@ -82,7 +82,7 @@ contains
     integer    :: i
     real(8)    :: w
 
-    do i=-Lw,Lw
+    do i=1,Lw
        w=wfreq(i)
        bath_dens(i)= heaviside(Wbath-abs(w))/(2.d0*Wbath)
     enddo
@@ -107,7 +107,7 @@ contains
     real(8)    :: w,sig,alpha
     complex(8) :: gf,zeta
 
-    bath_dens = exp(-0.5d0*((wfreq+xmu)/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
+    bath_dens = exp(-0.5d0*(wfreq/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
     !bath_dens = exp(-((wfreq+xmu)/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
 
     !    !!w/ erf in frquency space: coded from Abramowitz-Stegun
@@ -138,7 +138,7 @@ contains
     real(8)    :: w,sig,alpha
     complex(8) :: gf,zeta
 
-    do i=-Lw,Lw
+    do i=1,Lw
        w=wfreq(i)+xmu
        zeta=cmplx(w,eps,8)
        gf=gfbether(w,zeta,wbath/2.d0)

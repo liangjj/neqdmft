@@ -23,7 +23,7 @@ program neqDMFT
   call print_Afield_form(t(0:nstep))
 
   !STARTS THE REAL WORK:
-  call alloc_memory('a')        !allocate functions in the memory
+  call global_memory_allocation !allocate functions in the memory
   call get_bath()               !get the dissipative bath functions
   call guess_g0_sigma           !guess/read the first Weiss field/Sigma:
 
@@ -37,6 +37,6 @@ program neqDMFT
      converged = convergence_check()
      call end_loop()
   enddo
-  call alloc_memory('d')
+  !call alloc_memory('d')
   print*,"BRAVO!"
 end PROGRAM neqDMFT

@@ -72,13 +72,6 @@ MODULE VARS_GLOBAL
 
   !Frequency domain:
   type(keldysh_equilibrium_gf)        :: gf0,gf,sf
-  ! complex(8),dimension(:),allocatable :: g0fret,g0fless,g0fgtr
-  ! complex(8),dimension(:),allocatable :: gfret,gfless,gfgtr
-  ! complex(8),dimension(:),allocatable :: sfret,sfless,sfgtr
-  ! !Time domain:
-  ! complex(8),dimension(:),allocatable :: g0tret,g0tless,g0tgtr
-  ! complex(8),dimension(:),allocatable :: gtret,gtless,gtgtr
-  ! complex(8),dimension(:),allocatable :: stret,stless,stgtr
 
   real(8),dimension(:),allocatable    :: exa
 
@@ -124,13 +117,12 @@ MODULE VARS_GLOBAL
 
 
   !NAMELISTS:
-  !=========================================================  
-  namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess
-  namelist/Field/Ex,Ey,t0,t1,tau0,w0,field_profile
-  namelist/latticeN/Nx,Ny
-  namelist/parameters/L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,irdG0file,irdnkfile,omp_num_threads
-  namelist/flags/method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench
-  namelist/quench/iquench,beta0,xmu0,U0
+  !=========================================================
+  namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,&
+       Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
+       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,irdG0file,irdnkfile,omp_num_threads,&
+       method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
+       iquench,beta0,xmu0,U0
 
 contains
 
@@ -215,11 +207,6 @@ contains
     if(control)then
        open(10,file=adjustl(trim(inputFILE)))
        read(10,nml=variables)
-       read(10,nml=field)
-       read(10,nml=flags)
-       read(10,nml=parameters)
-       read(10,nml=LatticeN)    
-       read(10,nml=quench)
        close(10)
     else
        print*,"Can not find INPUT file"
@@ -231,10 +218,6 @@ contains
 
     write(*,*)"CONTROL PARAMETERS"
     write(*,nml=variables)
-    write(*,nml=field)
-    write(*,nml=flags)
-    write(*,nml=parameters)
-    write(*,nml=LatticeN)
     write(*,*)"--------------------------------------------"
     write(*,*)""
     if(present(printf).AND.printf.eq..true.)call dump_input_file("used.")
@@ -248,11 +231,6 @@ contains
       character(len=*) :: prefix
       open(10,file=trim(adjustl(trim(prefix)))//adjustl(trim(inputFILE)))
       write(10,nml=variables)
-      write(10,nml=field)
-      write(10,nml=flags)
-      write(10,nml=parameters)
-      write(10,nml=LatticeN)    
-      write(10,nml=quench)
       close(10)
     end subroutine dump_input_file
   end subroutine read_input_init
@@ -267,70 +245,32 @@ contains
   !+----------------------------------------------------------------+
   !PURPOSE  : massive allocation of work array
   !+----------------------------------------------------------------+
-  subroutine alloc_memory(char)
-    character(len=1) :: char
+  subroutine global_memory_allocation()
     integer          :: i
     real(8)          :: ex
-    if(char=='a')then
-       print '(A)', "Allocating the memory:"
-       allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
-       allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
-       allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
-       allocate(locGless(0:nstep,0:nstep),locGgtr(0:nstep,0:nstep))
-       allocate(impGless(0:nstep,0:nstep),impGgtr(0:nstep,0:nstep))
-       allocate(nk(0:nstep,Lk))
+    call msg("Allocating the memory")
+    allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
+    allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
+    allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
+    allocate(locGless(0:nstep,0:nstep),locGgtr(0:nstep,0:nstep))
+    allocate(impGless(0:nstep,0:nstep),impGgtr(0:nstep,0:nstep))
+    allocate(nk(0:nstep,Lk))
 
-       call allocate_gf(gf0,nstep)
-       call allocate_gf(gf,nstep)
-       call allocate_gf(sf,nstep)
-       ! allocate(g0fret(-nstep:nstep),g0fless(-nstep:nstep),g0fgtr(-nstep:nstep))
-       ! allocate(gfret(-nstep:nstep),gfless(-nstep:nstep),gfgtr(-nstep:nstep))
-       ! allocate(sfret(-nstep:nstep))
-       ! allocate(g0tret(-nstep:nstep),g0tless(-nstep:nstep),g0tgtr(-nstep:nstep))
-       ! allocate(gtret(-nstep:nstep),gtless(-nstep:nstep),gtgtr(-nstep:nstep))
-       ! allocate(stret(-nstep:nstep),stless(-nstep:nstep),stgtr(-nstep:nstep))
+    call allocate_gf(gf0,nstep)
+    call allocate_gf(gf,nstep)
+    call allocate_gf(sf,nstep)
 
-       if(fchi)then
-          allocate(chi(2,2,0:nstep,0:nstep))
-       endif
+    if(fchi)then
+       allocate(chi(2,2,0:nstep,0:nstep))
+    endif
 
-       allocate(exa(-nstep:nstep))
-       ex=-1.d0       
-       do i=-nstep,nstep
-          ex=-ex
-          exa(i)=ex
-       enddo
-
-
-    elseif(char=='d')then
-       print '(A)',"Deallocating:"
-       deallocate(G0gtr,G0less)
-       deallocate(S0less,S0gtr)
-       deallocate(Sgtr,Sless)
-       deallocate(locGless,locGgtr)
-       deallocate(impGless,impGgtr)
-       deallocate(nk)
-
-       if(fchi.AND.allocated(chi))deallocate(chi)
-
-       call deallocate_gf(gf0)
-       call deallocate_gf(gf)
-       call deallocate_gf(sf)
-       ! deallocate(g0fret,g0fless,g0fgtr)
-       ! deallocate(gfret,gfless,gfgtr)
-       ! deallocate(sfret)
-       ! deallocate(g0tret,g0tless,g0tgtr)
-       ! deallocate(gtret,gtless,gtgtr)
-       ! deallocate(stret,stless,stgtr)
-
-       if(allocated(irdG0w))deallocate(irdG0w) 
-       if(allocated(irdNk))deallocate(irdNk)
-       deallocate(exa)
-
-    end if
-    print '(A)',"done" 
-    print '(A)', "" 
-  end subroutine alloc_memory
+    allocate(exa(-nstep:nstep))
+    ex=-1.d0       
+    do i=-nstep,nstep
+       ex=-ex
+       exa(i)=ex
+    enddo
+  end subroutine global_memory_allocation
 
 
 
@@ -338,8 +278,6 @@ contains
   !******************************************************************
   !******************************************************************
   !******************************************************************
-
-
 
 
 
