@@ -41,6 +41,7 @@ MODULE VARS_GLOBAL
   real(8)           :: Wbath         !Width of the BATH DOS
   real(8)           :: eps_error
   integer           :: Nsuccess
+  real(8)           :: weight    !mixing weight parameter
   real(8)           :: wmin,wmax     !
   character(len=32) :: irdG0file,irdNkfile
 
@@ -118,7 +119,7 @@ MODULE VARS_GLOBAL
 
   !NAMELISTS:
   !=========================================================
-  namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,&
+  namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,irdG0file,irdnkfile,omp_num_threads,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
@@ -139,7 +140,7 @@ contains
 
     call version(revision)
 
-    allocate(help_buffer(59))
+    allocate(help_buffer(60))
     help_buffer=([&
          'NAME',&
          '  neqDMFT',&
@@ -158,23 +159,24 @@ contains
          '  In this version the impurity solver is: IPT',&
          ' ',&
          'OPTIONS',&
-         ' dt=[0.157080]            -- ',&
-         ' beta=[100.0]             -- ',&
-         ' U=[6]                    -- ',&
-         ' Efield=[0]               -- ',&
-         ' Vpd=[0]                  -- ',&
-         ' ts=[1]                   -- ',&
-         ' nstep=[50]               -- ',&
-         ' nloop=[30]               -- ',&
-         ' eps_error=[1.d-4]        -- ',&
-         ' Nsuccess =[2]            -- ',&
-         ' Ex=[1]                   -- ',&
-         ' Ey=[1]                   -- ',&
-         ' t0=[0]                   -- ',&
-         ' t1=[dt*(nstep+10)]       -- ',&
-         ' tau0=[1]                 -- ',&
-         ' w0=[20]                  -- ',&
-         ' field_profile=[constant] -- ',&
+         ' dt=[0.157080]            -- Time step for solution of KB equations',&
+         ' beta=[100.0]             -- Inverse temperature ',&
+         ' U=[6]                    -- Hubbard local interaction value',&
+         ' Efield=[0]               -- Strenght of the electric field',&
+         ' Vpd=[0]                  -- Strenght of the coupling to bath (Lambda=Vpd^2/Wbath)',&
+         ' ts=[1]                   -- Hopping parameter',&
+         ' nstep=[50]               -- Number of time steps: T_max = dt*nstep',&
+         ' nloop=[30]               -- Maximum number of DMFT loops allowed (then exit)',&
+         ' eps_error=[1.d-4]        -- Tolerance on convergence',&
+         ' weight=[0.9]             -- Mixing parameter',&
+         ' Nsuccess =[2]            -- Number of consecutive success for convergence to be true',&
+         ' Ex=[1]                   -- X-component of the Electric field vector',&
+         ' Ey=[1]                   -- Y-component of the Electric field vector',&
+         ' t0=[0]                   -- Switching on time parameter for the Electric field',&
+         ' t1=[10^6]                -- Switching off time parameter for the Electric field',&
+         ' tau0=[1]                 -- Width of gaussian packect envelope for the impulsive Electric field',&
+         ' w0=[20]                  -- Frequency of the of the impulsive Electric field',&
+         ' field_profile=[constant] -- Type of electric field profile (constant,gaussian,ramp)',&
          ' irdeq=[F]        -- ',&
          ' method=[ipt]     -- ',&
          ' update_wfftw=[F] -- ',&

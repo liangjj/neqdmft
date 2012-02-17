@@ -12,6 +12,7 @@
      case("NLOOP")	;read(nml_var%value,*)nloop
      case("EPS_ERROR")	;read(nml_var%value,*)eps_error
      case("NSUCCESS")	;read(nml_var%value,*)Nsuccess
+     case("WEIGHT")	;read(nml_var%value,*)weight
         !Efield:
      case("EX")		;read(nml_var%value,*)Ex
      case("EY")		;read(nml_var%value,*)Ey

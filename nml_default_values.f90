@@ -9,12 +9,13 @@
   nloop   = 30
   eps_error= 1.d-4
   Nsuccess = 2
+  weight  = 0.9d0
 
   !     Efield:
   Ex  = 1.d0
   Ey  = 1.d0
   t0  = 0.d0
-  t1  = dt*dble(nstep+10)
+  t1  = 1000000.d0              !infinite time SHIT!!
   tau0= 1.d0
   w0  = 20.d0
   field_profile='constant'
