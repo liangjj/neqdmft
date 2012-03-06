@@ -25,8 +25,8 @@ contains
     complex(8)       :: peso
     real(8)          :: ngtr,nless,arg
 
-    call msg("Get Bath. Type: "//bold_green(trim(adjustl(trim(bath_type))))//" dissipative bath")
-    call system("if [ ! -d BATH ]; then mkdir BATH; fi")
+    call msg("Get Bath. Type: "//bold_green(trim(adjustl(trim(bath_type))))//" dissipative bath",id=0)
+    if(mpiID==0)call system("if [ ! -d BATH ]; then mkdir BATH; fi")
     allocate(bath_dens(Lw),wfreq(Lw))
 
     select case(trim(adjustl(trim(bath_type))))
@@ -62,9 +62,13 @@ contains
           S0gtr(i) =S0gtr(i) + xi*Vpd**2*ngtr*peso*bath_dens(iw)*dw
        enddo
     enddo
-    call splot("BATH/S0less_t.ipt",t,S0less)
-    call splot("BATH/S0gtr_t.ipt",t,S0gtr)
-    call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
+
+    if(mpiID==0)then
+       call splot("BATH/S0less_t.ipt",t,S0less)
+       call splot("BATH/S0gtr_t.ipt",t,S0gtr)
+       call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
+    endif
+
   end subroutine get_Bath
 
 

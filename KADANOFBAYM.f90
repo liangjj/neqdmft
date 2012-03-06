@@ -52,6 +52,8 @@ contains
   subroutine solve_kadanoff_baym()
     integer      :: istep,i,j,ik
     integer,save :: loop=1
+    complex(8)   :: tmpGless(0:nstep,0:nstep),tmpGgtr(0:nstep,0:nstep)
+    real(8)      :: tmpnk(0:nstep,Lk)
 
     !First loop ever, build the Initial Condition
     if(loop==1)then
@@ -61,12 +63,14 @@ contains
     end if
 
     call msg("Entering Kadanoff-Baym")
+
     !Set to Zero loc GF:
-    locGless=zero; locGgtr=zero
+    locGless=zero; locGgtr=zero ; nk=0.d0
+    tmpGless=zero; tmpGgtr =zero; tmpnk=0.d0
 
     !=============START K-POINTS LOOP======================
     call start_timer
-    do ik=1,Lk
+    do ik=1+mpiID,Lk,mpiSIZE
        Gkless=zero;   Gkgtr=zero
 
        !Recover Initial Condition for Gk^{<,>}
@@ -77,15 +81,32 @@ contains
           call GFstep(2,ik,istep) !2nd-pass
        enddo
 
-       locGless(0:nstep,0:nstep) =locGless(0:nstep,0:nstep) + Gkless(0:nstep,0:nstep)*wt(ik)
-       locGgtr(0:nstep,0:nstep)  =locGgtr(0:nstep,0:nstep)  + Gkgtr(0:nstep,0:nstep)*wt(ik)
-       forall(istep=0:nstep)nk(istep,ik)=-xi*Gkless(istep,istep)
+       tmpGless(0:nstep,0:nstep) =tmpGless(0:nstep,0:nstep) + Gkless(0:nstep,0:nstep)*wt(ik)
+       tmpGgtr(0:nstep,0:nstep)  =tmpGgtr(0:nstep,0:nstep)  + Gkgtr(0:nstep,0:nstep)*wt(ik)
+       forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gkless(istep,istep)
        call eta(ik,Lk,unit=999)
     enddo
     call stop_timer
+    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
     !=============END K-POINTS LOOP======================
 
-    if(fchi)then
+
+    call MPI_REDUCE(tmpGless(0:,0:),locGless(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_REDUCE(tmpGgtr(0:,0:),locGgtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    !Gloc^>(t',t)= - Gloc^>(t,t')^T
+    if(mpiID==0)then
+       forall(i=0:nstep,j=0:nstep,i>j)locGless(i,j)=-conjg(locGless(j,i))
+       forall(i=0:nstep,j=0:nstep,i<j)locGgtr(i,j) =-conjg(locGgtr(j,i))
+    endif
+    call MPI_BCAST(locGless(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locGgtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+
+    call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
+
+
+    if(fchi .AND. mpiID==0)then
        call msg("Get Chi:")
        call get_chi_pm
        call get_chi_dia
@@ -93,15 +114,14 @@ contains
        do i=0,nstep
           chi(:,:,i,i)=chi(:,:,i,i)+chi_dia(:,:,i)
        enddo
+       call MPI_BCAST(chi(:,:,0:nstep,0:nstep),2*2*(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+       call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
     endif
 
-    !Gloc^>(t',t)= - Gloc^>(t,t')^T
-    forall(i=0:nstep,j=0:nstep,i>j)locGless(i,j)=-conjg(locGless(j,i))
-    forall(i=0:nstep,j=0:nstep,i<j)locGgtr(i,j) =-conjg(locGgtr(j,i))
 
     call print_out_Gloc()
+
     loop=loop+1
-    return
   end subroutine solve_kadanoff_baym
 
 
@@ -315,28 +335,29 @@ contains
   !+-------------------------------------------------------------------+
   subroutine print_out_Gloc()
     integer :: i,j
-    call splot("locGless.data",locGless(0:nstep,0:nstep))
-    call splot("locGgtr.data",locGgtr(0:nstep,0:nstep))
-    call splot("nk.data",nk(0:nstep,1:Lk))
-    forall(i=0:nstep,j=0:nstep)
-       gf%less%t(i-j) = locGless(i,j)
-       gf%gtr%t(i-j)  = locGgtr(i,j)
-       gf%ret%t(i-j)  = heaviside(t(i-j))*(locGgtr(i,j)-locGless(i,j))
-    end forall
-    if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
-    call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ;  gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)
-    call splot("locGless_t.ipt",t,gf%less%t,append=TT)
-    call splot("locGgtr_t.ipt",t,gf%gtr%t,append=TT)
-    call splot("locGret_t.ipt",t,gf%ret%t,append=TT)
-    call splot("locGret_realw.ipt",wr,gf%ret%w,append=TT)
-    call splot("locDOS.ipt",wr,-aimag(gf%ret%w)/pi,append=TT)
-    if(fchi)then
-       call splot("locChi_11.data",chi(1,1,0:nstep,0:nstep))
-       call splot("locChi_12.data",chi(1,2,0:nstep,0:nstep))
-       call splot("locChi_21.data",chi(2,1,0:nstep,0:nstep))
-       call splot("locChi_22.data",chi(2,2,0:nstep,0:nstep))
+    if(mpiID==0)then
+       call splot("locGless.data",locGless(0:nstep,0:nstep))
+       call splot("locGgtr.data",locGgtr(0:nstep,0:nstep))
+       call splot("nk.data",nk(0:nstep,1:Lk))
+       forall(i=0:nstep,j=0:nstep)
+          gf%less%t(i-j) = locGless(i,j)
+          gf%gtr%t(i-j)  = locGgtr(i,j)
+          gf%ret%t(i-j)  = heaviside(t(i-j))*(locGgtr(i,j)-locGless(i,j))
+       end forall
+       if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
+       call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ;  gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)
+       call splot("locGless_t.ipt",t,gf%less%t,append=TT)
+       call splot("locGgtr_t.ipt",t,gf%gtr%t,append=TT)
+       call splot("locGret_t.ipt",t,gf%ret%t,append=TT)
+       call splot("locGret_realw.ipt",wr,gf%ret%w,append=TT)
+       call splot("locDOS.ipt",wr,-aimag(gf%ret%w)/pi,append=TT)
+       if(fchi)then
+          call splot("locChi_11.data",chi(1,1,0:nstep,0:nstep))
+          call splot("locChi_12.data",chi(1,2,0:nstep,0:nstep))
+          call splot("locChi_21.data",chi(2,1,0:nstep,0:nstep))
+          call splot("locChi_22.data",chi(2,2,0:nstep,0:nstep))
+       endif
     endif
-    return
   end subroutine print_out_Gloc
 
 
@@ -564,48 +585,55 @@ contains
     complex(8) :: funcM(L),sigma(L)
     real(8)    :: funcT(0:L) 
 
-    !Get Sret(w) = FFT(Sret(t-t'))
-    forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sgtr(i,j)-Sless(i,j))
-    sf%ret%t=exa*sf%ret%t ; call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=dt*sf%ret%w
+    if(mpiID==0)then
+       !Get Sret(w) = FFT(Sret(t-t'))
+       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sgtr(i,j)-Sless(i,j))
+       sf%ret%t=exa*sf%ret%t ; call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=dt*sf%ret%w
 
-    !Get locGret(w),locG<(w),locG>(w)
-    gf%ret%w=zero
-    do i=1,2*nstep
-       w=wr(i)
-       zetan=cmplx(w,eps,8)-sf%ret%w(i) !-eqsbfret(i)
+       !Get locGret(w),locG<(w),locG>(w)
+       gf%ret%w=zero
+       do i=1,2*nstep
+          w=wr(i)
+          zetan=cmplx(w,eps,8)-sf%ret%w(i) !-eqsbfret(i)
+          do ik=1,Lk
+             gf%ret%w(i)=gf%ret%w(i)+wt(ik)/(zetan-epsik(ik))
+          enddo
+          A=-aimag(gf%ret%w(i))/pi
+          gf%less%w(i)= pi2*xi*fermi0(w,beta)*A
+          gf%gtr%w(i) = pi2*xi*(fermi0(w,beta)-1.d0)*A
+       enddo
+
+       !Get locG<(t),locG>(t)
+       call fftgf_rw2rt(gf%less%w,gf%less%t,nstep)  ; gf%less%t=fmesh/pi2*gf%less%t
+       call fftgf_rw2rt(gf%gtr%w,gf%gtr%t,nstep)    ; gf%gtr%t=fmesh/pi2*gf%gtr%t
+       gf%less%t=exa*gf%less%t
+       gf%gtr%t =exa*gf%gtr%t
+
+       forall(i=0:nstep,j=0:nstep)
+          locGless(i,j) = gf%less%t(i-j)
+          locGgtr(i,j)  = gf%gtr%t(i-j)
+          gf%ret%t(i-j) = heaviside(t(i-j))*(locGgtr(i,j)-locGless(i,j))
+       end forall
+
+       call get_matsubara_gf_from_dos(wr,sf%ret%w,sigma,beta)
+       call splot('locSM_iw.ipt',wm,sigma,append=TT)
        do ik=1,Lk
-          gf%ret%w(i)=gf%ret%w(i)+wt(ik)/(zetan-epsik(ik))
+          funcM=zero
+          do i=1,L
+             w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigma(i)
+             funcM(i)=one/(zetan - epsik(ik))
+          enddo
+          call fftgf_iw2tau(funcM,funcT,beta)
+          n=-funcT(L) !from G(-tau) = -G(beta-tau)==> G(tau=0-)=-G(beta)
+          nk(:,ik)=n
        enddo
-       A=-aimag(gf%ret%w(i))/pi
-       gf%less%w(i)= pi2*xi*fermi0(w,beta)*A
-       gf%gtr%w(i) = pi2*xi*(fermi0(w,beta)-1.d0)*A
-    enddo
+    endif
+    call MPI_BCAST(locGless,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locGgtr,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
 
-    !Get locG<(t),locG>(t)
-    call fftgf_rw2rt(gf%less%w,gf%less%t,nstep)  ; gf%less%t=fmesh/pi2*gf%less%t
-    call fftgf_rw2rt(gf%gtr%w,gf%gtr%t,nstep)    ; gf%gtr%t=fmesh/pi2*gf%gtr%t
-    gf%less%t=exa*gf%less%t
-    gf%gtr%t =exa*gf%gtr%t
-
-    forall(i=0:nstep,j=0:nstep)
-       locGless(i,j) = gf%less%t(i-j)
-       locGgtr(i,j)  = gf%gtr%t(i-j)
-       gf%ret%t(i-j) = heaviside(t(i-j))*(locGgtr(i,j)-locGless(i,j))
-    end forall
-
-    call get_matsubara_gf_from_dos(wr,sf%ret%w,sigma,beta)
-    call splot('locSM_iw.ipt',wm,sigma,append=TT)
-    do ik=1,Lk
-       funcM=zero
-       do i=1,L
-          w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigma(i)
-          funcM(i)=one/(zetan - epsik(ik))
-       enddo
-       call fftgf_iw2tau(funcM,funcT,beta)
-       n=-funcT(L) !from G(-tau) = -G(beta-tau)==> G(tau=0-)=-G(beta)
-       nk(:,ik)=n
-    enddo
     call print_out_Gloc()
+
     return
   end subroutine solve_equilibrium
 

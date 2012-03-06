@@ -15,13 +15,15 @@ program neqDMFT
   logical :: converged
   complex(8),dimension(:,:),allocatable :: G0less_old,G0gtr_old
 
+  call start_mpi()  !start MPI
+
   call read_input_init("inputFILE.in",printf=.true.)
   include "grid_setup.f90"
   include "build_square_lattice.f90"
 
   !SET THE ELECTRIC FIELD:use constant field by default
   Ek = set_efield_vector(Ex,Ey)
-  call print_Afield_form(t(0:nstep))
+  if(mpiID==0)call print_Afield_form(t(0:nstep))
 
   !STARTS THE REAL WORK:
   call global_memory_allocation !allocate functions in the memory
@@ -42,8 +44,11 @@ program neqDMFT
      !
      call print_observables
      converged = convergence_check()
+     call MPI_BCAST(converged,1,MPI_LOGICAL,0,MPI_COMM_WORLD,mpiERR)
+     !
      call end_loop()
   enddo
-  !call alloc_memory('d')
-  print*,"BRAVO!"
+  call msg("BRAVO")
+  call close_mpi()
+
 end PROGRAM neqDMFT

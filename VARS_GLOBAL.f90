@@ -15,6 +15,7 @@ MODULE VARS_GLOBAL
   USE FFTGF
   USE SPLINE
   USE TOOLS
+  USE MPI
   implicit none
 
   !Version revision

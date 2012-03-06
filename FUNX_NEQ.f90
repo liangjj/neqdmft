@@ -94,51 +94,17 @@ contains
     complex(8) :: peso
     real(8)    :: nless,ngtr
 
-    call msg("Get G0guess(t,t')")
+    call msg("Get G0guess(t,t')",id=0)
     gf0=zero ; G0gtr=zero ; G0less=zero
+    if(mpiID==0)then
 
-    if(irdeq)then            !Read from equilibrium solution
-       call read_init_seed()
-       do ik=1,irdL             !2*L
-          en   = irdwr(ik)
-          nless= fermi0(en,beta)
-          ngtr = fermi0(en,beta)-1.d0
-          A    = -aimag(irdG0w(ik))/pi*irdfmesh
-          do i=-nstep,nstep
-             peso=exp(-xi*en*t(i))
-             gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
-             gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
-          enddo
-       enddo
-       forall(i=0:nstep,j=0:nstep)
-          G0less(i,j)=gf0%less%t(i-j)
-          G0gtr(i,j) =gf0%gtr%t(i-j)
-       end forall
-
-    else
-
-       if(equench)then
-          do ik=1,Lk
-             en   = epsik(ik)
+       if(irdeq)then            !Read from equilibrium solution
+          call read_init_seed()
+          do ik=1,irdL             !2*L
+             en   = irdwr(ik)
              nless= fermi0(en,beta)
              ngtr = fermi0(en,beta)-1.d0
-             do j=0,nstep
-                do i=0,nstep
-                   intE=int_Ht(ik,i,j)
-                   peso=exp(-xi*intE)
-                   G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
-                   G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
-                enddo
-             enddo
-          enddo
-
-       else
-
-          do ik=1,Lk
-             en   = epsik(ik)
-             nless= fermi0(en,beta)
-             ngtr = fermi0(en,beta)-1.d0
-             A    = wt(ik)
+             A    = -aimag(irdG0w(ik))/pi*irdfmesh
              do i=-nstep,nstep
                 peso=exp(-xi*en*t(i))
                 gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
@@ -150,14 +116,51 @@ contains
              G0gtr(i,j) =gf0%gtr%t(i-j)
           end forall
 
+       else
+
+          if(equench)then
+             do ik=1,Lk
+                en   = epsik(ik)
+                nless= fermi0(en,beta)
+                ngtr = fermi0(en,beta)-1.d0
+                do j=0,nstep
+                   do i=0,nstep
+                      intE=int_Ht(ik,i,j)
+                      peso=exp(-xi*intE)
+                      G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
+                      G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
+                   enddo
+                enddo
+             enddo
+
+          else
+
+             do ik=1,Lk
+                en   = epsik(ik)
+                nless= fermi0(en,beta)
+                ngtr = fermi0(en,beta)-1.d0
+                A    = wt(ik)
+                do i=-nstep,nstep
+                   peso=exp(-xi*en*t(i))
+                   gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
+                   gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
+                enddo
+             enddo
+             forall(i=0:nstep,j=0:nstep)
+                G0less(i,j)=gf0%less%t(i-j)
+                G0gtr(i,j) =gf0%gtr%t(i-j)
+             end forall
+
+          endif
        endif
+
+       call splot("guessG0less.data",G0less(0:nstep,0:nstep))
+       call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
     endif
+    call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
 
     call get_sigma 
-
-    !Save data:
-    call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-    call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
 
   contains
 
@@ -214,8 +217,10 @@ contains
     end if
 
     !Save data:
-    call splot("Sless.data",Sless(0:nstep,0:nstep))
-    call splot("Sgtr.data",Sgtr(0:nstep,0:nstep))
+    if(mpiID==0)then
+       call splot("Sless.data",Sless(0:nstep,0:nstep))
+       call splot("Sgtr.data",Sgtr(0:nstep,0:nstep))
+    endif
     return
   end subroutine Get_Sigma
 
@@ -289,9 +294,11 @@ contains
     endif
 
     !Save data:
-    call splot("impGless.data",impGless(0:nstep,0:nstep))
-    call splot("impGgtr.data",impGgtr(0:nstep,0:nstep))
-    return
+    if(mpiID==0)then
+       call splot("impGless.data",impGless(0:nstep,0:nstep))
+       call splot("impGgtr.data",impGgtr(0:nstep,0:nstep))
+    endif
+
   end subroutine obtain_Gimp
 
 
@@ -312,21 +319,23 @@ contains
     type(vect2D)                     :: Jk,Ak
     type(vect2D),dimension(0:nstep)  :: Jloc                   !local Current 
     real(8),dimension(0:nstep)       :: nt,modJloc             !occupation(time)
-    forall(i=0:nstep)nt(i)=-xi*locGless(i,i)
-    Jloc=Vzero    
-    do ik=1,Lk
-       ix=ik2ix(ik);iy=ik2iy(ik)
-       do i=0,nstep
-          Ak= Afield(t(i),Ek)
-          Jk= nk(i,ik)*square_lattice_velocity(kgrid(ix,iy) - Ak)
-          Jloc(i) = Jloc(i) +  wt(ik)*Jk
+    if(mpiID==0)then
+       forall(i=0:nstep)nt(i)=-xi*locGless(i,i)
+       Jloc=Vzero    
+       do ik=1,Lk
+          ix=ik2ix(ik);iy=ik2iy(ik)
+          do i=0,nstep
+             Ak= Afield(t(i),Ek)
+             Jk= nk(i,ik)*square_lattice_velocity(kgrid(ix,iy) - Ak)
+             Jloc(i) = Jloc(i) +  wt(ik)*Jk
+          enddo
        enddo
-    enddo
-    call splot("nVStime.ipt",t(0:nstep),2.d0*nt(0:nstep),append=TT)
-    modJloc(0:nstep)=modulo(Jloc(0:nstep))
-    if(Efield/=0.d0)then
-       call splot("JlocVStime.ipt",t(0:nstep),Jloc(0:nstep)%x,Jloc(0:nstep)%y,append=TT)
-       call splot("modJlocVStime.ipt",t(0:nstep),modJloc(0:nstep),append=TT)
+       call splot("nVStime.ipt",t(0:nstep),2.d0*nt(0:nstep),append=TT)
+       modJloc(0:nstep)=modulo(Jloc(0:nstep))
+       if(Efield/=0.d0)then
+          call splot("JlocVStime.ipt",t(0:nstep),Jloc(0:nstep)%x,Jloc(0:nstep)%y,append=TT)
+          call splot("modJlocVStime.ipt",t(0:nstep),modJloc(0:nstep),append=TT)
+       endif
     endif
   end subroutine print_observables
 
@@ -347,23 +356,23 @@ contains
     type(vect2D)                    :: Jk,Ak
     type(vect2D),dimension(0:nstep) :: Jloc                   !local Current 
     real(8),dimension(0:nstep)      :: test_func
-    if(Efield/=0.d0)then
-       Jloc=Vzero    
-       do ik=1,Lk
-          ix=ik2ix(ik);iy=ik2iy(ik)
-          do i=0,nstep
-             Ak= Afield(t(i),Ek)
-             Jk= nk(i,ik)*square_lattice_velocity(kgrid(ix,iy) - Ak)
-             Jloc(i) = Jloc(i) +  wt(ik)*Jk
+    if(mpiID==0)then
+       if(Efield/=0.d0)then
+          Jloc=Vzero    
+          do ik=1,Lk
+             ix=ik2ix(ik);iy=ik2iy(ik)
+             do i=0,nstep
+                Ak= Afield(t(i),Ek)
+                Jk= nk(i,ik)*square_lattice_velocity(kgrid(ix,iy) - Ak)
+                Jloc(i) = Jloc(i) +  wt(ik)*Jk
+             enddo
           enddo
-       enddo
-       test_func(0:nstep)=modulo(Jloc(0:nstep))
-    else
-       forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
+          test_func(0:nstep)=modulo(Jloc(0:nstep))
+       else
+          forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
+       endif
+       converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop)
     endif
-
-    converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop)
-
   end function convergence_check
 
 
