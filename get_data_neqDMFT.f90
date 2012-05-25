@@ -103,12 +103,6 @@ contains
     call allocate_gf(gf0,nstep)
     call allocate_gf(gf,nstep)
     call allocate_gf(sf,nstep)
-    ! allocate(g0fret(-nstep:nstep),g0fless(-nstep:nstep),g0fgtr(-nstep:nstep))
-    ! allocate(gfret(-nstep:nstep),gfless(-nstep:nstep),gfgtr(-nstep:nstep))
-    ! allocate(sfret(-nstep:nstep))
-    ! allocate(g0tret(-nstep:nstep),g0tless(-nstep:nstep),g0tgtr(-nstep:nstep))
-    ! allocate(gtret(-nstep:nstep),gtless(-nstep:nstep),gtgtr(-nstep:nstep))
-    ! allocate(stret(-nstep:nstep),stless(-nstep:nstep),stgtr(-nstep:nstep))
     allocate(trel(-nstep:nstep),tave(0:nstep))
     allocate(wgnGless(-nstep:nstep,0:nstep),&
          wgnGgtr(-nstep:nstep,0:nstep),     &
@@ -141,12 +135,6 @@ contains
     call deallocate_gf(gf0)
     call deallocate_gf(gf)
     call deallocate_gf(sf)
-    ! deallocate(g0fret,g0fless,g0fgtr)
-    ! deallocate(gfret,gfless,gfgtr)
-    ! deallocate(sfret)
-    ! deallocate(g0tret,g0tless,g0tgtr)
-    ! deallocate(gtret,gtless,gtgtr)
-    ! deallocate(stret,stless,stgtr)
     if(fchi)then
        deallocate(chi_dia,chi_pm)
        deallocate(chi)
@@ -327,13 +315,13 @@ contains
 
     !Fermi Surface plot:
     if(Efield/=0.d0 .or. Vpd/=0.0)then
-       call plot_dislin_3D_movie("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
+       call dplot_3d_intensity_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
     else
-       call plot_dislin_3D("FSVSpi3D","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
+       call dplot_3d_intensity("FSVSpi3D","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
     endif
 
     !Current Vector Field:
-    if(Efield/=0.d0 .AND. plotVF)call plot_dislin_VF("vf_JfieldVSkVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,Jkvec(0:nstep,:,:)%x,Jkvec(0:nstep,:,:)%y)
+    if(Efield/=0.d0 .AND. plotVF)call dplot_vector_field("vf_JfieldVSkVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,Jkvec(0:nstep,:,:)%x,Jkvec(0:nstep,:,:)%y)
 
     if(fchi)then
        call splot("sigma_cond.ipt",t(0:nstep),t(0:nstep),scond(1,1,0:nstep,0:nstep))
@@ -353,7 +341,8 @@ contains
     !Local functions:
     !===========================================================================
     if(plot3D)then
-       if(Efield/=0.d0 .or. Vpd/=0.0)call plot_3D_surface_movie("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
+       if(Efield/=0.d0 .or. Vpd/=0.0)call dplot_3d_surface_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",&
+            kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
        call splot("guessG0less3D",t(0:nstep)/dt,t(0:nstep)/dt,guessG0less(0:nstep,0:nstep))
        call splot("guessG0gtr3D",t(0:nstep)/dt,t(0:nstep)/dt,guessG0gtr(0:nstep,0:nstep))
        call splot("G0less3D",t(0:nstep)/dt,t(0:nstep)/dt,G0less(0:nstep,0:nstep))
@@ -482,8 +471,8 @@ contains
     wgnSless= wigner_transform(Sless,nstep)
     wgnSret = wigner_transform(Sret,nstep)
     call system("if [ ! -d WIGNER ]; then mkdir WIGNER; fi")
-    call plot_3D("wgnGless3D","X","Y","Z",trel(-nstep:nstep)/dt,tave(1:nstep)/dt,wgnGless(-nstep:nstep,1:nstep))
-    call plot_3D("wgnSless3D","X","Y","Z",trel(-nstep:nstep)/dt,tave(1:nstep)/dt,wgnSless(-nstep:nstep,1:nstep))
+    ! call plot_3D("wgnGless3D","X","Y","Z",trel(-nstep:nstep)/dt,tave(1:nstep)/dt,wgnGless(-nstep:nstep,1:nstep))
+    ! call plot_3D("wgnSless3D","X","Y","Z",trel(-nstep:nstep)/dt,tave(1:nstep)/dt,wgnSless(-nstep:nstep,1:nstep))
     call system("mv wgn*3D WIGNER/")
 
     delta=(one+xi)/dble(nstep)

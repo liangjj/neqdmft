@@ -371,7 +371,7 @@ contains
        else
           forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
        endif
-       converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop)
+       converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop,id=0)
     endif
   end function convergence_check
 

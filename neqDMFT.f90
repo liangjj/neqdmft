@@ -15,7 +15,11 @@ program neqDMFT
   logical :: converged
   complex(8),dimension(:,:),allocatable :: G0less_old,G0gtr_old
 
-  call start_mpi()  !start MPI
+  call MPI_INIT(mpiERR)
+  call MPI_COMM_RANK(MPI_COMM_WORLD,mpiID,mpiERR)
+  call MPI_COMM_SIZE(MPI_COMM_WORLD,mpiSIZE,mpiERR)
+  write(*,"(A,I4,A,I4,A)")'Processor ',mpiID,' of ',mpiSIZE,' is alive'
+  call MPI_BARRIER(MPI_COMM_WORLD,mpiERR)
 
   call read_input_init("inputFILE.in",printf=.true.)
   include "grid_setup.f90"
@@ -49,6 +53,7 @@ program neqDMFT
      call end_loop()
   enddo
   call msg("BRAVO")
-  call close_mpi()
+  call MPI_BARRIER(MPI_COMM_WORLD,mpiERR)
+  call MPI_FINALIZE(mpiERR)
 
 end PROGRAM neqDMFT
