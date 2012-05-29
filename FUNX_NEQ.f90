@@ -7,88 +7,27 @@ module FUNX_NEQ
   USE VARS_GLOBAL
   USE ELECTRIC_FIELD
   USE BATH
+  USE EQUILIBRIUM
   implicit none
   private
   !
-  integer                          :: irdL
+  integer                          :: irdL,irdLM
   real(8)                          :: irdfmesh
-  real(8),allocatable,dimension(:) :: irdwr
+  real(8),allocatable,dimension(:) :: irdwr,irdwm
   !
-  public                           :: guess_g0_sigma
-  public                           :: update_weiss_field
-  public                           :: get_sigma
-  public                           :: obtain_gimp
+  public                           :: neq_guess_weiss_field
+  public                           :: neq_update_weiss_field
   public                           :: print_observables,convergence_check
 
 contains
 
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : Build a guess for the initial Weiss Fields G0^{<,>} 
-  !as non-interacting GFs. If required read construct it starting 
-  !from a read seed (cf. routine for seed reading)
-  !+-------------------------------------------------------------------+
-  subroutine read_init_seed()
-    logical :: control
-    real(8) :: w1,w2
-    integer :: ik,redLk
-    real(8),allocatable :: rednk(:),redek(:)
-    integer,allocatable :: orderk(:)
-    real(8),allocatable :: uniq_rednk(:),uniq_redek(:)
-    logical,allocatable :: maskk(:)
-
-    !GOret:
-    !Check if G0file exist
-    inquire(file=trim(irdG0file),exist=control)
-    if(.not.control)call abort("Can not find irdG0file")
-    !Get file length to allocate arrays
-    irdL=file_length(trim(irdG0file))
-    !Read the function: the WF
-    allocate(irdG0w(irdL))
-    allocate(irdwr(irdL))
-    call sread(trim(irdG0file),irdwr,irdG0w)
-    !Get G0 mesh:
-    irdfmesh=abs(irdwr(2)-irdwr(1))
-
-    !n(k):
-    inquire(file=trim(irdnkfile),exist=control)
-    if(.not.control)call abort("Can not find irdnkfile")
-    !Get file length:
-    redLk=file_length(trim(irdnkfile))
-    allocate(rednk(redLk),redek(redLk),orderk(redLk))
-    call sread(trim(irdnkfile),redek,rednk)
-    !work on the read arrays:
-    !1 - sorting: sort the energies (X-axis), mirror on occupation (Y-axis) 
-    !2 - delete duplicates energies (X-axis), mirror on occupation (Y-axis) 
-    !3 - interpolate to the actual lattice structure (epsik,nk)
-    call sort_array(redek,orderk)
-    call reshuffle(rednk,orderk)
-    call uniq(redek,uniq_redek,maskk)
-    allocate(uniq_rednk(size(uniq_redek)))
-    uniq_rednk = pack(rednk,maskk)
-    allocate(irdnk(Lk))
-    call linear_spline(uniq_rednk,uniq_redek,irdnk,epsik)
-
-    call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
-    call splot("InitialConditions/read_G0_realw.ipt",irdwr,irdG0w)
-    call splot("InitialConditions/read_nkVSek.ipt",epsik,irdnk)
-  end subroutine read_init_seed
-
-
-
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
-
-
-
 
   !+-------------------------------------------------------------------+
   !PURPOSE  : Build a guess for the initial Weiss Fields G0^{<,>} 
   !as non-interacting GFs. If required read construct it starting 
   !from a read seed (cf. routine for seed reading)
   !+-------------------------------------------------------------------+
-  subroutine guess_g0_sigma
+  subroutine neq_guess_weiss_field
     integer    :: i,j,ik,redLk
     real(8)    :: en,intE,A
     complex(8) :: peso
@@ -98,7 +37,7 @@ contains
     gf0=zero ; G0gtr=zero ; G0less=zero
     if(mpiID==0)then
 
-       if(irdeq)then            !Read from equilibrium solution
+       if(irdeq .OR. solve_eq)then            !Read from equilibrium solution
           call read_init_seed()
           do ik=1,irdL             !2*L
              en   = irdwr(ik)
@@ -160,8 +99,6 @@ contains
     call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
     call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
 
-    call get_sigma 
-
   contains
 
     function int_Ht(ik,it,jt)
@@ -178,8 +115,7 @@ contains
       enddo
     end function int_Ht
 
-  end subroutine guess_g0_sigma
-
+  end subroutine neq_guess_weiss_field
 
 
 
@@ -187,43 +123,74 @@ contains
   !********************************************************************
   !********************************************************************
   !********************************************************************
-
-
 
 
 
   !+-------------------------------------------------------------------+
-  !PURPOSE  : BUild the 2^nd IPT sigma functions:
+  !PURPOSE  : Build a guess for the initial Weiss Fields G0^{<,>} 
+  !as non-interacting GFs. If required construct it starting 
+  !from a read seed (cf. routine for seed reading)
   !+-------------------------------------------------------------------+
-  subroutine get_sigma()
-    integer                               :: i,j,itau
+  subroutine read_init_seed()
+    logical :: control
+    real(8) :: w1,w2
+    integer :: ik,redLk
+    real(8),allocatable :: rednk(:),redek(:)
+    integer,allocatable :: orderk(:)
+    real(8),allocatable :: uniq_rednk(:),uniq_redek(:)
+    logical,allocatable :: maskk(:)
 
-    !Get SIgma:
-    call msg("Get Sigma(t,t')")
-    forall(i=0:nstep,j=0:nstep)
-       Sless(i,j) = (U**2)*(G0less(i,j)**2)*G0gtr(j,i)
-       Sgtr (i,j) = (U**2)*(G0gtr(i,j)**2)*G0less(j,i)
-    end forall
+    !GO_realw:
+    inquire(file=trim(irdG0file),exist=control)
+    if(.not.control)call error("Can not find irdG0file")
+    !Read the function WF
+    irdL=file_length(trim(irdG0file))
+    allocate(irdG0w(irdL),irdwr(irdL))
+    call sread(trim(irdG0file),irdwr,irdG0w)
+    !Get G0 mesh:
+    irdfmesh=abs(irdwr(2)-irdwr(1))
 
-    !Get impurity GF and use SPT method if required
-    call obtain_Gimp
+    !n(k): A lot of work here to reshape the array
+    inquire(file=trim(irdnkfile),exist=control)
+    if(.not.control)call abort("Can not find irdnkfile")
+    !Read the function nk.
+    redLk=file_length(trim(irdnkfile))
+    allocate(rednk(redLk),redek(redLk),orderk(redLk))
+    call sread(trim(irdnkfile),redek,rednk)
+    !work on the read arrays:
+    !1 - sorting: sort the energies (X-axis), mirror on occupation (Y-axis) 
+    !2 - delete duplicates energies (X-axis), mirror on occupation (Y-axis) 
+    !3 - interpolate to the actual lattice structure (epsik,nk)
+    call sort_array(redek,orderk)
+    call reshuffle(rednk,orderk)
+    call uniq(redek,uniq_redek,maskk)
+    allocate(uniq_rednk(size(uniq_redek)))
+    uniq_rednk = pack(rednk,maskk)
+    allocate(irdnk(Lk))
+    call linear_spline(uniq_rednk,uniq_redek,irdnk,epsik)
 
-    if(method=="spt")then
-       call msg("Recalculate Sigma using SPT")
-       forall(i=0:nstep,j=0:nstep)
-          Sless(i,j) = (U**2)*(impGless(i,j)**2)*impGgtr(j,i)
-          Sgtr (i,j) = (U**2)*(impGgtr(i,j)**2)*impGless(j,i)                
-       end forall
-    end if
+    !G0_iw:
+    inquire(file=trim(irdG0Mfile),exist=control)
+    if(.not.control)call error("Can not find irdG0Mfile")
+    !Read the function WF
+    irdLM=file_length(trim(irdG0Mfile))
+    allocate(irdG0iw(irdLM),irdG0tau(0:Ltau),irdwm(irdLM))
+    call sread(trim(irdG0Mfile),irdwm,irdG0iw)
+    call fftgf_iw2tau(irdG0iw,irdG0tau,beta)
 
-    !Save data:
-    if(mpiID==0)then
-       call splot("Sless.data",Sless(0:nstep,0:nstep))
-       call splot("Sgtr.data",Sgtr(0:nstep,0:nstep))
-    endif
-    return
-  end subroutine Get_Sigma
 
+    !Print out the initial conditions as effectively read from the files:
+    call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
+    call splot("InitialConditions/read_G0_realw.ipt",irdwr,irdG0w)
+    call splot("InitialConditions/read_G0_iw.ipt",irdwm,irdG0iw)
+    call splot("InitialConditions/read_G0_tau.ipt",tau,irdG0tau)
+    call splot("InitialConditions/read_nkVSek.ipt",epsik,irdnk)
+
+    call MPI_BCAST(irdG0w,irdL,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(irdG0iw,irdL,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(irdG0tau,Ltau+1,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
+  end subroutine read_init_seed
 
 
 
@@ -231,8 +198,6 @@ contains
   !********************************************************************
   !********************************************************************
   !********************************************************************
-
-
 
 
 
@@ -241,7 +206,7 @@ contains
   !+-------------------------------------------------------------------+
   !PURPOSE  : Update the Weiss Fields G0^{>,<,Ret} using Dyson equation
   !+-------------------------------------------------------------------+
-  subroutine update_weiss_field
+  subroutine neq_update_weiss_field
     integer :: M,i,j,k,itau,jtau,NN
     real(8) :: R,deg
     real(8) :: w,A,An
@@ -252,54 +217,33 @@ contains
     complex(8),dimension(0:nstep,0:nstep) :: G0kel,locGkel,Skel
     complex(8),dimension(0:nstep,0:nstep) :: locGtt,locGat,Stt,Sat
     complex(8),dimension(:,:),allocatable :: locGmat,Smat,G0mat,GammaMat,UnoMat
+    complex(8),dimension(:,:),allocatable,save :: G0less_old,G0gtr_old
+
+
+    if(.not.allocated(G0less_old))then
+       allocate(G0less_old(0:nstep,0:nstep))
+       G0less_old=G0less
+    endif
+    if(.not.allocated(G0gtr_old))then
+       allocate(G0gtr_old(0:nstep,0:nstep))
+       G0gtr_old =G0gtr
+    endif
 
     call msg("Update WF: Dyson")
     if(update_wfftw)then
-       include "update_G0_equilibrium.f90"
+       call update_equilibrium_weiss_field
     else
        include "update_G0_nonequilibrium.f90"
     endif
-
-    !Save data:
-    call splot("G0less.data",G0less(0:nstep,0:nstep))
-    call splot("G0gtr.data",G0gtr(0:nstep,0:nstep))
-  end subroutine update_weiss_field
-
-
-
-
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
-
-
-
-
-
-
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : evaluate the impurity neq Green's functions
-  !+-------------------------------------------------------------------+
-  subroutine obtain_Gimp()
-    integer                               :: i,j
-    real(8)                               :: A,w
-    complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet,Gamma0Ret
-    complex(8),dimension(0:nstep,0:nstep) :: dG0ret,dGret,dSret
-
-    if(update_wfftw)then
-       include "obtain_Gimp_equilibrium.f90"
-    else
-       include "obtain_Gimp_nonequilibrium.f90"
-    endif
+    G0less = weight*G0less + (1.d0-weight)*G0less_old
+    G0gtr = weight*G0gtr + (1.d0-weight)*G0gtr_old
 
     !Save data:
     if(mpiID==0)then
-       call splot("impGless.data",impGless(0:nstep,0:nstep))
-       call splot("impGgtr.data",impGgtr(0:nstep,0:nstep))
+       call splot("G0less.data",G0less(0:nstep,0:nstep))
+       call splot("G0gtr.data",G0gtr(0:nstep,0:nstep))
     endif
-
-  end subroutine obtain_Gimp
+  end subroutine neq_update_weiss_field
 
 
 
@@ -308,6 +252,7 @@ contains
   !********************************************************************
   !********************************************************************
   !********************************************************************
+
 
 
 
@@ -356,9 +301,13 @@ contains
     type(vect2D)                    :: Jk,Ak
     type(vect2D),dimension(0:nstep) :: Jloc                   !local Current 
     real(8),dimension(0:nstep)      :: test_func
+    integer                         :: selector
+
     if(mpiID==0)then
-       if(Efield/=0.d0)then
-          Jloc=Vzero    
+       if(solve_wfftw)then
+          forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
+       elseif(Efield/=0.d0)then
+          Jloc=Vzero
           do ik=1,Lk
              ix=ik2ix(ik);iy=ik2iy(ik)
              do i=0,nstep

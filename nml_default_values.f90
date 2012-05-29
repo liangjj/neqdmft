@@ -29,6 +29,7 @@
   plot3D        = .false.
   fchi          = .false.
   equench       = .false.
+  solve_eq      = .false.
 
   !     Parameters:
   L          = 1024
@@ -39,6 +40,7 @@
   bath_type  = "constant"
   eps        = 0.05d0
   irdG0file  = "eqG0w.restart"
+  irdG0Mfile = "eqG0iw.restart"
   irdnkfile  = "eqnk.restart"
   omp_num_threads =1      
 

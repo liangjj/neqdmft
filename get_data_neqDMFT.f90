@@ -45,7 +45,7 @@ contains
 
     call massive_allocation()
 
-    call get_Bath()
+    call get_thermostat_bath()
 
     !Read the functions:
     call sread("locGless.data",locGless(0:nstep,0:nstep))

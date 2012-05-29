@@ -39,7 +39,8 @@
      case("BATH_TYPE")	;read(nml_var%value,*)bath_type
      case("EPS")	;read(nml_var%value,*)eps
      case("IRDG0FILE")	;read(nml_var%value,*)irdG0file
-     case("IRDNKFILE")	;read(nml_var%value,*)irdnkfile
+     case("IRDG0MFILE")	;read(nml_var%value,*)irdG0Mfile
+     case("IRDNKFILE")	;read(nml_var%value,*)irdNkfile
      case("OMP_NUM_THREADS") ;read(nml_var%value,*)omp_num_threads
         !LatticeN:
      case("NX")		;read(nml_var%value,*)Nx
@@ -49,6 +50,7 @@
      case("BETA0")	;read(nml_var%value,*)beta0
      case("U0")         ;read(nml_var%value,*)U0
      case("XMU0")       ;read(nml_var%value,*)xmu0
+     case("SOLVE_EQ")   ;read(nml_var%value,*)solve_eq
      case default
         print*,"No corresponging variable in NML"
      end select

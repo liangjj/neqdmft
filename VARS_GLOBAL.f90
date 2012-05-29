@@ -44,7 +44,7 @@ MODULE VARS_GLOBAL
   integer           :: Nsuccess
   real(8)           :: weight    !mixing weight parameter
   real(8)           :: wmin,wmax     !
-  character(len=32) :: irdG0file,irdNkfile
+  character(len=32) :: irdG0file,irdNkfile,irdG0Mfile
 
 
   !FREQS & TIME ARRAYS:
@@ -67,15 +67,18 @@ MODULE VARS_GLOBAL
 
 
   !EQUILIUBRIUM/WIGNER TRANSFORMED GREEN'S FUNCTION 
-  !=========================================================  
+  !=========================================================
   !Equilibrium initial conditions: Bath DOS, n(\e(k))
-  real(8),allocatable,dimension(:)     :: irdNk
-  complex(8),allocatable,dimension(:)  :: irdG0w
+  real(8),allocatable,dimension(:)     :: irdNk,irdG0tau
+  complex(8),allocatable,dimension(:)  :: irdG0w,irdG0iw
 
   !Frequency domain:
   type(keldysh_equilibrium_gf)        :: gf0,gf,sf
 
   real(8),dimension(:),allocatable    :: exa
+
+  !Solve equilibrium Flag:
+  logical                             :: solve_eq
 
 
   !NON-EQUILIBRIUM GREEN'S FUNCTION: 4 = G^<,G^>
@@ -124,7 +127,7 @@ MODULE VARS_GLOBAL
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,irdG0file,irdnkfile,omp_num_threads,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
-       iquench,beta0,xmu0,U0
+       iquench,beta0,xmu0,U0,solve_eq
 
 contains
 

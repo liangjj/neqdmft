@@ -11,7 +11,7 @@ module BATH
   private
   integer,parameter                :: Lw=1024 !# of frequencies
   real(8),allocatable,dimension(:) :: bath_dens,wfreq
-  public                           :: get_Bath
+  public                           :: get_thermostat_bath
 
 contains
   !+-------------------------------------------------------------------+
@@ -19,7 +19,7 @@ contains
   !dependent formalism. The bath is not interacting so it is 
   ! time translation invariant.
   !+-------------------------------------------------------------------+
-  subroutine get_Bath()
+  subroutine get_thermostat_bath()
     integer          :: iw,i
     real(8)          :: en,w,dw,wfin,wini
     complex(8)       :: peso
@@ -69,7 +69,7 @@ contains
        call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
     endif
 
-  end subroutine get_Bath
+  end subroutine get_thermostat_bath
 
 
 

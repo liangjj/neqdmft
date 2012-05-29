@@ -8,12 +8,14 @@ program neqDMFT
   USE VARS_GLOBAL                 !global variables, calls to 3rd library 
   USE ELECTRIC_FIELD              !contains electric field init && routines
   USE BATH                        !contains bath inizialization
-  USE FUNX_NEQ                    !contains all the neqDMFT routines
+  USE EQUILIBRIUM                 !solves the equilibrium problem w/ IPT
+  USE IPT_NEQ                     !performs the non-eq. IPT. Write Sigma
+  USE FUNX_NEQ                    !contains routines for WF update and printing.
   USE KADANOFBAYM                 !solves KB equations numerically to get k-sum
   implicit none
 
   logical :: converged
-  complex(8),dimension(:,:),allocatable :: G0less_old,G0gtr_old
+
 
   call MPI_INIT(mpiERR)
   call MPI_COMM_RANK(MPI_COMM_WORLD,mpiID,mpiERR)
@@ -31,20 +33,22 @@ program neqDMFT
 
   !STARTS THE REAL WORK:
   call global_memory_allocation !allocate functions in the memory
-  call get_bath()               !get the dissipative bath functions
-  call guess_g0_sigma           !guess/read the first Weiss field/Sigma:
 
-  allocate(G0less_old(0:nstep,0:nstep),G0gtr_old(0:nstep,0:nstep))
+  if(solve_eq)call solve_equilibrium_ipt()
+
+  call get_thermostat_bath()    !get the dissipative bath functions
+  !call neq_guess_weiss_field   !guess/read the first Weiss field:
+
+  call neq_init_sigma           !initialize (read) the first Sigma. Guess.
+
   iloop=0;converged=.false.
   do while (.not.converged);iloop=iloop+1
      call start_loop(iloop,nloop,"DMFT-loop",unit=6)
-     G0less_old=G0less ; G0gtr_old =G0gtr
-     call get_gloc_kadanoff_baym  !-|
-     call update_weiss_field      !-|SELF-CONSISTENCY
-     G0less = weight*G0less + (1.d0-weight)*G0less_old
-     G0gtr = weight*G0gtr + (1.d0-weight)*G0gtr_old
      !
-     call get_sigma               !-|IMPURITY SOLVER
+     call neq_get_localgf !-|
+     call neq_update_weiss_field  !-|SELF-CONSISTENCY
+     !
+     call neq_solve_ipt           !-|IMPURITY SOLVER
      !
      call print_observables
      converged = convergence_check()
