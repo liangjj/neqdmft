@@ -22,7 +22,7 @@ module EQUILIBRIUM
 contains
 
   subroutine solve_equilibrium_ipt()
-    integer    :: i,loop
+    integer    :: i,j,loop
     logical    :: converged
     complex(8) :: zeta
     real(8)    :: n,wmax_    
@@ -36,7 +36,7 @@ contains
        allocate(sold(L))
        allocate(wr_(L),nk_(Lk))
        !
-       wmax_= min(30.d0,wmax)
+       wmax_= min(20.d0,wmax)
        wr_ = linspace(-wmax_,wmax_,L)
        !
        sigma_=zero ; sold=sigma_
@@ -48,13 +48,13 @@ contains
              zeta  = cmplx(wr_(i),eps) - sigma_(i)
              fg_(i) = sum_overk_zeta(zeta,epsik,wt)
           enddo
-          n     = sum(aimag(fg_)*fermi(wr,beta))/sum(aimag(fg_))
+          n     = sum(aimag(fg_)*fermi(wr_,beta))/sum(aimag(fg_))
           fg0_  = one/(one/fg_ + sigma_)
           sigma_= solve_ipt_sopt(fg0_,wr_)
           sigma_= weight*sigma_ + (1.d0-weight)*sold
           sold  = sigma_
           converged=check_convergence(sigma_,eps_error,nsuccess,nloop)
-          call splot("EQUILIBRIUM/nVSiloop.ipt",iloop,n,append=TT)
+          call splot("EQUILIBRIUM/nVSiloop.ipt",loop,n,append=TT)
        enddo
        call close_file("EQUILIBRIUM/nVSiloop.ipt")
        !
@@ -67,13 +67,28 @@ contains
        call splot("EQUILIBRIUM/Sigma_realw.ipt",wr_,sigma_)
        call splot("EQUILIBRIUM/nkVSepsk.ipt",epsik,nk_)
        call splot("EQUILIBRIUM/G0_iw.ipt",wm,fg0m_)
+
+
+       !Prepare output to start neq-KB equations solution
        call splot(trim(irdG0file),wr_,fg0_)
-       call splot(trim(irdG0Mfile),wm,fg0m_)
        call splot(trim(irdnkfile),epsik,nk_)
+       ! call linear_spline(fg0_,wr_,gf0%ret%w,wr)
+       ! gf0%less%w = less_component_w(gf0%ret%w,wr,beta)
+       ! gf0%gtr%w  = gtr_component_w(gf0%ret%w,wr,beta)
+       ! call fftgf_rw2rt(gf0%less%w,gf0%less%t,nstep) ; gf0%less%t=exa*fmesh/pi2*gf0%less%t
+       ! call fftgf_rw2rt(gf0%gtr%w, gf0%gtr%t,nstep)  ; gf0%gtr%t =exa*fmesh/pi2*gf0%gtr%t
+       ! forall(i=0:nstep,j=0:nstep)
+       !    Sless(i,j)=(U**2)*(gf0%less%t(i-j)**2)*gf0%gtr%t(j-i)
+       !    Sgtr(i,j) =(U**2)*(gf0%gtr%t(i-j)**2)*gf0%less%t(j-i)
+       ! end forall
+       ! call splot(trim(irdSlfile),Sless(0:nstep,0:nstep))
+       ! call splot(trim(irdSgfile),Sgtr(0:nstep,0:nstep))
+
+
     endif
   contains
     function square_lattice_momentum_distribution(Lk) result(nk)
-      integer,parameter  :: M=4*4096
+      integer,parameter  :: M=4096
       integer            :: Lk
       integer            :: ik,i
       type(matsubara_gf) :: gm,sm

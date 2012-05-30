@@ -335,18 +335,18 @@ contains
     real(8) :: en,mu,invtemp
     call msg("Building initial conditions:")
     call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
-    mu=xmu
-    invtemp=beta
-    if(iquench)mu=xmu0
-    if(iquench)invtemp=beta0
-    if(irdeq)then
-       icGkless = xi*irdNk
-    else
-       do ik=1,Lk
-          en           = epsik(ik)-mu
-          Icgkless(ik) = xi*fermi0(en,invtemp)
-       enddo
-    endif
+    ! mu=xmu
+    ! invtemp=beta
+    ! if(iquench)mu=xmu0
+    ! if(iquench)invtemp=beta0
+    ! if(irdeq)then
+    icGkless = xi*irdNk
+    ! else
+    !    do ik=1,Lk
+    !       en           = epsik(ik)-mu
+    !       icGkless(ik) = xi*fermi0(en,invtemp)
+    !    enddo
+    ! endif
     call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),aimag(icGkless(1:Lk)))
     return
   end subroutine build_ic

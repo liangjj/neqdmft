@@ -11,196 +11,14 @@ module FUNX_NEQ
   implicit none
   private
   !
-  integer                          :: irdL,irdLM
-  real(8)                          :: irdfmesh
-  real(8),allocatable,dimension(:) :: irdwr,irdwm
+  !integer                          :: irdL,irdLM
+  !real(8)                          :: irdfmesh
+  !real(8),allocatable,dimension(:) :: irdwr,irdwm
   !
-  public                           :: neq_guess_weiss_field
   public                           :: neq_update_weiss_field
-  public                           :: print_observables,convergence_check
-
+  public                           :: print_observables
+  public                           :: convergence_check
 contains
-
-
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : Build a guess for the initial Weiss Fields G0^{<,>} 
-  !as non-interacting GFs. If required read construct it starting 
-  !from a read seed (cf. routine for seed reading)
-  !+-------------------------------------------------------------------+
-  subroutine neq_guess_weiss_field
-    integer    :: i,j,ik,redLk
-    real(8)    :: en,intE,A
-    complex(8) :: peso
-    real(8)    :: nless,ngtr
-
-    call msg("Get G0guess(t,t')",id=0)
-    gf0=zero ; G0gtr=zero ; G0less=zero
-    if(mpiID==0)then
-
-       if(irdeq .OR. solve_eq)then            !Read from equilibrium solution
-          call read_init_seed()
-          do ik=1,irdL             !2*L
-             en   = irdwr(ik)
-             nless= fermi0(en,beta)
-             ngtr = fermi0(en,beta)-1.d0
-             A    = -aimag(irdG0w(ik))/pi*irdfmesh
-             do i=-nstep,nstep
-                peso=exp(-xi*en*t(i))
-                gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
-                gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
-             enddo
-          enddo
-          forall(i=0:nstep,j=0:nstep)
-             G0less(i,j)=gf0%less%t(i-j)
-             G0gtr(i,j) =gf0%gtr%t(i-j)
-          end forall
-
-       else
-
-          if(equench)then
-             do ik=1,Lk
-                en   = epsik(ik)
-                nless= fermi0(en,beta)
-                ngtr = fermi0(en,beta)-1.d0
-                do j=0,nstep
-                   do i=0,nstep
-                      intE=int_Ht(ik,i,j)
-                      peso=exp(-xi*intE)
-                      G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
-                      G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
-                   enddo
-                enddo
-             enddo
-
-          else
-
-             do ik=1,Lk
-                en   = epsik(ik)
-                nless= fermi0(en,beta)
-                ngtr = fermi0(en,beta)-1.d0
-                A    = wt(ik)
-                do i=-nstep,nstep
-                   peso=exp(-xi*en*t(i))
-                   gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
-                   gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
-                enddo
-             enddo
-             forall(i=0:nstep,j=0:nstep)
-                G0less(i,j)=gf0%less%t(i-j)
-                G0gtr(i,j) =gf0%gtr%t(i-j)
-             end forall
-
-          endif
-       endif
-
-       call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-       call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
-    endif
-    call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-
-  contains
-
-    function int_Ht(ik,it,jt)
-      real(8)      :: int_Ht
-      integer      :: i,j,ii,ik,it,jt,sgn
-      type(vect2D) :: kt,Ak
-      int_Ht=0.d0 ; if(it==jt)return
-      sgn=1 ; if(jt > it)sgn=-1
-      i=ik2ix(ik); j=ik2iy(ik)
-      do ii=jt,it,sgn
-         Ak=Afield(t(ii),Ek)
-         kt=kgrid(i,j) - Ak
-         int_Ht=int_Ht + sgn*square_lattice_dispersion(kt)*dt
-      enddo
-    end function int_Ht
-
-  end subroutine neq_guess_weiss_field
-
-
-
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
-
-
-
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : Build a guess for the initial Weiss Fields G0^{<,>} 
-  !as non-interacting GFs. If required construct it starting 
-  !from a read seed (cf. routine for seed reading)
-  !+-------------------------------------------------------------------+
-  subroutine read_init_seed()
-    logical :: control
-    real(8) :: w1,w2
-    integer :: ik,redLk
-    real(8),allocatable :: rednk(:),redek(:)
-    integer,allocatable :: orderk(:)
-    real(8),allocatable :: uniq_rednk(:),uniq_redek(:)
-    logical,allocatable :: maskk(:)
-
-    !GO_realw:
-    inquire(file=trim(irdG0file),exist=control)
-    if(.not.control)call error("Can not find irdG0file")
-    !Read the function WF
-    irdL=file_length(trim(irdG0file))
-    allocate(irdG0w(irdL),irdwr(irdL))
-    call sread(trim(irdG0file),irdwr,irdG0w)
-    !Get G0 mesh:
-    irdfmesh=abs(irdwr(2)-irdwr(1))
-
-    !n(k): A lot of work here to reshape the array
-    inquire(file=trim(irdnkfile),exist=control)
-    if(.not.control)call abort("Can not find irdnkfile")
-    !Read the function nk.
-    redLk=file_length(trim(irdnkfile))
-    allocate(rednk(redLk),redek(redLk),orderk(redLk))
-    call sread(trim(irdnkfile),redek,rednk)
-    !work on the read arrays:
-    !1 - sorting: sort the energies (X-axis), mirror on occupation (Y-axis) 
-    !2 - delete duplicates energies (X-axis), mirror on occupation (Y-axis) 
-    !3 - interpolate to the actual lattice structure (epsik,nk)
-    call sort_array(redek,orderk)
-    call reshuffle(rednk,orderk)
-    call uniq(redek,uniq_redek,maskk)
-    allocate(uniq_rednk(size(uniq_redek)))
-    uniq_rednk = pack(rednk,maskk)
-    allocate(irdnk(Lk))
-    call linear_spline(uniq_rednk,uniq_redek,irdnk,epsik)
-
-    !G0_iw:
-    inquire(file=trim(irdG0Mfile),exist=control)
-    if(.not.control)call error("Can not find irdG0Mfile")
-    !Read the function WF
-    irdLM=file_length(trim(irdG0Mfile))
-    allocate(irdG0iw(irdLM),irdG0tau(0:Ltau),irdwm(irdLM))
-    call sread(trim(irdG0Mfile),irdwm,irdG0iw)
-    call fftgf_iw2tau(irdG0iw,irdG0tau,beta)
-
-
-    !Print out the initial conditions as effectively read from the files:
-    call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
-    call splot("InitialConditions/read_G0_realw.ipt",irdwr,irdG0w)
-    call splot("InitialConditions/read_G0_iw.ipt",irdwm,irdG0iw)
-    call splot("InitialConditions/read_G0_tau.ipt",tau,irdG0tau)
-    call splot("InitialConditions/read_nkVSek.ipt",epsik,irdnk)
-
-    call MPI_BCAST(irdG0w,irdL,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(irdG0iw,irdL,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(irdG0tau,Ltau+1,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
-  end subroutine read_init_seed
-
-
-
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
-
-
-
 
 
   !+-------------------------------------------------------------------+
@@ -220,14 +38,10 @@ contains
     complex(8),dimension(:,:),allocatable,save :: G0less_old,G0gtr_old
 
 
-    if(.not.allocated(G0less_old))then
-       allocate(G0less_old(0:nstep,0:nstep))
-       G0less_old=G0less
-    endif
-    if(.not.allocated(G0gtr_old))then
-       allocate(G0gtr_old(0:nstep,0:nstep))
-       G0gtr_old =G0gtr
-    endif
+    if(.not.allocated(G0less_old))allocate(G0less_old(0:nstep,0:nstep))
+    if(.not.allocated(G0gtr_old))allocate(G0gtr_old(0:nstep,0:nstep))
+    G0less_old=G0less
+    G0gtr_old =G0gtr
 
     call msg("Update WF: Dyson")
     if(update_wfftw)then
@@ -323,6 +137,187 @@ contains
        converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop,id=0)
     endif
   end function convergence_check
+
+
+
+
+
+
+  ! !+-------------------------------------------------------------------+
+  ! !PURPOSE  : Build a guess for the initial Weiss Fields G0^{<,>} 
+  ! !as non-interacting GFs. If required read construct it starting 
+  ! !from a read seed (cf. routine for seed reading)
+  ! !+-------------------------------------------------------------------+
+  ! subroutine neq_guess_weiss_field
+  !   integer    :: i,j,ik,redLk
+  !   real(8)    :: en,intE,A
+  !   complex(8) :: peso
+  !   real(8)    :: nless,ngtr
+
+  !   call msg("Get G0guess(t,t')",id=0)
+  !   gf0=zero ; G0gtr=zero ; G0less=zero
+  !   if(mpiID==0)then
+
+  !      if(irdeq .OR. solve_eq)then            !Read from equilibrium solution
+  !         call read_init_seed()
+  !         do ik=1,irdL             !2*L
+  !            en   = irdwr(ik)
+  !            nless= fermi0(en,beta)
+  !            ngtr = fermi0(en,beta)-1.d0
+  !            A    = -aimag(irdG0w(ik))/pi*irdfmesh
+  !            do i=-nstep,nstep
+  !               peso=exp(-xi*en*t(i))
+  !               gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
+  !               gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
+  !            enddo
+  !         enddo
+  !         forall(i=0:nstep,j=0:nstep)
+  !            G0less(i,j)=gf0%less%t(i-j)
+  !            G0gtr(i,j) =gf0%gtr%t(i-j)
+  !         end forall
+
+  !      else
+
+  !         if(equench)then
+  !            do ik=1,Lk
+  !               en   = epsik(ik)
+  !               nless= fermi0(en,beta)
+  !               ngtr = fermi0(en,beta)-1.d0
+  !               do j=0,nstep
+  !                  do i=0,nstep
+  !                     intE=int_Ht(ik,i,j)
+  !                     peso=exp(-xi*intE)
+  !                     G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
+  !                     G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
+  !                  enddo
+  !               enddo
+  !            enddo
+
+  !         else
+
+  !            do ik=1,Lk
+  !               en   = epsik(ik)
+  !               nless= fermi0(en,beta)
+  !               ngtr = fermi0(en,beta)-1.d0
+  !               A    = wt(ik)
+  !               do i=-nstep,nstep
+  !                  peso=exp(-xi*en*t(i))
+  !                  gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
+  !                  gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
+  !               enddo
+  !            enddo
+  !            forall(i=0:nstep,j=0:nstep)
+  !               G0less(i,j)=gf0%less%t(i-j)
+  !               G0gtr(i,j) =gf0%gtr%t(i-j)
+  !            end forall
+
+  !         endif
+  !      endif
+
+  !      call splot("guessG0less.data",G0less(0:nstep,0:nstep))
+  !      call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
+  !   endif
+  !   call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+  !   call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+
+  ! contains
+
+  !   function int_Ht(ik,it,jt)
+  !     real(8)      :: int_Ht
+  !     integer      :: i,j,ii,ik,it,jt,sgn
+  !     type(vect2D) :: kt,Ak
+  !     int_Ht=0.d0 ; if(it==jt)return
+  !     sgn=1 ; if(jt > it)sgn=-1
+  !     i=ik2ix(ik); j=ik2iy(ik)
+  !     do ii=jt,it,sgn
+  !        Ak=Afield(t(ii),Ek)
+  !        kt=kgrid(i,j) - Ak
+  !        int_Ht=int_Ht + sgn*square_lattice_dispersion(kt)*dt
+  !     enddo
+  !   end function int_Ht
+
+  ! end subroutine neq_guess_weiss_field
+
+
+
+
+  !********************************************************************
+  !********************************************************************
+  !********************************************************************
+
+
+
+  ! !+-------------------------------------------------------------------+
+  ! !PURPOSE  : Build a guess for the initial Weiss Fields G0^{<,>} 
+  ! !as non-interacting GFs. If required construct it starting 
+  ! !from a read seed (cf. routine for seed reading)
+  ! !+-------------------------------------------------------------------+
+  ! subroutine read_init_seed()
+  !   logical :: control
+  !   real(8) :: w1,w2
+  !   integer :: ik,redLk
+  !   real(8),allocatable :: rednk(:),redek(:)
+  !   integer,allocatable :: orderk(:)
+  !   real(8),allocatable :: uniq_rednk(:),uniq_redek(:)
+  !   logical,allocatable :: maskk(:)
+
+  !   !GO_realw:
+  !   inquire(file=trim(irdG0file),exist=control)
+  !   if(.not.control)call error("Can not find irdG0file")
+  !   !Read the function WF
+  !   irdL=file_length(trim(irdG0file))
+  !   allocate(irdG0w(irdL),irdwr(irdL))
+  !   call sread(trim(irdG0file),irdwr,irdG0w)
+  !   !Get G0 mesh:
+  !   irdfmesh=abs(irdwr(2)-irdwr(1))
+
+  !   !n(k): A lot of work here to reshape the array
+  !   inquire(file=trim(irdnkfile),exist=control)
+  !   if(.not.control)call abort("Can not find irdnkfile")
+  !   !Read the function nk.
+  !   redLk=file_length(trim(irdnkfile))
+  !   allocate(rednk(redLk),redek(redLk),orderk(redLk))
+  !   call sread(trim(irdnkfile),redek,rednk)
+  !   !work on the read arrays:
+  !   !1 - sorting: sort the energies (X-axis), mirror on occupation (Y-axis) 
+  !   !2 - delete duplicates energies (X-axis), mirror on occupation (Y-axis) 
+  !   !3 - interpolate to the actual lattice structure (epsik,nk)
+  !   call sort_array(redek,orderk)
+  !   call reshuffle(rednk,orderk)
+  !   call uniq(redek,uniq_redek,maskk)
+  !   allocate(uniq_rednk(size(uniq_redek)))
+  !   uniq_rednk = pack(rednk,maskk)
+  !   allocate(irdnk(Lk))
+  !   call linear_spline(uniq_rednk,uniq_redek,irdnk,epsik)
+
+  !   !G0_iw:
+  !   allocate(irdG0iw(L),irdG0tau(0:Ltau))
+  !   call get_matsubara_gf_from_DOS(irdwr,irdG0w,irdG0iw,beta)
+  !   call fftgf_iw2tau(irdG0iw,irdG0tau,beta)
+
+
+  !   !Print out the initial conditions as effectively read from the files:
+  !   call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
+  !   call splot("InitialConditions/read_G0_realw.ipt",irdwr,irdG0w)
+  !   call splot("InitialConditions/read_G0_iw.ipt",irdwm,irdG0iw)
+  !   call splot("InitialConditions/read_G0_tau.ipt",tau,irdG0tau)
+  !   call splot("InitialConditions/read_nkVSek.ipt",epsik,irdnk)
+
+  !   call MPI_BCAST(irdG0w,irdL,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+  !   call MPI_BCAST(irdG0iw,irdL,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+  !   call MPI_BCAST(irdG0tau,Ltau+1,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+  !   call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
+  ! end subroutine read_init_seed
+
+
+
+
+  !********************************************************************
+  !********************************************************************
+  !********************************************************************
+
+
+
 
 
 end module FUNX_NEQ

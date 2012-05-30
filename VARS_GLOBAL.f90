@@ -44,7 +44,11 @@ MODULE VARS_GLOBAL
   integer           :: Nsuccess
   real(8)           :: weight    !mixing weight parameter
   real(8)           :: wmin,wmax     !
-  character(len=32) :: irdG0file,irdNkfile,irdG0Mfile
+
+
+  !Files to restart job
+  !=========================================================
+  character(len=32) :: irdG0file,irdNkfile,irdSlfile,irdSgfile
 
 
   !FREQS & TIME ARRAYS:
@@ -79,7 +83,7 @@ MODULE VARS_GLOBAL
 
   !Solve equilibrium Flag:
   logical                             :: solve_eq
-
+  logical                             :: g0loc_guess
 
   !NON-EQUILIBRIUM GREEN'S FUNCTION: 4 = G^<,G^>
   !=========================================================  
@@ -125,9 +129,10 @@ MODULE VARS_GLOBAL
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
-       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,irdG0file,irdnkfile,omp_num_threads,&
+       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,omp_num_threads,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
-       iquench,beta0,xmu0,U0,solve_eq
+       iquench,beta0,xmu0,U0,irdG0file,irdnkfile,irdSlfile,irdSgfile,&
+       solve_eq,g0loc_guess
 
 contains
 
@@ -260,15 +265,13 @@ contains
     allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
     allocate(locGless(0:nstep,0:nstep),locGgtr(0:nstep,0:nstep))
     allocate(impGless(0:nstep,0:nstep),impGgtr(0:nstep,0:nstep))
-    allocate(nk(0:nstep,Lk))
+    allocate(nk(0:nstep,Lk),irdnk(Lk))
 
     call allocate_gf(gf0,nstep)
     call allocate_gf(gf,nstep)
     call allocate_gf(sf,nstep)
 
-    if(fchi)then
-       allocate(chi(2,2,0:nstep,0:nstep))
-    endif
+    if(fchi)allocate(chi(2,2,0:nstep,0:nstep))
 
     allocate(exa(-nstep:nstep))
     ex=-1.d0       
@@ -287,8 +290,7 @@ contains
 
 
 
-
-  function fermi0(x,beta)
+  pure function fermi0(x,beta)
     real(8),intent(in) :: x,beta
     real(8) :: fermi0
     fermi0=fermi(x,beta)

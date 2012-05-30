@@ -30,6 +30,7 @@
      case("PLOT3D")		;read(nml_var%value,*)plot3D
      case("FCHI")		;read(nml_var%value,*)fchi
      case("EQUENCH")		;read(nml_var%value,*)equench
+
         !parameters:
      case("L")		;read(nml_var%value,*)L
      case("LTAU")	;read(nml_var%value,*)Ltau
@@ -39,8 +40,9 @@
      case("BATH_TYPE")	;read(nml_var%value,*)bath_type
      case("EPS")	;read(nml_var%value,*)eps
      case("IRDG0FILE")	;read(nml_var%value,*)irdG0file
-     case("IRDG0MFILE")	;read(nml_var%value,*)irdG0Mfile
      case("IRDNKFILE")	;read(nml_var%value,*)irdNkfile
+     case("IRDSLFILE")	;read(nml_var%value,*)irdSlfile
+     case("IRDSGFILE")	;read(nml_var%value,*)irdSgfile
      case("OMP_NUM_THREADS") ;read(nml_var%value,*)omp_num_threads
         !LatticeN:
      case("NX")		;read(nml_var%value,*)Nx
@@ -51,6 +53,7 @@
      case("U0")         ;read(nml_var%value,*)U0
      case("XMU0")       ;read(nml_var%value,*)xmu0
      case("SOLVE_EQ")   ;read(nml_var%value,*)solve_eq
+     case("G0LOC_GUESS");read(nml_var%value,*)g0loc_guess
      case default
         print*,"No corresponging variable in NML"
      end select

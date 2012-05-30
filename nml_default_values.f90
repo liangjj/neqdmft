@@ -21,8 +21,8 @@
   field_profile='constant'
 
   !     Flags:
-  irdeq         = .false.
   method        = 'ipt'
+  irdeq         = .false.
   update_wfftw  = .false.
   solve_wfftw   = .false.
   plotVF        = .false.
@@ -30,6 +30,8 @@
   fchi          = .false.
   equench       = .false.
   solve_eq      = .false.
+  g0loc_guess   = .false.
+  iquench       = .false.
 
   !     Parameters:
   L          = 1024
@@ -40,16 +42,16 @@
   bath_type  = "constant"
   eps        = 0.05d0
   irdG0file  = "eqG0w.restart"
-  irdG0Mfile = "eqG0iw.restart"
   irdnkfile  = "eqnk.restart"
+  irdSlfile  = "Sless.restart"
+  irdSgfile  = "Sgtr.restart"
   omp_num_threads =1      
 
   !     LatticeN
-  Nx = 50
-  Ny = 50    
+  Nx = 25
+  Ny = 25    
 
   !     Quench
-  iquench = .false.
   beta0   = 100.0
   U0      = 6.0
   xmu0    = 0.0    

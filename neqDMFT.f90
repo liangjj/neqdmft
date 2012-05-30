@@ -16,7 +16,6 @@ program neqDMFT
 
   logical :: converged
 
-
   call MPI_INIT(mpiERR)
   call MPI_COMM_RANK(MPI_COMM_WORLD,mpiID,mpiERR)
   call MPI_COMM_SIZE(MPI_COMM_WORLD,mpiSIZE,mpiERR)
@@ -33,22 +32,20 @@ program neqDMFT
 
   !STARTS THE REAL WORK:
   call global_memory_allocation !allocate functions in the memory
+  call get_thermostat_bath()    !get the dissipative bath functions
 
   if(solve_eq)call solve_equilibrium_ipt()
 
-  call get_thermostat_bath()    !get the dissipative bath functions
-  !call neq_guess_weiss_field   !guess/read the first Weiss field:
-
-  call neq_init_sigma           !initialize (read) the first Sigma. Guess.
+  call neq_init_run            !initialize the run w/ different guess.
 
   iloop=0;converged=.false.
   do while (.not.converged);iloop=iloop+1
      call start_loop(iloop,nloop,"DMFT-loop",unit=6)
      !
-     call neq_get_localgf !-|
-     call neq_update_weiss_field  !-|SELF-CONSISTENCY
+     call neq_get_localgf        !-|
+     call neq_update_weiss_field !-|SELF-CONSISTENCY
      !
-     call neq_solve_ipt           !-|IMPURITY SOLVER
+     call neq_solve_ipt          !-|IMPURITY SOLVER
      !
      call print_observables
      converged = convergence_check()
