@@ -30,7 +30,7 @@ MODULE VARS_GLOBAL
   integer           :: Lkreduced     !reduced lattice dimension
   integer           :: Nx,Ny         !lattice grid dimensions
   integer           :: nstep         !Number of Time steps
-  real(8)           :: beta0,xmu0,U0 !quench variables        
+  real(8)           :: beta0,xmu0,U0 !quench variables
   logical           :: iquench       !quench flag
   logical           :: Equench       !initial condition with (T) or without (F) electric field
   logical           :: irdeq         !irdeq=TT read inputs from equilbrium solution
@@ -48,7 +48,8 @@ MODULE VARS_GLOBAL
 
   !Files to restart job
   !=========================================================
-  character(len=32) :: irdG0file,irdNkfile,irdSlfile,irdSgfile
+  character(len=32) :: irdG0file,irdNkfile,irdG0mfile
+  character(len=32) :: irdSlfile,irdSgfile,irdSmfile
 
 
   !FREQS & TIME ARRAYS:
@@ -75,21 +76,18 @@ MODULE VARS_GLOBAL
   !Equilibrium initial conditions: Bath DOS, n(\e(k))
   real(8),allocatable,dimension(:)     :: irdNk,irdG0tau
   complex(8),allocatable,dimension(:)  :: irdG0w,irdG0iw
-
   !Frequency domain:
   type(keldysh_equilibrium_gf)        :: gf0,gf,sf
-
   real(8),dimension(:),allocatable    :: exa
 
-  !Solve equilibrium Flag:
-  logical                             :: solve_eq
-  logical                             :: g0loc_guess
+
 
   !NON-EQUILIBRIUM GREEN'S FUNCTION: 4 = G^<,G^>
   !=========================================================  
   !NON-INTERACTING
-  complex(8),allocatable,dimension(:,:) :: G0gtr
-  complex(8),allocatable,dimension(:,:) :: G0less
+  complex(8),allocatable,dimension(:,:) :: G0gtr,G0lceil
+  complex(8),allocatable,dimension(:,:) :: G0less,G0rceil
+  real(8),allocatable,dimension(:,:)    :: G0mat
   real(8),allocatable,dimension(:,:)    :: nk
 
   !SELF-ENERGIES
@@ -98,13 +96,15 @@ MODULE VARS_GLOBAL
   complex(8),allocatable,dimension(:)   :: S0gtr
   complex(8),allocatable,dimension(:)   :: S0less
   !Sigma^U(t,t`)
-  complex(8),allocatable,dimension(:,:) :: Sgtr
-  complex(8),allocatable,dimension(:,:) :: Sless
+  complex(8),allocatable,dimension(:,:) :: Sgtr,Slceil
+  complex(8),allocatable,dimension(:,:) :: Sless,Srceil
+  real(8),allocatable,dimension(:,:)    :: Smat
 
   !INTERACTING
   !=========================================================  
-  complex(8),allocatable,dimension(:,:) :: locGgtr
-  complex(8),allocatable,dimension(:,:) :: locGless
+  complex(8),allocatable,dimension(:,:) :: locGgtr,locGlceil
+  complex(8),allocatable,dimension(:,:) :: locGless,locGrceil
+  real(8),allocatable,dimension(:,:)    :: locGmat
 
   !IMPURITY
   !=========================================================  
@@ -121,9 +121,10 @@ MODULE VARS_GLOBAL
 
   !FLAGS
   !=========================================================  
-  logical              :: plotVF,plot3D,fchi
-  integer              :: size_cutoff
-
+  logical :: plotVF,plot3D,fchi
+  integer :: size_cutoff
+  logical :: solve_eq
+  logical :: g0loc_guess
 
   !NAMELISTS:
   !=========================================================
@@ -131,7 +132,9 @@ MODULE VARS_GLOBAL
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,omp_num_threads,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
-       iquench,beta0,xmu0,U0,irdG0file,irdnkfile,irdSlfile,irdSgfile,&
+       iquench,beta0,xmu0,U0,&
+       irdG0file,irdG0mfile,irdNkfile,&
+       irdSlfile,irdSgfile,irdSmfile,&
        solve_eq,g0loc_guess
 
 contains
@@ -145,8 +148,10 @@ contains
     character(len=*) :: inputFILE
     integer          :: i
     logical,optional :: printf
+    logical          :: lprint
     logical          :: control
 
+    lprint=.false. ; if(present(printf))lprint=printf
     call version(revision)
 
     allocate(help_buffer(60))
@@ -213,7 +218,62 @@ contains
          '  '])
     call parse_cmd_help(help_buffer)
 
-    include "nml_default_values.f90"
+    !DEFAULT NML VARIABLES VALUES:
+    dt      = 0.157080
+    beta    = 100.0
+    U       = 6.0
+    Efield  = 0.0
+    Vpd     = 0.0
+    ts      = 1.0
+    nstep   = 50
+    nloop   = 30
+    eps_error= 1.d-4
+    Nsuccess = 2
+    weight  = 0.9d0
+
+    Ex  = 1.d0
+    Ey  = 1.d0
+    t0  = 0.d0
+    t1  = 1000000.d0              !infinite time SHIT!!
+    tau0= 1.d0
+    w0  = 20.d0
+    field_profile='constant'
+
+    method        = 'ipt'
+    irdeq         = .false.
+    update_wfftw  = .false.
+    solve_wfftw   = .false.
+    plotVF        = .false.
+    plot3D        = .false.
+    fchi          = .false.
+    equench       = .false.
+    solve_eq      = .false.
+    g0loc_guess   = .false.
+    iquench       = .false.
+
+    L          = 1024
+    Ltau       = 32
+    Lmu        = 2048
+    Lkreduced  = 200
+    wbath      = 20.0
+    bath_type  = "constant"
+    eps        = 0.04d0
+    irdG0file  = "eqG0w.restart"
+    irdG0mfile = "eqG0iw.restart"
+    irdnkfile  = "eqnk.restart"
+    irdSlfile  = "Sless.restart"
+    irdSgfile  = "Sgtr.restart"
+    irdSmfile  = "Siw.restart"
+
+    Nx = 25
+    Ny = 25    
+
+    beta0   = 100.0
+    U0      = 6.0
+    xmu0    = 0.0    
+
+    omp_num_threads =1
+
     inquire(file=adjustl(trim(inputFILE)),exist=control)
     if(control)then
        open(10,file=adjustl(trim(inputFILE)))
@@ -231,7 +291,7 @@ contains
     write(*,nml=variables)
     write(*,*)"--------------------------------------------"
     write(*,*)""
-    if(present(printf).AND.printf.eq..true.)call dump_input_file("used.")
+    if(lprint)call dump_input_file("used.")
 
     !SET OMP THREADS NUMBER
     call omp_set_num_threads(omp_num_threads)

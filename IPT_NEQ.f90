@@ -16,15 +16,18 @@ module IPT_NEQ
 
 contains
 
-
+  !+-------------------------------------------------------------------+
+  !PURPOSE  : Initialize the run guessing/reading/setting initial conditions
+  !+-------------------------------------------------------------------+
   subroutine neq_init_run()
     integer                          :: i,j,ik
     integer                          :: iselect,irdL
     real(8)                          :: en,intE,A,irdfmesh
     real(8)                          :: nless,ngtr,xmu_,beta_
     complex(8)                       :: peso
-    logical                          :: checkS,checkS1,checkS2
-    logical                          :: checkGN,checkG0,checkNk
+    logical                          :: checkS1,checkS2,checkS3
+    logical                          :: checkGM,checkG0,checkNk
+    logical                          :: checkG,checkS
     real(8),allocatable,dimension(:) :: irdwr
     type(matsubara_gf)               :: fg0m,sm
 
@@ -39,23 +42,38 @@ contains
     inquire(file=trim(irdSgfile),exist=checkS2)
     if(.not.checkS2)inquire(file=trim(irdSgfile)//".gz",exist=checkS2)
 
+    !Check if Sigma^M file exists:
+    inquire(file=trim(irdSmfile),exist=checkS3)
+    if(.not.checkS3)inquire(file=trim(irdSmfile)//".gz",exist=checkS3)
+
     !Check if G0(w) file exist:
     inquire(file=trim(irdG0file),exist=checkG0)
     if(.not.checkG0)inquire(file=trim(irdG0file)//".gz",exist=checkG0)
+
+    !Check if G0(iw) file exist:
+    inquire(file=trim(irdG0mfile),exist=checkGM)
+    if(.not.checkGM)inquire(file=trim(irdG0mfile)//".gz",exist=checkG0)
 
     !Check if n(k) file exist:
     inquire(file=trim(irdnkfile),exist=checkNk)
     if(.not.checkNk)inquire(file=trim(irdNkfile)//".gz",exist=checkNk)
 
-    checkS=checkS1.AND.checkS2.AND.checkNk
 
-    checkGN=checkG0.AND.checkNk
+    !All S^<,>(t,t') file AND Sigma^M(iw) file exist
+    checkS=checkS1.AND.checkS2.AND.checkS3
+    !Both G0^R(w) AND G0^M(iw) exist
+    checkG=checkG0.AND.checkGM
 
-    if(checkS)then              !S^<,>(t,t') AND n(k) files exist
+    !also n(k) should exist
+    checkS=checkS.AND.checkNk
+    checkG=checkG.AND.checkNk
+
+
+    if(checkS)then
        iselect=1
-    elseif(checkGN)then         !G0(w) AND n(k) files exist
+    elseif(checkG)then
        iselect=2
-    elseif(checkG0.AND..not.checkNk)then !G0(w) exists but no n(k) is given
+    elseif(checkG0.AND..not.checkNk.AND.not.checkGM)then !only G0(w) exists
        iselect=3
     endif
 
@@ -79,6 +97,10 @@ contains
              call msg("Using Hartree-Fock for self-energy guess")
              call msg("G0less=G0gtr=zero",lines=1)
              G0less=zero ; G0gtr=zero
+             G0rceil=zero; G0lceil=zero
+
+             !Get G0(tau,tau') from the non-interacting equilibrium solution (corresponds to n(k))
+
 
           else
 

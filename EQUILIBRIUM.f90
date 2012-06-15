@@ -72,6 +72,7 @@ contains
        !Prepare output to start neq-KB equations solution
        call splot(trim(irdG0file),wr_,fg0_)
        call splot(trim(irdnkfile),epsik,nk_)
+       call splot(trim(irdG0mfile),wm,fg0m_)
        ! call linear_spline(fg0_,wr_,gf0%ret%w,wr)
        ! gf0%less%w = less_component_w(gf0%ret%w,wr,beta)
        ! gf0%gtr%w  = gtr_component_w(gf0%ret%w,wr,beta)
