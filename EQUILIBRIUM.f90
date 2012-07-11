@@ -11,13 +11,14 @@ module EQUILIBRIUM
   private
 
   !Equilibrium Function
-  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_,fg0m_,sold
+  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_,fg0m_,sold,dummyGiw,Siw
+  real(8),allocatable,dimension(:)    :: dummyGtau,Stau
   real(8),allocatable,dimension(:)    :: wr_,nk_
 
   public :: solve_equilibrium_ipt
   public :: update_equilibrium_weiss_field
   public :: get_equilibrium_localgf
-  public :: get_equilibrium_impuritygf
+  !public :: get_equilibrium_impuritygf
 
 contains
 
@@ -57,60 +58,54 @@ contains
           call splot("EQUILIBRIUM/nVSiloop.ipt",loop,n,append=TT)
        enddo
        call close_file("EQUILIBRIUM/nVSiloop.ipt")
-       !
-       nk_ = square_lattice_momentum_distribution(Lk)
-       call get_matsubara_gf_from_DOS(wr_,fg0_,fg0m_,beta)
-       !
        call splot("EQUILIBRIUM/DOS.ipt",wr_,-aimag(fg_)/pi)
        call splot("EQUILIBRIUM/G_realw.ipt",wr_,fg_)
        call splot("EQUILIBRIUM/G0_realw.ipt",wr_,fg0_)
        call splot("EQUILIBRIUM/Sigma_realw.ipt",wr_,sigma_)
+
+
+       !Save G0(w):
+       call splot(trim(irdG0wfile),wr_,fg0_)   !interacting bath DOS
+       allocate(dummyGiw(L),dummyGtau(0:L))
+       call get_matsubara_gf_from_DOS(wr_,fg0_,dummyGiw,beta)
+       call fftgf_iw2tau(dummyGiw,dummyGtau,beta)
+       call splot("EQUILIBRIUM/G0_iw.ipt",wm,dummyGiw)
+
+       !Save S(iw):
+       allocate(Stau(0:L),Siw(L))
+       forall(i=0:L)Stau(i)=U**2*(dummyGtau(i))**2*dummyGtau(L-i)
+       call fftgf_tau2iw(Stau,Siw,beta)
+       call splot(trim(irdSiwfile),wm,Siw) !interacting Matsubara self-energy
+       call splot("EQUILIBRIUM/Sigma_iw.ipt",wm,Siw)
+
+       !Save interacting momentum-distribution:
+       nk_ = square_lattice_momentum_distribution(Lk)       
+       call splot(trim(irdnkfile),epsik,nk_) 
        call splot("EQUILIBRIUM/nkVSepsk.ipt",epsik,nk_)
-       call splot("EQUILIBRIUM/G0_iw.ipt",wm,fg0m_)
 
-
-       !Prepare output to start neq-KB equations solution
-       call splot(trim(irdG0file),wr_,fg0_)
-       call splot(trim(irdnkfile),epsik,nk_)
-       call splot(trim(irdG0mfile),wm,fg0m_)
-       ! call linear_spline(fg0_,wr_,gf0%ret%w,wr)
-       ! gf0%less%w = less_component_w(gf0%ret%w,wr,beta)
-       ! gf0%gtr%w  = gtr_component_w(gf0%ret%w,wr,beta)
-       ! call fftgf_rw2rt(gf0%less%w,gf0%less%t,nstep) ; gf0%less%t=exa*fmesh/pi2*gf0%less%t
-       ! call fftgf_rw2rt(gf0%gtr%w, gf0%gtr%t,nstep)  ; gf0%gtr%t =exa*fmesh/pi2*gf0%gtr%t
-       ! forall(i=0:nstep,j=0:nstep)
-       !    Sless(i,j)=(U**2)*(gf0%less%t(i-j)**2)*gf0%gtr%t(j-i)
-       !    Sgtr(i,j) =(U**2)*(gf0%gtr%t(i-j)**2)*gf0%less%t(j-i)
-       ! end forall
-       ! call splot(trim(irdSlfile),Sless(0:nstep,0:nstep))
-       ! call splot(trim(irdSgfile),Sgtr(0:nstep,0:nstep))
-
-
+       !Get G(tau) (to be compared with initial conditions summed over k in KB)
+       call get_matsubara_gf_from_DOS(wr_,fg_,dummyGiw,beta)
+       deallocate(dummyGtau);allocate(dummyGtau(0:Ltau))
+       call fftgf_iw2tau(dummyGiw,dummyGtau,beta)       
+       call splot("EQUILIBRIUM/G_tau.ipt",tau,-dummyGtau(Ltau:0:-1))
     endif
+    !
   contains
+    !
     function square_lattice_momentum_distribution(Lk) result(nk)
-      integer,parameter  :: M=4096
       integer            :: Lk
       integer            :: ik,i
-      type(matsubara_gf) :: gm,sm
-      real(8)            :: nk(Lk),wm(M),w
-      call allocate_gf(gm,M)
-      call allocate_gf(sm,M)
-      wm   = pi/beta*real(2*arange(1,M)-1,8)
-      call get_matsubara_gf_from_DOS(wr_,sigma_,sm%iw,beta)
+      type(matsubara_gf) :: gm
+      real(8)            :: nk(Lk)
+      call allocate_gf(gm,L)
       do ik=1,Lk
-         gm%iw=one/(xi*wm - epsik(ik) - sm%iw)
+         gm%iw=one/(xi*wm - epsik(ik) - Siw)
          call fftgf_iw2tau(gm%iw,gm%tau,beta)
-         nk(ik)=-gm%tau(M)
+         nk(ik)=-gm%tau(L)         
       enddo
     end function square_lattice_momentum_distribution
+    !
   end subroutine solve_equilibrium_ipt
-
-
-
-
-
-
 
 
 
@@ -239,33 +234,33 @@ contains
 
 
 
-  subroutine get_equilibrium_impuritygf
-    integer :: i,j,itau
-    real(8) :: A,w
+  ! subroutine get_equilibrium_impuritygf
+  !   integer :: i,j,itau
+  !   real(8) :: A,w
 
-    forall(i=0:nstep,j=0:nstep)
-       gf0%ret%t(i-j)=heaviside(t(i-j))*(G0gtr(i,j) - G0less(i,j))
-       sf%ret%t(i-j)=heaviside(t(i-j))*(Sgtr(i,j) - Sless(i,j))
-    end forall
-    if(heaviside(0.d0)==1.d0)gf0%ret%t(0)=gf0%ret%t(0)/2.d0
-    if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0
-    call fftgf_rt2rw(gf0%ret%t,gf0%ret%w,nstep) ;  gf0%ret%w=gf0%ret%w*dt ; call swap_fftrt2rw(gf0%ret%w) !swap because F(t) are not oscillating in this formalism:
-    call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep)   ;  sf%ret%w=dt*sf%ret%w   ; call swap_fftrt2rw(sf%ret%w)   !swap because F(t) are not oscillating in this formalism:
-    gf%ret%w = one/(one/gf0%ret%w - sf%ret%w)
-    do i=1,2*nstep
-       w = wr(i)
-       A=-aimag(gf%ret%w(i))/pi
-       gf%less%w(i)= pi2*xi*fermi(w,beta)*A
-       gf%gtr%w(i) = pi2*xi*(fermi(w,beta)-1.d0)*A
-    enddo
-    call fftgf_rw2rt(gf%less%w,gf%less%t,nstep)  ; gf%less%t=fmesh/pi2*gf%less%t ;  gf%less%t=gf%less%t*exa 
-    call fftgf_rw2rt(gf%gtr%w,gf%gtr%t,nstep)   ; gf%gtr%t =fmesh/pi2*gf%gtr%t  ;  gf%gtr%t=gf%gtr%t*exa
-    forall(i=0:nstep,j=0:nstep)
-       impGless(i,j)= gf%less%t(i-j)
-       impGgtr(i,j) = gf%gtr%t(i-j)
-    end forall
+  !   forall(i=0:nstep,j=0:nstep)
+  !      gf0%ret%t(i-j)=heaviside(t(i-j))*(G0gtr(i,j) - G0less(i,j))
+  !      sf%ret%t(i-j)=heaviside(t(i-j))*(Sgtr(i,j) - Sless(i,j))
+  !   end forall
+  !   if(heaviside(0.d0)==1.d0)gf0%ret%t(0)=gf0%ret%t(0)/2.d0
+  !   if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0
+  !   call fftgf_rt2rw(gf0%ret%t,gf0%ret%w,nstep) ;  gf0%ret%w=gf0%ret%w*dt ; call swap_fftrt2rw(gf0%ret%w) !swap because F(t) are not oscillating in this formalism:
+  !   call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep)   ;  sf%ret%w=dt*sf%ret%w   ; call swap_fftrt2rw(sf%ret%w)   !swap because F(t) are not oscillating in this formalism:
+  !   gf%ret%w = one/(one/gf0%ret%w - sf%ret%w)
+  !   do i=1,2*nstep
+  !      w = wr(i)
+  !      A=-aimag(gf%ret%w(i))/pi
+  !      gf%less%w(i)= pi2*xi*fermi(w,beta)*A
+  !      gf%gtr%w(i) = pi2*xi*(fermi(w,beta)-1.d0)*A
+  !   enddo
+  !   call fftgf_rw2rt(gf%less%w,gf%less%t,nstep)  ; gf%less%t=fmesh/pi2*gf%less%t ;  gf%less%t=gf%less%t*exa 
+  !   call fftgf_rw2rt(gf%gtr%w,gf%gtr%t,nstep)   ; gf%gtr%t =fmesh/pi2*gf%gtr%t  ;  gf%gtr%t=gf%gtr%t*exa
+  !   forall(i=0:nstep,j=0:nstep)
+  !      impGless(i,j)= gf%less%t(i-j)
+  !      impGgtr(i,j) = gf%gtr%t(i-j)
+  !   end forall
 
-  end subroutine get_equilibrium_impuritygf
+  ! end subroutine get_equilibrium_impuritygf
 
 
 end module EQUILIBRIUM

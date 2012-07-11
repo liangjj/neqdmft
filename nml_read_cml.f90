@@ -39,12 +39,9 @@
      case("WBATH")           ;read(nml_var%value,*)wbath
      case("BATH_TYPE")       ;read(nml_var%value,*)bath_type
      case("EPS")             ;read(nml_var%value,*)eps
-     case("IRDG0FILE")       ;read(nml_var%value,*)irdG0file
-     case("IRDG0MFILE")      ;read(nml_var%value,*)irdG0mfile
+     case("IRDG0WFILE")      ;read(nml_var%value,*)irdG0wfile
      case("IRDNKFILE")       ;read(nml_var%value,*)irdNkfile
-     case("IRDSLFILE")       ;read(nml_var%value,*)irdSlfile
-     case("IRDSGFILE")       ;read(nml_var%value,*)irdSgfile
-     case("IRDSMFILE")       ;read(nml_var%value,*)irdSmfile
+     case("IRDSIWFILE")      ;read(nml_var%value,*)irdSiwfile
      case("OMP_NUM_THREADS") ;read(nml_var%value,*)omp_num_threads
         !LatticeN:
      case("NX")              ;read(nml_var%value,*)Nx

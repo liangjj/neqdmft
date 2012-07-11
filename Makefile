@@ -6,7 +6,7 @@ DIREXE= $(HOME)/.bin
 include $(SFDIR)/etc/lib.mk
 include $(SFDIR)/etc/libdmft.mk
 #=========================================================================
-STD+=-static
+
 OBJS     =  VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o FUNX_NEQ.o KADANOFBAYM.o
 OBJS_OPT = VARS_GLOBAL_OPT.o ELECTRIC_FIELD_OPT.o BATH_OPT.o EQUILIBRIUM_OPT.o IPT_NEQ_OPT.o FUNX_NEQ_OPT.o KADANOFBAYM_OPT.o
 OBJS_DEB = VARS_GLOBAL_DEB.o ELECTRIC_FIELD_DEB.o BATH_DEB.o EQUILIBRIUM_DEB.o IPT_NEQ_DEB.o FUNX_NEQ_DEB.o KADANOFBAYM_DEB.o
@@ -45,9 +45,9 @@ debug: 	version $(OBJS_DEB)
 
 
 #==============DATA EXTRACTION======================================
-data: 	version $(OBJS)
+data: 	version $(OBJS_DEB)
 	@echo " ........... compile: getdata ........... "
-	${FC} ${STD} $(OBJS) get_data_$(EXE).f90 -o ${DIREXE}/get_data_$(EXE) $(LIBDMFT_DEB) ${DSL_MODS} ${SFMODS} ${SFLIBS} ${DSL_LIBS}
+	${FC} ${DEB} $(OBJS_DEB) get_data_$(EXE).f90 -o ${DIREXE}/get_data_$(EXE) $(LIBDMFT_DEB) ${DSL_MODS} ${SFMODS_DEB} ${SFLIBS_DEB} ${DSL_LIBS}
 	@echo ""
 	@echo ""
 	@echo " ...................... done .............................. "

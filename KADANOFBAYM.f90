@@ -13,11 +13,18 @@ module KADANOFBAYM
   USE FUNX_NEQ
   implicit none
   private
-  complex(8),allocatable,dimension(:)     :: icGkless
-  complex(8),allocatable,dimension(:,:)   :: Gkless,Gkgtr
+  !Initial conditions arrays:
+  complex(8),allocatable,dimension(:)     :: icGkless 
+  complex(8),allocatable,dimension(:,:)   :: icGktau
+  !k-dependent GF:
+  complex(8),allocatable,dimension(:,:)   :: Gkless,Gkgtr,Gklmix,Gkgmix
+  real(8),allocatable,dimension(:)        :: Gktau
+  !Vector for KB propagation solution: predictor-corrector method
   complex(8),allocatable,dimension(:)     :: Ikless,Ikgtr
   complex(8),allocatable,dimension(:)     :: Ikless0,Ikgtr0
+  complex(8),allocatable,dimension(:)     :: Iklmix,Iklmix0
   real(8)                                 :: Ikdiag
+  !Auxiliary operators:
   complex(8),allocatable,dimension(:,:)   :: Udelta,Vdelta
 
   public    :: neq_get_localgf
@@ -35,6 +42,7 @@ contains
     endif
     if(fchi)call get_chi
     call print_out_Gloc()
+    stop
   end subroutine neq_get_localgf
 
 
@@ -55,6 +63,7 @@ contains
     integer      :: istep,i,j,ik
     integer,save :: loop=1
     complex(8)   :: tmpGless(0:nstep,0:nstep),tmpGgtr(0:nstep,0:nstep)
+    complex(8)   :: tmpGlmix(0:nstep,0:Ltau)
     real(8)      :: tmpnk(0:nstep,Lk)
 
     !First loop ever, build the Initial Condition
@@ -67,9 +76,9 @@ contains
     call msg("Entering Kadanoff-Baym")
 
     !Set to Zero loc GF:
-    locGless=zero; locGgtr=zero ; nk=0.d0
-    tmpGless=zero; tmpGgtr =zero; tmpnk=0.d0
-
+    locGless=zero; locGgtr=zero ; locGlmix=zero 
+    tmpGless=zero; tmpGgtr =zero; tmpGlmix=zero
+    tmpnk=0.d0 ; nk=0.d0
     !=============START K-POINTS LOOP======================
     call start_timer
     do ik=1+mpiID,Lk,mpiSIZE
@@ -85,8 +94,9 @@ contains
 
        tmpGless(0:nstep,0:nstep) =tmpGless(0:nstep,0:nstep) + Gkless(0:nstep,0:nstep)*wt(ik)
        tmpGgtr(0:nstep,0:nstep)  =tmpGgtr(0:nstep,0:nstep)  + Gkgtr(0:nstep,0:nstep)*wt(ik)
+       tmpGlmix(0:nstep,0:Ltau)  =tmpGlmix(0:nstep,0:Ltau)  + Gklmix(0:nstep,0:Ltau)*wt(ik)
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gkless(istep,istep)
-       call eta(ik,Lk,unit=999)
+       call eta(ik,Lk,unit=6)
     enddo
     call stop_timer
     call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
@@ -95,13 +105,17 @@ contains
 
     call MPI_REDUCE(tmpGless(0:,0:),locGless(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     call MPI_REDUCE(tmpGgtr(0:,0:),locGgtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_REDUCE(tmpGlmix(0:,0:),locGlmix(0:,0:),(nstep+1)*(Ltau+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+
     !Gloc^>(t',t)= - Gloc^>(t,t')^T
     if(mpiID==0)then
        forall(i=0:nstep,j=0:nstep,i>j)locGless(i,j)=-conjg(locGless(j,i))
        forall(i=0:nstep,j=0:nstep,i<j)locGgtr(i,j) =-conjg(locGgtr(j,i))
+       forall(i=0:Ltau)locGgmix(i,:)=-conjg(locGlmix(:,Ltau-i))
     endif
     call MPI_BCAST(locGless(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
     call MPI_BCAST(locGgtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locGlmix(0:,0:),(nstep+1)*(Ltau+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
 
     call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
@@ -123,10 +137,17 @@ contains
   !+----------------------------------------------------------------+
   subroutine allocate_funx()
     call msg("Allocating KB memory:")
-    allocate(icGkless(Lk))
+    !Initial conditions for the KBE solution:
+    allocate(icGkless(Lk),icGktau(Lk,-Ltau:Ltau))
+    !k-dependent Green's functions:
     allocate(Gkless(0:nstep,0:nstep),Gkgtr(0:nstep,0:nstep))
+    allocate(Gklmix(0:nstep,0:Ltau),Gkgmix(0:Ltau,0:nstep))
+    allocate(Gktau(-Ltau:Ltau))
+    !Predictor-corrector solver arrays: store the time-step
     allocate(Ikless(0:nstep),Ikgtr(0:nstep))
     allocate(Ikless0(0:nstep),Ikgtr0(0:nstep))
+    allocate(Iklmix(0:Ltau),Iklmix0(0:Ltau))
+    !Aux. operators
     allocate(Udelta(Lk,0:nstep),Vdelta(Lk,0:nstep))
     if(fchi)allocate(chi_dia(2,2,0:nstep),chi_pm(2,2,0:nstep,0:nstep))
   end subroutine allocate_funx
@@ -138,18 +159,18 @@ contains
   !******************************************************************
 
 
-  !+----------------------------------------------------------------+
-  !PURPOSE  :  deallocation of working array
-  !+----------------------------------------------------------------+
-  subroutine deallocate_funx()
-    call msg("Deallocating KB memory:")
-    deallocate(icGkless)
-    deallocate(Gkless,Gkgtr)      
-    deallocate(Ikless,Ikgtr)
-    deallocate(Ikless0,Ikgtr0)
-    deallocate(Udelta,Vdelta)
-    if(fchi)deallocate(chi_dia,chi_pm)
-  end subroutine deallocate_funx
+  ! !+----------------------------------------------------------------+
+  ! !PURPOSE  :  deallocation of working array
+  ! !+----------------------------------------------------------------+
+  ! subroutine deallocate_funx()
+  !   call msg("Deallocating KB memory:")
+  !   deallocate(icGkless)
+  !   deallocate(Gkless,Gkgtr)      
+  !   deallocate(Ikless,Ikgtr)
+  !   deallocate(Ikless0,Ikgtr0)
+  !   deallocate(Udelta,Vdelta)
+  !   if(fchi)deallocate(chi_dia,chi_pm)
+  ! end subroutine deallocate_funx
 
 
 
@@ -169,16 +190,22 @@ contains
 
     if(ips == 1)then
        !First Pass: get collision integrals up to t=T=istep
-       Ikless0 = zero;Ikgtr0  = zero;Ikdiag  = 0.d0
+       Ikless0 = zero
+       Ikgtr0  = zero
+       Iklmix0 = zero
+       Ikdiag  = 0.d0
        call get_Ikcollision(istep)
        Ikless0  = Ikless
        Ikgtr0   = Ikgtr
+       Iklmix0  = iklmix
        Ikdiag   = real(Ikgtr(istep))-real(Ikless(istep))
+
     elseif(ips==2)then
        !Second Pass: get collision integrals up to t=T+\Delta=istep+1
        call get_Ikcollision(istep+1)
        Ikless   = (Ikless  + Ikless0)/2.d0
        Ikgtr    = (Ikgtr   + Ikgtr0)/2.d0
+       Iklmix   = (Iklmix  + Iklmix0)/2.d0
        Ikdiag   = (real(Ikgtr(istep+1))-real(Ikless(istep+1)) + Ikdiag)/2.d0
     endif
 
@@ -191,6 +218,8 @@ contains
     Gkless(istep+1,istep+1)= Gkless(istep,istep)-xi*dt*Ikdiag
     Gkgtr(istep+1,istep+1) = Gkless(istep+1,istep+1)-xi
 
+    forall(itau=0:Ltau)Gklmix(istep+1,itau)=Gklmix(istep,itau)*Udelta(ik,istep)+Iklmix(itau)*Vdelta(ik,istep)
+    forall(itau=0:Ltau)Gkgmix(itau,istep+1)=-conjg(Gklmix(istep+1,Ltau-itau))
 
     !$OMP PARALLEL PRIVATE(i,j)
     !$OMP DO
@@ -229,12 +258,13 @@ contains
   !+-------------------------------------------------------------------+
   subroutine get_Ikcollision(Nt)
     integer,intent(in)          :: Nt
-    integer                     :: i,itau,it,itp
+    integer                     :: i,itau,it,itp,count=0
     complex(8)                  :: I1,I2,Ib
     complex(8),dimension(0:Nt)  :: Vadv,Vret,Vless,Vgtr
+    complex(8),dimension(0:Ltau):: Vlmix,Vgmix
     complex(8),dimension(0:Nt)  :: Fadv,Fret
 
-    Ikless=zero; Ikgtr=zero
+    Ikless=zero; Ikgtr=zero; Iklmix=zero
     if(Nt==0)return
 
     !$OMP PARALLEL PRIVATE(i)
@@ -248,10 +278,19 @@ contains
     !$OMP END DO
     !$OMP END PARALLEL
 
+    !$OMP PARALLEL PRIVATE(i)
+    !$OMP DO
+    do i=0,Ltau
+       Vlmix(i)= Slmix(Nt,i) + S0lmix(Nt,i)
+       Vgmix(i)= Sgmix(i,Nt) + S0gmix(i,Nt)
+    end do
+    !$OMP END DO
+    !$OMP END PARALLEL
+
     !Get I^<(t=it,t'=Nt) it:0,...,Nt == t=0,...,T+\Delta
     !I1 = \int_0^{t=it}  G^R*Sigma^<
     !I2 = \int_0^{t'=Nt} G^<*Sigma^A
-    !Ib = \int_0^\beta   G^\rceil*S^\rceil
+    !Ib = \int_0^\beta   G^\lmix*S^\gmix
     !===============================================================
     !$OMP PARALLEL SHARED(Ikless) PRIVATE(i,it,I1,I2,Fret,Fadv)
     !$OMP DO
@@ -259,7 +298,8 @@ contains
        forall(i=0:Nt)Fret(i) = GkretF(it,i)
        I1=sum(Fret(0:it)*Vless(0:it))*dt
        I2=sum(Gkless(it,0:Nt)*Vadv(0:Nt))*dt
-       Ikless(it)=I1 + I2
+       Ib=sum(Gklmix(it,0:Ltau)*Vgmix(0:Ltau))*dtau
+       Ikless(it)=I1 + I2 - xi*Ib
     enddo
     !$OMP END DO
     !$OMP END PARALLEL
@@ -267,7 +307,7 @@ contains
     !Get I^>(t=Nt,t'=itp) itp:0,...,Nt == t' = 0,...,T+\Delta=Nt
     !I1 = \int_0^{t=Nt}   S^R*G^>
     !I2 = \int_0^{t'=itp} S^>*G^A
-    !Ib = \int_0^\beta    S^\lceil*G^\rceil
+    !Ib = \int_0^\beta    S^\lmix*G^\gmix
     !===============================================================
     !$OMP PARALLEL SHARED(Ikgtr) PRIVATE(i,itp,I1,I2,Fadv)
     !$OMP DO
@@ -275,10 +315,29 @@ contains
        forall(i=0:Nt)Fadv(i) = conjg(GkretF(itp,i))
        I1=sum(Vret(0:Nt)*Gkgtr(0:Nt,itp))*dt
        I2=sum(Vgtr(0:itp)*Fadv(0:itp))*dt
-       Ikgtr(itp)=I1 + I2
+       Ib=sum(Vlmix(0:Ltau)*Gkgmix(0:Ltau,itp))*dtau
+       Ikgtr(itp)=I1 + I2 - xi*Ib
     enddo
     !$OMP END DO
     !$OMP END PARALLEL
+
+    !Get I^\lmix(Nt,itau) itau:0:Ltau == tau=-beta:0
+    !I1 = \int_0^Nt    S^Ret*G^\rceil
+    !Ib = \int_0^\beta S^\lceil* G^\Mats
+    !===============================================================
+    !$OMP PARALLEL SHARED(Iklmix) PRIVATE(i,itau,I1,Ib)
+    !$OMP DO
+    do itau=0,Ltau
+       I1=sum(Vret(0:Nt)*Gklmix(0:Nt,itau))*dt
+       Ib=zero
+       do i=0,Ltau
+          Ib = Ib+Vlmix(i)*Gktau(i-itau)*dtau
+       enddo
+       Iklmix(itau)=I1+Ib
+    enddo
+    !$OMP END DO
+    !$OMP END PARALLEL
+
   end subroutine get_Ikcollision
 
 
@@ -331,23 +390,22 @@ contains
   ! G_k^\rceil(0,tau) = xi*G_k^M(tau>0)  
   !+-------------------------------------------------------------------+
   subroutine build_ic
-    integer :: ik,i
-    real(8) :: en,mu,invtemp
+    integer    :: ik,i
+    complex(8) :: funcM(L)
+    real(8)    :: n,funcT(0:Ltau)
     call msg("Building initial conditions:")
     call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
-    ! mu=xmu
-    ! invtemp=beta
-    ! if(iquench)mu=xmu0
-    ! if(iquench)invtemp=beta0
-    ! if(irdeq)then
-    icGkless = xi*irdNk
-    ! else
-    !    do ik=1,Lk
-    !       en           = epsik(ik)-mu
-    !       icGkless(ik) = xi*fermi0(en,invtemp)
-    !    enddo
-    ! endif
-    call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),aimag(icGkless(1:Lk)))
+    icGkless = xi*eq_Nk
+    icGktau  = 0.d0
+    do ik=1,Lk
+       funcM=one/(xi*wm - epsik(ik) - eq_Siw)
+       call fftgf_iw2tau(funcM,funcT,beta)
+       n=-funcT(Ltau) !; nk(:,ik)=n
+       icGktau(ik,0:Ltau)=funcT(0:Ltau)
+       forall(i=1:Ltau)icGktau(ik,-i)=-funcT(Ltau-i)
+       call splot("InitialConditions/icGktau.ipt",tau(0:),icGktau(ik,0:),append=TT)
+    enddo
+    call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),dimag(icGkless(1:Lk)))
     return
   end subroutine build_ic
 
@@ -361,9 +419,14 @@ contains
 
 
   subroutine read_ic(ik)
-    integer :: ik,itau
-    Gkless(0,0)=icGkless(ik)
-    Gkgtr(0,0) =icGkless(ik)-xi
+    integer :: ik,i
+    Gkless(0,0) = icGkless(ik)
+    Gkgtr(0,0)  = icGkless(ik)-xi
+    forall(i=0:Ltau)
+       Gklmix(0,i)=-xi*icGktau(ik,Ltau-i) ! Gklmix(0,0:)= icGklmix(ik,0:)
+       Gkgmix(i,0)= xi*icGktau(ik,i)
+    end forall
+    Gktau(-Ltau:Ltau)=icGktau(ik,-Ltau:Ltau)
     return
   end subroutine read_ic
 
@@ -558,9 +621,11 @@ contains
   subroutine print_out_Gloc()
     integer :: i,j
     if(mpiID==0)then
-       call splot("locGless.data",locGless(0:nstep,0:nstep))
-       call splot("locGgtr.data",locGgtr(0:nstep,0:nstep))
-       call splot("nk.data",nk(0:nstep,1:Lk))
+       call splot("locGless.data",locGless(0:,0:))
+       call splot("locGgtr.data",locGgtr(0:,0:))
+       call splot("locGlmix.data",locGlmix(0:,0:))
+       call splot("nk.data",nk(0:,:))
+
        forall(i=0:nstep,j=0:nstep)
           gf%less%t(i-j) = locGless(i,j)
           gf%gtr%t(i-j)  = locGgtr(i,j)
@@ -579,7 +644,16 @@ contains
           call splot("locChi_21.data",chi(2,1,0:nstep,0:nstep))
           call splot("locChi_22.data",chi(2,2,0:nstep,0:nstep))
        endif
+
+       call splot("locGless_t_t.3d",t(0:),t(0:),locGless(0:,0:))
+       call splot("locGlmix_t_tau.3d",t(0:),tau(0:),locGlmix(0:,0:))
+       ! do i=0,nstep
+       !    call splot("locnkVSepsik_t.2d",epsik(:),nk(i,:),append=TT)
+       ! enddo
     endif
+
+
+
   end subroutine print_out_Gloc
 
 

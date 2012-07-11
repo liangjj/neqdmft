@@ -22,252 +22,128 @@ contains
   subroutine neq_init_run()
     integer                          :: i,j,ik
     integer                          :: iselect,irdL
-    real(8)                          :: en,intE,A,irdfmesh
+    real(8)                          :: en,A,fmesh_
     real(8)                          :: nless,ngtr,xmu_,beta_
     complex(8)                       :: peso
-    logical                          :: checkS1,checkS2,checkS3
-    logical                          :: checkGM,checkG0,checkNk
-    logical                          :: checkG,checkS
-    real(8),allocatable,dimension(:) :: irdwr
-    type(matsubara_gf)               :: fg0m,sm
+    logical                          :: checkG0,checkNk,checkSm,checkEQ
+    real(8),allocatable,dimension(:) :: wr_,wm_
+
+    call system("if [ ! -d GUESS ]; then mkdir GUESS; fi")
 
     !Initial selection: no file exist
     iselect=0
 
-    !Check if Sigma^< file exists:
-    inquire(file=trim(irdSlfile),exist=checkS1)
-    if(.not.checkS1)inquire(file=trim(irdSlfile)//".gz",exist=checkS1)
-
-    !Check if Sigma^> file exists:
-    inquire(file=trim(irdSgfile),exist=checkS2)
-    if(.not.checkS2)inquire(file=trim(irdSgfile)//".gz",exist=checkS2)
-
-    !Check if Sigma^M file exists:
-    inquire(file=trim(irdSmfile),exist=checkS3)
-    if(.not.checkS3)inquire(file=trim(irdSmfile)//".gz",exist=checkS3)
-
-    !Check if G0(w) file exist:
-    inquire(file=trim(irdG0file),exist=checkG0)
-    if(.not.checkG0)inquire(file=trim(irdG0file)//".gz",exist=checkG0)
-
-    !Check if G0(iw) file exist:
-    inquire(file=trim(irdG0mfile),exist=checkGM)
-    if(.not.checkGM)inquire(file=trim(irdG0mfile)//".gz",exist=checkG0)
-
     !Check if n(k) file exist:
     inquire(file=trim(irdnkfile),exist=checkNk)
     if(.not.checkNk)inquire(file=trim(irdNkfile)//".gz",exist=checkNk)
+    inquire(file=trim(irdSiwfile),exist=checkSm)
+    if(.not.checkSm)inquire(file=trim(irdSiwfile)//".gz",exist=checkSm)
+    inquire(file=trim(irdG0wfile),exist=checkG0)
+    if(.not.checkG0)inquire(file=trim(irdG0wfile)//".gz",exist=checkG0)
+    checkEQ=checkNk.AND.checkSm.AND.checkG0
+    if(checkEQ)iselect=1
 
-
-    !All S^<,>(t,t') file AND Sigma^M(iw) file exist
-    checkS=checkS1.AND.checkS2.AND.checkS3
-    !Both G0^R(w) AND G0^M(iw) exist
-    checkG=checkG0.AND.checkGM
-
-    !also n(k) should exist
-    checkS=checkS.AND.checkNk
-    checkG=checkG.AND.checkNk
-
-
-    if(checkS)then
-       iselect=1
-    elseif(checkG)then
-       iselect=2
-    elseif(checkG0.AND..not.checkNk.AND.not.checkGM)then !only G0(w) exists
-       iselect=3
-    endif
-
-    select case(iselect)
+    select case(iselect)        !add more solutions here (e.g. restart from read file)
     case(-1)
        write(*,*)"Iselect=",iselect
        call error("A problem in neq_init_run!")
 
-    case default                !No files are given:
-       if(mpiID==0)then
-          !Get non-interacting n(k):
-          xmu_=xmu   ; if(iquench)xmu_=xmu0
-          beta_=beta ; if(iquench)beta_=beta0
-          do ik=1,Lk
-             irdNk(ik)=fermi0((epsik(ik)-xmu_),beta_)
+    case default
+       call msg("Temporary use of non-interacting GUESS!! ONLY if U=0",id=0)
+       !Get non-interacting n(k):
+       !Initial conditions:
+       allocate(eq_nk(Lk))
+       allocate(eq_G0w(L))
+       allocate(eq_Siw(L))
+       xmu_=xmu   ; if(iquench)xmu_=xmu0
+       beta_=beta ; if(iquench)beta_=beta0
+       do ik=1,Lk
+          eq_nk(ik)=fermi0((epsik(ik)-xmu_),beta_)
+       enddo
+       if(mpiID==0)call splot("GUESS/guessnkVSepsk.ipt",epsik,eq_nk)
+       Sgtr=zero   ; Sless=zero !to be changed when-out-half-filling
+       Sgmix=zero  ; Slmix=zero
+       Smat=zero
+       eq_Siw=zero
+       eq_G0w=zero
+
+       G0less=zero
+       G0lmix=zero
+       do ik=1,Lk
+          en   = epsik(ik)
+          nless= fermi0(en,beta)
+          ngtr = fermi0(en,beta)-1.d0
+          do i=0,nstep
+             do j=0,nstep
+                peso=exp(-xi*en*(t(i)-t(j)))
+                G0less(i,j)=G0less(i,j) + xi*nless*wt(ik)*peso
+             enddo
+             do j=0,Ltau
+                peso=exp(-xi*en*t(i))*exp(-en*tau(j))
+                G0lmix(i,j)=G0lmix(i,j) + xi*nless*wt(ik)*peso
+             enddo
           enddo
-          call splot("guessnkVSepsk.ipt",epsik,irdnk)
-
-          !Guess G0-->Sigma^(0)
-          if(.not.g0loc_guess)then
-             call msg("Using Hartree-Fock for self-energy guess")
-             call msg("G0less=G0gtr=zero",lines=1)
-             G0less=zero ; G0gtr=zero
-             G0rceil=zero; G0lceil=zero
-
-             !Get G0(tau,tau') from the non-interacting equilibrium solution (corresponds to n(k))
-
-
-          else
-
-             if(equench)then
-                call msg("Using G0_loc + electric field for self-energy guess",lines=1)
-                do ik=1,Lk
-                   en   = epsik(ik)
-                   nless= fermi0(en,beta)
-                   ngtr = fermi0(en,beta)-1.d0
-                   do j=0,nstep
-                      do i=0,nstep
-                         intE=int_Ht(ik,i,j)
-                         peso=exp(-xi*intE)
-                         G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
-                         G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
-                      enddo
-                   enddo
-                enddo
-             else
-                call msg("Using G0_loc for self-energy guess",lines=1)
-                do ik=1,Lk
-                   en   = epsik(ik)
-                   nless= fermi0(en,beta)
-                   ngtr = fermi0(en,beta)-1.d0
-                   A    = wt(ik)
-                   do i=-nstep,nstep
-                      peso=exp(-xi*en*t(i))
-                      gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
-                      gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
-                   enddo
-                enddo
-                forall(i=0:nstep,j=0:nstep)
-                   G0less(i,j)=gf0%less%t(i-j)
-                   G0gtr(i,j) =gf0%gtr%t(i-j)
-                end forall
-             endif
-             call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-             call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
-          end if
-
-       endif
-       call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
-       call neq_solve_ipt()
-
+       enddo
+       call splot("G0less_t_t.ipt",t(0:),t(0:),G0less(0:,0:))
+       call splot("G0lmix_t_tau.ipt",t(0:),tau(0:),G0lmix(0:,0:))
 
     case(1)
-       call msg("Reading self-energy guess and n(k) from input files",lines=1)
-       call sread(trim(irdSlfile),Sless(0:nstep,0:nstep))
-       call sread(trim(irdSgfile),Sgtr(0:nstep,0:nstep))
+       call msg("Continuing the EQUILIBRIUM SOLUTION")
+       !READ n(k) --> eq_nk(:)
+       allocate(eq_nk(Lk))
        call read_nkfile(trim(irdnkfile))
 
+       !READ \Sigma(iw) --> eq_Siw(:)
+       irdL=file_length(trim(irdSiwfile))
+       allocate(eq_Siw(irdL),wm_(irdL))
+       call sread(trim(irdSiwfile),wm_,eq_Siw)
+       deallocate(wm_)
 
-    case(2)
-       call msg("Reading G0(w) and n(k) from input files")
-       call msg("Using G0(w) for self-energy guess",lines=1)
-       if(mpiID==0)then
-          call read_nkfile(trim(irdnkfile))
-          irdL=file_length(trim(irdG0file))
-          allocate(irdG0w(irdL),irdwr(irdL))
-          call sread(trim(irdG0file),irdwr,irdG0w)
-          !1)
-          ! call linear_spline(irdG0w,irdwr,gf0%ret%w,wr)
-          ! gf0%less%w = less_component_w(gf0%ret%w,wr,beta)
-          ! gf0%gtr%w  = gtr_component_w(gf0%ret%w,wr,beta)
-          ! call fftgf_rw2rt(gf0%less%w,gf0%less%t,nstep) ; gf0%less%t=fmesh/pi2*gf0%less%t
-          ! call fftgf_rw2rt(gf0%gtr%w, gf0%gtr%t,nstep)  ; gf0%gtr%t =fmesh/pi2*gf0%gtr%t
-          !2)
-          irdfmesh=abs(irdwr(2)-irdwr(1)) !Get G0 mesh:
-          do ik=1,irdL
-             en   = irdwr(ik)
-             nless= fermi0(en,beta)
-             ngtr = fermi0(en,beta)-1.d0
-             A    = -aimag(irdG0w(ik))/pi*irdfmesh
-             do i=-nstep,nstep
-                peso=exp(-xi*en*t(i))
-                gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
-                gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
+       !READ \GG_0(w) --> eq_G0w(:)
+       irdL=file_length(trim(irdG0wfile))
+       allocate(eq_G0w(irdL))
+       allocate(wr_(irdL))
+       call sread(trim(irdG0wfile),wr_,eq_G0w)
+       fmesh_=abs(wr_(2)-wr_(1)) !Get G0 mesh:
+       G0lmix=zero;gf0=zero
+       do ik=1,irdL
+          en   = wr_(ik)
+          nless= fermi0(en,beta)
+          ngtr = fermi0(en,beta)-1.d0
+          A    = -aimag(eq_G0w(ik))/pi*fmesh_
+          do i=-nstep,nstep
+             peso=exp(-xi*en*t(i))
+             gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
+             gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
+          enddo
+          do i=0,nstep
+             do j=0,Ltau
+                peso=exp(-xi*en*t(i))*exp(-en*tau(j))
+                G0lmix(i,j)=G0lmix(i,j) + xi*nless*A*peso
              enddo
           enddo
-          forall(i=0:nstep,j=0:nstep)
-             G0less(i,j)=gf0%less%t(i-j)
-             G0gtr(i,j) =gf0%gtr%t(i-j)
-          end forall
-          call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-          call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
-       endif
-       call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
-       call neq_solve_ipt()
+       enddo
+       forall(i=0:nstep,j=0:nstep)
+          G0less(i,j)=gf0%less%t(i-j)
+          G0gtr(i,j) =gf0%gtr%t(i-j)
+       end forall
+       forall(j=0:Ltau)G0gmix(j,:)=-conjg(G0lmix(:,Ltau-j))
+       deallocate(wr_)
 
-
-    case(3)
-       call msg("Reading G0(w) from input file")
-       call msg("Using G0(w) to build n(k) and for self-energy guess",lines=1)
        if(mpiID==0)then
-          irdL=file_length(trim(irdG0file))
-          allocate(irdG0w(irdL),irdwr(irdL))
-          call sread(trim(irdG0file),irdwr,irdG0w)
-          !1)
-          ! call linear_spline(irdG0w,irdwr,gf0%ret%w,wr)
-          ! gf0%less%w = less_component_w(gf0%ret%w,wr,beta)
-          ! gf0%gtr%w  = gtr_component_w(gf0%ret%w,wr,beta)
-          ! call fftgf_rw2rt(gf0%less%w,gf0%less%t,nstep) ; gf0%less%t=fmesh/pi2*gf0%less%t
-          ! call fftgf_rw2rt(gf0%gtr%w, gf0%gtr%t,nstep)  ; gf0%gtr%t =fmesh/pi2*gf0%gtr%t
-          !2)
-          irdfmesh=abs(irdwr(2)-irdwr(1)) !Get G0 mesh:
-          do ik=1,irdL
-             en   = irdwr(ik)
-             nless= fermi0(en,beta)
-             ngtr = fermi0(en,beta)-1.d0
-             A    = -aimag(irdG0w(ik))/pi*irdfmesh
-             do i=-nstep,nstep
-                peso=exp(-xi*en*t(i))
-                gf0%less%t(i)=gf0%less%t(i) + xi*nless*A*peso
-                gf0%gtr%t(i) =gf0%gtr%t(i)  + xi*ngtr*A*peso
-             enddo
-          enddo
-          forall(i=0:nstep,j=0:nstep)
-             G0less(i,j)=gf0%less%t(i-j)
-             G0gtr(i,j) =gf0%gtr%t(i-j)
-          end forall
           call splot("guessG0less.data",G0less(0:nstep,0:nstep))
           call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
-
-
-          !Get n(k) within IPT approximation!!
-          call msg("Getting n(k) within using IPT approximation!!")
-          call allocate_gf(fg0m,L)
-          call allocate_gf(sm,L)
-          call get_matsubara_gf_from_DOS(irdwr,irdG0w,fg0m%iw,beta)
-          call fftgf_iw2tau(fg0m%iw,fg0m%tau,beta)
-          forall(i=0:L)sm%tau(i)=U**2*(fg0m%tau(i))**2*fg0m%tau(L-i)
-          call fftgf_tau2iw(sm%tau,sm%iw,beta)
-          do ik=1,Lk
-             fg0m%iw=one/(xi*wm - epsik(ik) - sm%iw)
-             call fftgf_iw2tau(fg0m%iw,fg0m%tau,beta)
-             irdnk(ik)=-fg0m%tau(L)
-          enddo
-          call splot("guessnkVSepsk.ipt",epsik,irdnk)
-
+          call splot("guessG0lmix.data",G0lmix(0:nstep,0:Ltau))
+          call splot("guessG0less_t_t.ipt",t(0:),t(0:),G0less(0:,0:))
+          call splot("guessG0lmix_t_tau.ipt",t(0:),tau(0:),G0lmix(0:,0:))
+          call system("mv -vf *guess*.ipt GUESS/")
        endif
-       call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
        call neq_solve_ipt()
 
     end select
 
 
   contains
-
-    function int_Ht(ik,it,jt)
-      real(8)      :: int_Ht
-      integer      :: i,j,ii,ik,it,jt,sgn
-      type(vect2D) :: kt,Ak
-      int_Ht=0.d0 ; if(it==jt)return
-      sgn=1 ; if(jt > it)sgn=-1
-      i=ik2ix(ik); j=ik2iy(ik)
-      do ii=jt,it,sgn
-         Ak=Afield(t(ii),Ek)
-         kt=kgrid(i,j) - Ak
-         int_Ht=int_Ht + sgn*square_lattice_dispersion(kt)*dt
-      enddo
-    end function int_Ht
 
     subroutine read_nkfile(file)
       character(len=*)    :: file
@@ -279,8 +155,7 @@ contains
       !n(k): A lot of work here to reshape the array
       redLk=file_length(file)
       allocate(rednk(redLk),redek(redLk),orderk(redLk))
-      call sread(file,redek,rednk)
-      !
+      call sread(file,redek,rednk)      
       !work on the read arrays:
       !1 - sorting: sort the energies (X-axis), mirror on occupation (Y-axis) 
       !2 - delete duplicates energies (X-axis), mirror on occupation (Y-axis) 
@@ -290,39 +165,42 @@ contains
       call uniq(redek,uniq_redek,maskk)
       allocate(uniq_rednk(size(uniq_redek)))
       uniq_rednk = pack(rednk,maskk)
-      call linear_spline(uniq_rednk,uniq_redek,irdnk,epsik)
+      call linear_spline(uniq_rednk,uniq_redek,eq_nk,epsik)
     end subroutine read_nkfile
 
   end subroutine neq_init_run
+
+
 
 
   !+-------------------------------------------------------------------+
   !PURPOSE  : BUild the 2^nd IPT sigma functions:
   !+-------------------------------------------------------------------+
   subroutine neq_solve_ipt()
-    integer                               :: i,j,itau
+    integer      :: i,j,itau
+    integer,save :: loop=1
+
     !Get SIgma:
     call msg("Get Sigma(t,t')")
+    call system("if [ ! -d SIGMA ]; then mkdir SIGMA; fi")
 
     forall(i=0:nstep,j=0:nstep)
-       Sless(i,j) = (U**2)*(G0less(i,j)**2)*G0gtr(j,i)
        Sgtr (i,j) = (U**2)*(G0gtr(i,j)**2)*G0less(j,i)
+       Sless(i,j) = (U**2)*(G0less(i,j)**2)*G0gtr(j,i)
     end forall
 
-    !Get impurity GF and use SPT method if required
-    call get_impuritygf
-    if(method=="spt")then
-       call msg("Recalculate Sigma using SPT")
-       forall(i=0:nstep,j=0:nstep)
-          Sless(i,j) = (U**2)*(impGless(i,j)**2)*impGgtr(j,i)
-          Sgtr (i,j) = (U**2)*(impGgtr(i,j)**2)*impGless(j,i)                
-       end forall
-    end if
+    forall(i=0:nstep,itau=0:Ltau)Slmix(i,itau) = -U**2*(G0lmix(i,itau)**2)*G0gmix(itau,i)
+    forall(j=0:Ltau)Sgmix(j,:)=-conjg(Slmix(:,Ltau-j))
 
     !Save data:
     if(mpiID==0)then
        call splot("Sless.data",Sless(0:nstep,0:nstep))
        call splot("Sgtr.data",Sgtr(0:nstep,0:nstep))
+       call splot("Slmix.data",Slmix(0:nstep,0:Ltau))
+       call splot("Slmix_t_tau.ipt",t(0:nstep),tau(0:Ltau),Slmix(0:nstep,0:Ltau))
+       call splot("Sless_t_t.ipt",t(0:),t(0:),Sless(0:,0:))
+       call splot("Slmix_t_tau.ipt",t(0:),tau(0:),Slmix(0:,0:))
+       call system("mv -vf *Sl*_t*.ipt SIGMA/")
     endif
 
   end subroutine Neq_solve_ipt
@@ -336,28 +214,25 @@ contains
 
 
 
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : evaluate the impurity neq Green's functions
-  !+-------------------------------------------------------------------+
-  subroutine get_impuritygf()
-    integer                               :: i,j
-    real(8)                               :: A,w
-    complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet,Gamma0Ret
-    complex(8),dimension(0:nstep,0:nstep) :: dG0ret,dGret,dSret
-
-    if(update_wfftw)then
-       call get_equilibrium_impuritygf !not tested!
-    else
-       include "obtain_Gimp_nonequilibrium.f90"
-    endif
-
-    !Save data:
-    if(mpiID==0)then
-       call splot("impGless.data",impGless(0:nstep,0:nstep))
-       call splot("impGgtr.data",impGgtr(0:nstep,0:nstep))
-    endif
-
-  end subroutine get_impuritygf
+  ! !+-------------------------------------------------------------------+
+  ! !PURPOSE  : evaluate the impurity neq Green's functions
+  ! !+-------------------------------------------------------------------+
+  ! subroutine get_impuritygf()
+  !   integer                               :: i,j
+  !   real(8)                               :: A,w
+  !   complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet,Gamma0Ret
+  !   complex(8),dimension(0:nstep,0:nstep) :: dG0ret,dGret,dSret
+  !   if(update_wfftw)then
+  !      call get_equilibrium_impuritygf !not tested!
+  !   else
+  !      include "obtain_Gimp_nonequilibrium.f90"
+  !   endif
+  !   !Save data:
+  !   if(mpiID==0)then
+  !      call splot("impGless.data",impGless(0:nstep,0:nstep))
+  !      call splot("impGgtr.data",impGgtr(0:nstep,0:nstep))
+  !   endif
+  ! end subroutine get_impuritygf
 
 
 

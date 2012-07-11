@@ -46,16 +46,14 @@ MODULE VARS_GLOBAL
   real(8)           :: wmin,wmax     !
 
 
-  !Files to restart job
-  !=========================================================
-  character(len=32) :: irdG0file,irdNkfile,irdG0mfile
-  character(len=32) :: irdSlfile,irdSgfile,irdSmfile
+
+
 
 
   !FREQS & TIME ARRAYS:
   !=========================================================  
-  real(8),dimension(:),allocatable :: wr,t,wm,tau
-
+  real(8),dimension(:),allocatable :: wr,t,wm,tau,taureal
+  real(8)                          :: dtaureal
 
   !LATTICE (weight & dispersion) ARRAYS:
   !=========================================================  
@@ -71,45 +69,53 @@ MODULE VARS_GLOBAL
   real(8)         :: w0,tau0       !parameters for pulsed light
 
 
-  !EQUILIUBRIUM/WIGNER TRANSFORMED GREEN'S FUNCTION 
+  !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
-  !Equilibrium initial conditions: Bath DOS, n(\e(k))
-  real(8),allocatable,dimension(:)     :: irdNk,irdG0tau
-  complex(8),allocatable,dimension(:)  :: irdG0w,irdG0iw
-  !Frequency domain:
   type(keldysh_equilibrium_gf)        :: gf0,gf,sf
   real(8),dimension(:),allocatable    :: exa
 
 
+  !INITIAL CONDITIONS: BATH DOS, N(\e(k)), Matsubara Self-energy
+  !=========================================================
+  real(8),allocatable,dimension(:)     :: eq_nk
+  complex(8),allocatable,dimension(:)  :: eq_Siw
+  complex(8),allocatable,dimension(:)  :: eq_G0w
+  !Files to restart job
+  character(len=32) :: irdNkfile !the n(k) file
+  character(len=32) :: irdSiwfile !the Self-energies file
+  character(len=32) :: irdG0wfile !the bath GF file
 
-  !NON-EQUILIBRIUM GREEN'S FUNCTION: 4 = G^<,G^>
+
+  !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
-  !NON-INTERACTING
-  complex(8),allocatable,dimension(:,:) :: G0gtr,G0lceil
-  complex(8),allocatable,dimension(:,:) :: G0less,G0rceil
+  !WEISS-FIELDS
+  complex(8),allocatable,dimension(:,:) :: G0gtr,G0gmix
+  complex(8),allocatable,dimension(:,:) :: G0less,G0lmix
   real(8),allocatable,dimension(:,:)    :: G0mat
+
+  !MOMENTUM-DISTRIBUTION
   real(8),allocatable,dimension(:,:)    :: nk
 
   !SELF-ENERGIES
-  !=========================================================  
-  !Sigma^V_k,mu(t,t`)
-  complex(8),allocatable,dimension(:)   :: S0gtr
-  complex(8),allocatable,dimension(:)   :: S0less
-  !Sigma^U(t,t`)
-  complex(8),allocatable,dimension(:,:) :: Sgtr,Slceil
-  complex(8),allocatable,dimension(:,:) :: Sless,Srceil
+  !Bath:
+  !Sigma_bath^X(t,t`) X=>,<,\lmix,\gmix,Matsubara
+  complex(8),allocatable,dimension(:)   :: S0gtr,S0less
+  complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
+  !Interaction:
+  !Sigma_U^X(t,t`) X=>,<,\lmix,\gmix
+  complex(8),allocatable,dimension(:,:) :: Sgtr,Sgmix
+  complex(8),allocatable,dimension(:,:) :: Sless,Slmix
   real(8),allocatable,dimension(:,:)    :: Smat
 
-  !INTERACTING
-  !=========================================================  
-  complex(8),allocatable,dimension(:,:) :: locGgtr,locGlceil
-  complex(8),allocatable,dimension(:,:) :: locGless,locGrceil
+  !LOCAL GF
+  complex(8),allocatable,dimension(:,:) :: locGgtr,locGgmix
+  complex(8),allocatable,dimension(:,:) :: locGless,locGlmix
   real(8),allocatable,dimension(:,:)    :: locGmat
 
-  !IMPURITY
-  !=========================================================  
-  complex(8),allocatable,dimension(:,:) :: impGgtr
-  complex(8),allocatable,dimension(:,:) :: impGless
+  ! !IMPURITY
+  ! complex(8),allocatable,dimension(:,:) :: impGgtr,impGless
+  ! complex(8),allocatable,dimension(:,:) :: impGgmix,impGlmix
+
 
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
@@ -126,16 +132,17 @@ MODULE VARS_GLOBAL
   logical :: solve_eq
   logical :: g0loc_guess
 
+
   !NAMELISTS:
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,omp_num_threads,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
-       iquench,beta0,xmu0,U0,&
-       irdG0file,irdG0mfile,irdNkfile,&
-       irdSlfile,irdSgfile,irdSmfile,&
-       solve_eq,g0loc_guess
+       solve_eq,g0loc_guess,&
+       irdNkfile,irdSiwfile,irdG0wfile,&
+       iquench,beta0,xmu0,U0
+
 
 contains
 
@@ -206,8 +213,9 @@ contains
          ' wbath=[10.0]     -- ',&
          ' bath_type=[constant] -- ',&
          ' eps=[0.05d0]         -- ',&
-         ' irdG0file=[eqG0w.restart]-- ',&
          ' irdnkfile =[eqnk.restart]-- ',&
+         ' irdSiwfile=[eqSiw.restart]-- ',&
+         ' irdG0wfile=[eqG0w.restart]-- ',&
          ' omp_num_threads=[1]      -- ',&
          ' Nx=[50]      -- ',&
          ' Ny=[50]      -- ',&    
@@ -247,7 +255,7 @@ contains
     plot3D        = .false.
     fchi          = .false.
     equench       = .false.
-    solve_eq      = .false.
+    solve_eq      = .true.
     g0loc_guess   = .false.
     iquench       = .false.
 
@@ -258,12 +266,9 @@ contains
     wbath      = 20.0
     bath_type  = "constant"
     eps        = 0.04d0
-    irdG0file  = "eqG0w.restart"
-    irdG0mfile = "eqG0iw.restart"
     irdnkfile  = "eqnk.restart"
-    irdSlfile  = "Sless.restart"
-    irdSgfile  = "Sgtr.restart"
-    irdSmfile  = "Siw.restart"
+    irdG0wfile = "eqG0w.restart"
+    irdSiwfile = "eqSiw.restart"
 
     Nx = 25
     Ny = 25    
@@ -320,19 +325,39 @@ contains
     integer          :: i
     real(8)          :: ex
     call msg("Allocating the memory")
+    !Weiss-fields:
     allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
-    allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
-    allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
-    allocate(locGless(0:nstep,0:nstep),locGgtr(0:nstep,0:nstep))
-    allocate(impGless(0:nstep,0:nstep),impGgtr(0:nstep,0:nstep))
-    allocate(nk(0:nstep,Lk),irdnk(Lk))
+    allocate(G0gmix(0:Ltau,0:nstep),G0lmix(0:nstep,0:Ltau))
+    allocate(G0mat(0:Ltau,0:Ltau))
 
+    !Bath self-energies:
+    allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
+    allocate(S0gmix(0:Ltau,0:nstep),S0lmix(0:nstep,0:Ltau))
+
+    !Interaction self-energies:
+    allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
+    allocate(Sgmix(0:Ltau,0:nstep),Slmix(0:nstep,0:Ltau))
+    allocate(Smat(0:Ltau,0:Ltau))
+
+    !Local Green's functions:
+    allocate(locGgtr(0:nstep,0:nstep),locGless(0:nstep,0:nstep))
+    allocate(locGgmix(0:Ltau,0:nstep),locGlmix(0:nstep,0:Ltau))
+
+    ! allocate(impGgtr(0:nstep,0:nstep),impGless(0:nstep,0:nstep))
+    ! allocate(impGgmix(0:Ltau,0:nstep),impGlmix(0:nstep,0:Ltau))
+
+    !Momentum-distribution:
+    allocate(nk(0:nstep,Lk))
+
+    !Equilibrium/Wigner rotated Green's function
     call allocate_gf(gf0,nstep)
     call allocate_gf(gf,nstep)
     call allocate_gf(sf,nstep)
 
+    !Susceptibility/Optical response
     if(fchi)allocate(chi(2,2,0:nstep,0:nstep))
 
+    !Other:
     allocate(exa(-nstep:nstep))
     ex=-1.d0       
     do i=-nstep,nstep

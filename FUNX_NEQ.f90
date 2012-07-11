@@ -290,17 +290,11 @@ contains
   !   allocate(irdnk(Lk))
   !   call linear_spline(uniq_rednk,uniq_redek,irdnk,epsik)
 
-  !   !G0_iw:
-  !   allocate(irdG0iw(L),irdG0tau(0:Ltau))
-  !   call get_matsubara_gf_from_DOS(irdwr,irdG0w,irdG0iw,beta)
-  !   call fftgf_iw2tau(irdG0iw,irdG0tau,beta)
-
 
   !   !Print out the initial conditions as effectively read from the files:
   !   call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
   !   call splot("InitialConditions/read_G0_realw.ipt",irdwr,irdG0w)
   !   call splot("InitialConditions/read_G0_iw.ipt",irdwm,irdG0iw)
-  !   call splot("InitialConditions/read_G0_tau.ipt",tau,irdG0tau)
   !   call splot("InitialConditions/read_nkVSek.ipt",epsik,irdnk)
 
   !   call MPI_BCAST(irdG0w,irdL,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)

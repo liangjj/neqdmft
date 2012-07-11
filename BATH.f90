@@ -9,7 +9,7 @@ module BATH
   USE VARS_GLOBAL
   implicit none
   private
-  integer,parameter                :: Lw=1024 !# of frequencies
+  integer,parameter                :: Lw=2048 !# of frequencies
   real(8),allocatable,dimension(:) :: bath_dens,wfreq
   public                           :: get_thermostat_bath
 
@@ -20,9 +20,9 @@ contains
   ! time translation invariant.
   !+-------------------------------------------------------------------+
   subroutine get_thermostat_bath()
-    integer          :: iw,i
+    integer          :: iw,i,itau
     real(8)          :: en,w,dw,wfin,wini
-    complex(8)       :: peso
+    complex(8)       :: peso,ptau
     real(8)          :: ngtr,nless,arg
 
     call msg("Get Bath. Type: "//bold_green(trim(adjustl(trim(bath_type))))//" dissipative bath",id=0)
@@ -50,25 +50,33 @@ contains
 
     end select
 
+    if(mpiID==0)call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
 
     S0less=zero ; S0gtr=zero
+    S0lmix=zero; S0gmix=zero
     do iw=1,Lw
        en   = wfreq(iw)
        nless= fermi0(en,beta)
-       ngtr = fermi0(en,beta)-1.d0
+       ngtr = fermi0(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
        do i=-nstep,nstep
           peso=exp(-xi*t(i)*en)
           S0less(i)=S0less(i)+ xi*Vpd**2*nless*peso*bath_dens(iw)*dw
           S0gtr(i) =S0gtr(i) + xi*Vpd**2*ngtr*peso*bath_dens(iw)*dw
        enddo
+       do itau=0,Ltau
+          do i=0,nstep
+             peso=exp(-en*tau(itau))*exp(-xi*en*t(i))
+             S0lmix(i,itau) = S0lmix(i,itau) + xi*Vpd**2*nless*peso*bath_dens(iw)*dw
+          enddo
+       enddo
     enddo
-
+    forall(i=0:Ltau)S0gmix(i,:)=-conjg(S0lmix(:,Ltau-i))
     if(mpiID==0)then
        call splot("BATH/S0less_t.ipt",t,S0less)
        call splot("BATH/S0gtr_t.ipt",t,S0gtr)
-       call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
+       call splot("S0lmix_t_tau.ipt",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))
+       call system("mv -vf *S0*t_tau.ipt BATH/")
     endif
-
   end subroutine get_thermostat_bath
 
 
