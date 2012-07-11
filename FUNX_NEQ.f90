@@ -33,6 +33,11 @@ contains
     complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet
     complex(8),dimension(0:nstep,0:nstep) :: G0ret
     complex(8),dimension(0:nstep,0:nstep) :: G0adv
+    !
+    complex(8),dimension(:,:),allocatable :: mat_Delta
+    complex(8),dimension(:,:),allocatable :: mat_Gamma
+    complex(8),dimension(:,:),allocatable :: mat_G0,mat_Sigma,mat_locG
+    !
     complex(8),dimension(:,:),allocatable,save :: G0less_old,G0gtr_old
 
 

@@ -1,5 +1,5 @@
   !=======Component by component inversion==========================
-  if(TT)then
+  if(FF)then
      forall(i=0:nstep,j=0:nstep)
         locGret(i,j)= heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
         Sret(i,j)   = heaviside(t(i)-t(j))*(Sig%gtr(i,j) - Sig%less(i,j))
@@ -13,7 +13,9 @@
      GammaRet(0:nstep,0:nstep) = GammaRet(0:nstep,0:nstep)*dt**2
      call mat_inversion(GammaRet(0:nstep,0:nstep))
      G0ret(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),locGret(0:nstep,0:nstep))*dt
+     !### COMMENTING THIS LINE THE RESULTS ARE IDENTICAL WITH THE TWO METHODS OF UPDATE ###
      forall(i=0:nstep)G0ret(i,i)=-xi !???
+     !#####################################################################################
      G0adv=conjg(transpose(G0ret))
 
      !G0less = GammaR^-1 * Gless * GammaA^-1  -  gR * Sless * gA
@@ -29,5 +31,31 @@
 
 
 
+  !Matrix update, from testKELDYSHMATGF3
+  if(TT)then
+     !Build Gloc matrix
+     allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
+     mat_locG = build_keldysh_matrix_gf(locG,nstep)
+
+     !Build Sigma matrix
+     allocate(mat_Sigma(0:2*nstep+1,0:2*nstep+1))
+     mat_Sigma = build_keldysh_matrix_gf(Sig,nstep)
+
+     !Allocate space for other matrices:
+     allocate(mat_Delta(0:2*nstep+1,0:2*nstep+1))
+     allocate(mat_Gamma(0:2*nstep+1,0:2*nstep+1))
+     allocate(mat_G0(0:2*nstep+1,0:2*nstep+1))
+
+     mat_Delta=zero ; forall(i=0:2*nstep+1)mat_Delta(i,i)=One/dt
+     mat_Gamma = mat_Delta + matmul(mat_Sigma,mat_locG)*dt
+     mat_Gamma = mat_Gamma*dt**2
+     call mat_inversion(mat_Gamma)
+     mat_G0  = matmul(mat_locG,mat_Gamma)*dt
+
+     G0%less = -mat_G0(0:Nstep,Nstep+1:2*Nstep+1)
+     G0%gtr  =  mat_G0(Nstep+1:2*Nstep+1,0:Nstep)
+
+     deallocate(mat_locG,mat_Sigma,mat_G0,mat_Delta,mat_Gamma)
+  endif
 
 
