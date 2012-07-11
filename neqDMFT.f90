@@ -10,8 +10,8 @@ program neqDMFT
   USE BATH                        !contains bath inizialization
   USE EQUILIBRIUM                 !solves the equilibrium problem w/ IPT
   USE IPT_NEQ                     !performs the non-eq. IPT. Write Sigma
-  USE FUNX_NEQ                    !contains routines for WF update and printing.
   USE KADANOFBAYM                 !solves KB equations numerically to get k-sum
+  USE FUNX_NEQ                    !contains routines for WF update and printing.
   implicit none
 
   logical :: converged

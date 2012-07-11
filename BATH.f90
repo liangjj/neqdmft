@@ -20,7 +20,7 @@ contains
   ! time translation invariant.
   !+-------------------------------------------------------------------+
   subroutine get_thermostat_bath()
-    integer          :: iw,i
+    integer          :: iw,i,j
     real(8)          :: en,w,dw,wfin,wini
     complex(8)       :: peso
     real(8)          :: ngtr,nless,arg
@@ -51,21 +51,22 @@ contains
     end select
 
 
-    S0less=zero ; S0gtr=zero
     do iw=1,Lw
        en   = wfreq(iw)
        nless= fermi0(en,beta)
        ngtr = fermi0(en,beta)-1.d0
-       do i=-nstep,nstep
-          peso=exp(-xi*t(i)*en)
-          S0less(i)=S0less(i)+ xi*Vpd**2*nless*peso*bath_dens(iw)*dw
-          S0gtr(i) =S0gtr(i) + xi*Vpd**2*ngtr*peso*bath_dens(iw)*dw
+       do i=0,nstep
+          do j=0,nstep
+             peso=exp(-xi*(t(i)-t(j))*en)
+             S0%less(i,j)=S0%less(i,j)+ xi*Vpd**2*nless*peso*bath_dens(iw)*dw
+             S0%gtr(i,j) =S0%gtr(i,j) + xi*Vpd**2*ngtr*peso*bath_dens(iw)*dw
+          enddo
        enddo
     enddo
 
     if(mpiID==0)then
-       call splot("BATH/S0less_t.ipt",t,S0less)
-       call splot("BATH/S0gtr_t.ipt",t,S0gtr)
+       call splot("BATH/S0less_t.ipt",S0%less)
+       call splot("BATH/S0gtr_t.ipt",S0%gtr)
        call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
     endif
 

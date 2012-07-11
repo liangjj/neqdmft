@@ -40,13 +40,17 @@ MODULE VARS_GLOBAL
   character(len=16) :: bath_type     !choose the shape of the BATH
   character(len=16) :: field_profile !choose the profile of the electric field
   real(8)           :: Wbath         !Width of the BATH DOS
-  real(8)           :: eps_error
-  integer           :: Nsuccess
-  real(8)           :: weight    !mixing weight parameter
-  real(8)           :: wmin,wmax     !
+  real(8)           :: eps_error     !convergence error threshold
+  integer           :: Nsuccess      !number of convergence success
+  real(8)           :: weight        !mixing weight parameter
+  real(8)           :: wmin,wmax     !min/max frequency
+  logical           :: solve_eq      !Solve equilibrium Flag:
+  logical           :: g0loc_guess   !use non-interacting local GF as guess.
+  logical           :: plotVF,plot3D,fchi
+  integer           :: size_cutoff
 
 
-  !Files to restart job
+  !FILES TO RESTART
   !=========================================================
   character(len=32) :: irdG0file,irdNkfile,irdSlfile,irdSgfile
 
@@ -77,39 +81,43 @@ MODULE VARS_GLOBAL
   complex(8),allocatable,dimension(:)  :: irdG0w,irdG0iw
 
   !Frequency domain:
-  type(keldysh_equilibrium_gf)        :: gf0,gf,sf
+  type(keldysh_equilibrium_gf)        :: gf0
+  type(keldysh_equilibrium_gf)        :: gf
+  type(keldysh_equilibrium_gf)        :: sf
 
-  real(8),dimension(:),allocatable    :: exa
-
-  !Solve equilibrium Flag:
-  logical                             :: solve_eq
-  logical                             :: g0loc_guess
 
   !NON-EQUILIBRIUM GREEN'S FUNCTION: 4 = G^<,G^>
   !=========================================================  
-  !NON-INTERACTING
-  complex(8),allocatable,dimension(:,:) :: G0gtr
-  complex(8),allocatable,dimension(:,:) :: G0less
+  type keldysh_contour_gf
+     complex(8),dimension(:,:),pointer  :: less,gtr
+  end type keldysh_contour_gf
+
+  interface assignment(=)
+     module procedure keldysh_contour_gf_equality,keldysh_contour_gf_equality_
+  end interface assignment(=)
+
+  !MOMENTUM-DISTRIBUTION
+  !=========================================================  
   real(8),allocatable,dimension(:,:)    :: nk
+
+  !NON-INTERACTING
+  !=========================================================  
+  type(keldysh_contour_gf) :: G0
 
   !SELF-ENERGIES
   !=========================================================  
   !Sigma^V_k,mu(t,t`)
-  complex(8),allocatable,dimension(:)   :: S0gtr
-  complex(8),allocatable,dimension(:)   :: S0less
+  type(keldysh_contour_gf) :: S0
   !Sigma^U(t,t`)
-  complex(8),allocatable,dimension(:,:) :: Sgtr
-  complex(8),allocatable,dimension(:,:) :: Sless
+  type(keldysh_contour_gf) :: Sig
 
   !INTERACTING
   !=========================================================  
-  complex(8),allocatable,dimension(:,:) :: locGgtr
-  complex(8),allocatable,dimension(:,:) :: locGless
+  type(keldysh_contour_gf) :: locG
 
   !IMPURITY
   !=========================================================  
-  complex(8),allocatable,dimension(:,:) :: impGgtr
-  complex(8),allocatable,dimension(:,:) :: impGless
+  type(keldysh_contour_gf) :: impG
 
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
@@ -119,10 +127,9 @@ MODULE VARS_GLOBAL
   real(8),allocatable,dimension(:,:,:)   :: chi_dia
 
 
-  !FLAGS
-  !=========================================================  
-  logical              :: plotVF,plot3D,fchi
-  integer              :: size_cutoff
+
+  !Other:
+  real(8),dimension(:),allocatable    :: exa
 
 
   !NAMELISTS:
@@ -260,11 +267,11 @@ contains
     integer          :: i
     real(8)          :: ex
     call msg("Allocating the memory")
-    allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
-    allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
-    allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
-    allocate(locGless(0:nstep,0:nstep),locGgtr(0:nstep,0:nstep))
-    allocate(impGless(0:nstep,0:nstep),impGgtr(0:nstep,0:nstep))
+    call allocate_keldysh_contour_gf(G0,nstep)
+    call allocate_keldysh_contour_gf(S0,nstep)
+    call allocate_keldysh_contour_gf(Sig,nstep)
+    call allocate_keldysh_contour_gf(locG,nstep)
+    call allocate_keldysh_contour_gf(impG,nstep)
     allocate(nk(0:nstep,Lk),irdnk(Lk))
 
     call allocate_gf(gf0,nstep)
@@ -282,6 +289,61 @@ contains
   end subroutine global_memory_allocation
 
 
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
+  subroutine keldysh_contour_gf_equality(G1,G2)
+    type(keldysh_contour_gf),intent(inout) :: G1
+    type(keldysh_contour_gf),intent(in)    :: G2
+    G1%less = G2%less
+    G1%gtr = G2%gtr
+  end subroutine keldysh_contour_gf_equality
+
+  subroutine keldysh_contour_gf_equality_(G1,C)
+    type(keldysh_contour_gf),intent(inout) :: G1
+    complex(8),intent(in) :: C
+    G1%less = C
+    G1%gtr = C
+  end subroutine keldysh_contour_gf_equality_
+
+
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
+
+  subroutine allocate_keldysh_contour_gf(G,N)
+    type(keldysh_contour_gf) :: G
+    integer                  :: i,j,N
+    nullify(G%less,G%gtr)
+    allocate(G%less(0:N,0:N),G%gtr(0:N,0:N))
+    G%less=zero
+    G%gtr =zero
+  end subroutine allocate_keldysh_contour_gf
+
+
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
+  function build_keldysh_matrix_gf(G,N) result(matG)
+    type(keldysh_contour_gf)              :: G
+    complex(8),dimension(0:2*N+1,0:2*N+1) :: matG
+    integer                               :: i,j,N
+    forall(i=0:N,j=0:N)
+       matG(i,j)         = step(t(i)-t(j))*G%gtr(i,j) + step(t(j)-t(i))*G%less(i,j)
+       matG(i,N+1+j)     =-G%less(i,j)
+       matG(N+1+i,j)     = G%gtr(i,j)
+       matG(N+1+i,N+1+j) =-(step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
+    end forall
+  end function build_keldysh_matrix_gf
 
 
   !******************************************************************

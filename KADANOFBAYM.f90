@@ -13,8 +13,8 @@ module KADANOFBAYM
   USE FUNX_NEQ
   implicit none
   private
+  type(keldysh_contour_gf)                :: Gk
   complex(8),allocatable,dimension(:)     :: icGkless
-  complex(8),allocatable,dimension(:,:)   :: Gkless,Gkgtr
   complex(8),allocatable,dimension(:)     :: Ikless,Ikgtr
   complex(8),allocatable,dimension(:)     :: Ikless0,Ikgtr0
   real(8)                                 :: Ikdiag
@@ -67,13 +67,14 @@ contains
     call msg("Entering Kadanoff-Baym")
 
     !Set to Zero loc GF:
-    locGless=zero; locGgtr=zero ; nk=0.d0
-    tmpGless=zero; tmpGgtr =zero; tmpnk=0.d0
+    locG=zero  
+    nk=0.d0   ; tmpnk=0.d0
+    tmpGless=zero; tmpGgtr =zero
 
     !=============START K-POINTS LOOP======================
     call start_timer
     do ik=1+mpiID,Lk,mpiSIZE
-       Gkless=zero;   Gkgtr=zero
+       Gk=zero
 
        !Recover Initial Condition for Gk^{<,>}
        call read_ic(ik)
@@ -83,9 +84,9 @@ contains
           call GFstep(2,ik,istep) !2nd-pass
        enddo
 
-       tmpGless(0:nstep,0:nstep) =tmpGless(0:nstep,0:nstep) + Gkless(0:nstep,0:nstep)*wt(ik)
-       tmpGgtr(0:nstep,0:nstep)  =tmpGgtr(0:nstep,0:nstep)  + Gkgtr(0:nstep,0:nstep)*wt(ik)
-       forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gkless(istep,istep)
+       tmpGless(0:nstep,0:nstep) =tmpGless(0:nstep,0:nstep) + Gk%less(0:nstep,0:nstep)*wt(ik)
+       tmpGgtr(0:nstep,0:nstep)  =tmpGgtr(0:nstep,0:nstep)  + Gk%gtr(0:nstep,0:nstep)*wt(ik)
+       forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gk%less(istep,istep)
        call eta(ik,Lk,unit=999)
     enddo
     call stop_timer
@@ -93,15 +94,15 @@ contains
     !=============END K-POINTS LOOP======================
 
 
-    call MPI_REDUCE(tmpGless(0:,0:),locGless(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpGgtr(0:,0:),locGgtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_REDUCE(tmpGless(0:,0:),locG%less(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_REDUCE(tmpGgtr(0:,0:),locG%gtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     !Gloc^>(t',t)= - Gloc^>(t,t')^T
     if(mpiID==0)then
-       forall(i=0:nstep,j=0:nstep,i>j)locGless(i,j)=-conjg(locGless(j,i))
-       forall(i=0:nstep,j=0:nstep,i<j)locGgtr(i,j) =-conjg(locGgtr(j,i))
+       forall(i=0:nstep,j=0:nstep,i>j)locG%less(i,j)=-conjg(locG%less(j,i))
+       forall(i=0:nstep,j=0:nstep,i<j)locG%gtr(i,j) =-conjg(locG%gtr(j,i))
     endif
-    call MPI_BCAST(locGless(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(locGgtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locG%less(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locG%gtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
 
     call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
@@ -123,8 +124,8 @@ contains
   !+----------------------------------------------------------------+
   subroutine allocate_funx()
     call msg("Allocating KB memory:")
+    call allocate_keldysh_contour_gf(Gk,nstep)
     allocate(icGkless(Lk))
-    allocate(Gkless(0:nstep,0:nstep),Gkgtr(0:nstep,0:nstep))
     allocate(Ikless(0:nstep),Ikgtr(0:nstep))
     allocate(Ikless0(0:nstep),Ikgtr0(0:nstep))
     allocate(Udelta(Lk,0:nstep),Vdelta(Lk,0:nstep))
@@ -144,7 +145,6 @@ contains
   subroutine deallocate_funx()
     call msg("Deallocating KB memory:")
     deallocate(icGkless)
-    deallocate(Gkless,Gkgtr)      
     deallocate(Ikless,Ikgtr)
     deallocate(Ikless0,Ikgtr0)
     deallocate(Udelta,Vdelta)
@@ -184,20 +184,20 @@ contains
 
     !Evolve the solution of KB equations for all the k-points:
     forall(it=0:istep)
-       Gkless(it,istep+1) = Gkless(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
-       Gkgtr(istep+1,it)  = Gkgtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
+       Gk%less(it,istep+1) = Gk%less(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
+       Gk%gtr(istep+1,it)  = Gk%gtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
     end forall
-    Gkgtr(istep+1,istep)=(Gkless(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
-    Gkless(istep+1,istep+1)= Gkless(istep,istep)-xi*dt*Ikdiag
-    Gkgtr(istep+1,istep+1) = Gkless(istep+1,istep+1)-xi
+    Gk%gtr(istep+1,istep)=(Gk%less(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
+    Gk%less(istep+1,istep+1)= Gk%less(istep,istep)-xi*dt*Ikdiag
+    Gk%gtr(istep+1,istep+1) = Gk%less(istep+1,istep+1)-xi
 
 
     !$OMP PARALLEL PRIVATE(i,j)
     !$OMP DO
     do i=0,istep+1!nstep
        do j=0,istep+1!nstep
-          if(i>j)Gkless(i,j)=-conjg(Gkless(j,i))
-          if(i<j)Gkgtr(i,j)=-conjg(Gkgtr(j,i)) 
+          if(i>j)Gk%less(i,j)=-conjg(Gk%less(j,i))
+          if(i<j)Gk%gtr(i,j)=-conjg(Gk%gtr(j,i)) 
        enddo
     enddo
     !$OMP END DO
@@ -240,10 +240,10 @@ contains
     !$OMP PARALLEL PRIVATE(i)
     !$OMP DO
     do i=0,Nt
-       Vless(i)= Sless(i,Nt)    + S0less(i-Nt)
-       Vgtr(i) = Sgtr(Nt,i)     + S0gtr(Nt-i)
-       Vret(i) = SretF(Nt,i)    + S0retF(Nt-i)
-       Vadv(i) = conjg(Vret(i)) 
+       Vless(i)= Sig%less(i,Nt)    + S0%less(i,Nt)
+       Vgtr(i) = Sig%gtr(Nt,i)     + S0%gtr(Nt,i)
+       Vret(i) = SretF(Nt,i)       + S0retF(Nt,i)
+       Vadv(i) = conjg(Vret(i))
     end do
     !$OMP END DO
     !$OMP END PARALLEL
@@ -258,7 +258,7 @@ contains
     do it=0,Nt
        forall(i=0:Nt)Fret(i) = GkretF(it,i)
        I1=sum(Fret(0:it)*Vless(0:it))*dt
-       I2=sum(Gkless(it,0:Nt)*Vadv(0:Nt))*dt
+       I2=sum(Gk%less(it,0:Nt)*Vadv(0:Nt))*dt
        Ikless(it)=I1 + I2
     enddo
     !$OMP END DO
@@ -273,7 +273,7 @@ contains
     !$OMP DO
     do itp=0,Nt
        forall(i=0:Nt)Fadv(i) = conjg(GkretF(itp,i))
-       I1=sum(Vret(0:Nt)*Gkgtr(0:Nt,itp))*dt
+       I1=sum(Vret(0:Nt)*Gk%gtr(0:Nt,itp))*dt
        I2=sum(Vgtr(0:itp)*Fadv(0:itp))*dt
        Ikgtr(itp)=I1 + I2
     enddo
@@ -292,15 +292,15 @@ contains
   pure function GkretF(i,j)      
     integer,intent(in) :: i,j
     complex(8)         :: GkretF
-    GkretF = heaviside(t(i-j))*(Gkgtr(i,j)-Gkless(i,j))
+    GkretF = heaviside(t(i)-t(j))*(Gk%gtr(i,j)-Gk%less(i,j))
   end function GkretF
   !-------------------------------------------------------!
 
   !-------------------------------------------------------!
-  pure function S0retF(i)      
-    integer,intent(in) :: i
+  pure function S0retF(i,j)   
+    integer,intent(in) :: i,j
     complex(8)         :: S0retF
-    S0retF = heaviside(t(i))*(S0gtr(i)-S0less(i))
+    S0retF = heaviside(t(i)-t(j))*(S0%gtr(i,j)-S0%less(i,j))
   end function S0retF
   !-------------------------------------------------------!
 
@@ -308,7 +308,7 @@ contains
   pure function SretF(i,j)      
     integer,intent(in) :: i,j
     complex(8)         :: SretF
-    SretF = heaviside(t(i-j))*(Sgtr(i,j)-Sless(i,j))
+    SretF = heaviside(t(i)-t(j))*(Sig%gtr(i,j)-Sig%less(i,j))
   end function SretF
   !-------------------------------------------------------!
 
@@ -335,18 +335,7 @@ contains
     real(8) :: en,mu,invtemp
     call msg("Building initial conditions:")
     call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
-    ! mu=xmu
-    ! invtemp=beta
-    ! if(iquench)mu=xmu0
-    ! if(iquench)invtemp=beta0
-    ! if(irdeq)then
     icGkless = xi*irdNk
-    ! else
-    !    do ik=1,Lk
-    !       en           = epsik(ik)-mu
-    !       icGkless(ik) = xi*fermi0(en,invtemp)
-    !    enddo
-    ! endif
     call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),aimag(icGkless(1:Lk)))
     return
   end subroutine build_ic
@@ -361,10 +350,9 @@ contains
 
 
   subroutine read_ic(ik)
-    integer :: ik,itau
-    Gkless(0,0)=icGkless(ik)
-    Gkgtr(0,0) =icGkless(ik)-xi
-    return
+    integer :: ik
+    Gk%less(0,0)=icGkless(ik)
+    Gk%gtr(0,0) =icGkless(ik)-xi
   end subroutine read_ic
 
 
@@ -501,10 +489,10 @@ contains
           kt = kgrid(ix,iy)-Ak
           vel= square_lattice_velocity(kt)
           do j=0,nstep
-             chi_pm(1,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%x*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
-             chi_pm(1,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%y*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
-             chi_pm(2,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%x*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
-             chi_pm(2,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%y*wt(ik)*aimag(GkretF(i,j)*Gkless(j,i))
+             chi_pm(1,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%x*wt(ik)*aimag(GkretF(i,j)*Gk%less(j,i))
+             chi_pm(1,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%x*vel%y*wt(ik)*aimag(GkretF(i,j)*Gk%less(j,i))
+             chi_pm(2,1,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%x*wt(ik)*aimag(GkretF(i,j)*Gk%less(j,i))
+             chi_pm(2,2,i,j)=chi_pm(1,1,i,j)-2.d0*vel%y*vel%y*wt(ik)*aimag(GkretF(i,j)*Gk%less(j,i))
           enddo
        enddo
     enddo
@@ -536,8 +524,8 @@ contains
           kt = kgrid(ix,iy)-Ak
           eab(1)=2*ts*cos(kt%x)
           eab(2)=2*ts*cos(kt%y)
-          chi_dia(1,1,i)=chi_dia(1,1,i)+2.d0*wt(ik)*eab(1)*xi*Gkless(i,i)
-          chi_dia(2,2,i)=chi_dia(2,2,i)+2.d0*wt(ik)*eab(2)*xi*Gkless(i,i)
+          chi_dia(1,1,i)=chi_dia(1,1,i)+2.d0*wt(ik)*eab(1)*xi*Gk%less(i,i)
+          chi_dia(2,2,i)=chi_dia(2,2,i)+2.d0*wt(ik)*eab(2)*xi*Gk%less(i,i)
        enddo
     enddo
   end subroutine get_chi_dia
@@ -558,13 +546,13 @@ contains
   subroutine print_out_Gloc()
     integer :: i,j
     if(mpiID==0)then
-       call splot("locGless.data",locGless(0:nstep,0:nstep))
-       call splot("locGgtr.data",locGgtr(0:nstep,0:nstep))
+       call splot("locGless.data",locG%less(0:nstep,0:nstep))
+       call splot("locGgtr.data",locG%gtr(0:nstep,0:nstep))
        call splot("nk.data",nk(0:nstep,1:Lk))
        forall(i=0:nstep,j=0:nstep)
-          gf%less%t(i-j) = locGless(i,j)
-          gf%gtr%t(i-j)  = locGgtr(i,j)
-          gf%ret%t(i-j)  = heaviside(t(i-j))*(locGgtr(i,j)-locGless(i,j))
+          gf%less%t(i-j) = locG%less(i,j)
+          gf%gtr%t(i-j)  = locG%gtr(i,j)
+          gf%ret%t(i-j)  = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
        end forall
        if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
        call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ;  gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)

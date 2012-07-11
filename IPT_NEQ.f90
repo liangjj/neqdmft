@@ -78,7 +78,7 @@ contains
           if(.not.g0loc_guess)then
              call msg("Using Hartree-Fock for self-energy guess")
              call msg("G0less=G0gtr=zero",lines=1)
-             G0less=zero ; G0gtr=zero
+             G0=zero
 
           else
 
@@ -92,8 +92,8 @@ contains
                       do i=0,nstep
                          intE=int_Ht(ik,i,j)
                          peso=exp(-xi*intE)
-                         G0less(i,j)= G0less(i,j) + xi*nless*peso*wt(ik)
-                         G0gtr(i,j) = G0gtr(i,j)  + xi*ngtr*peso*wt(ik)
+                         G0%less(i,j)= G0%less(i,j) + xi*nless*peso*wt(ik)
+                         G0%gtr(i,j) = G0%gtr(i,j)  + xi*ngtr*peso*wt(ik)
                       enddo
                    enddo
                 enddo
@@ -111,25 +111,25 @@ contains
                    enddo
                 enddo
                 forall(i=0:nstep,j=0:nstep)
-                   G0less(i,j)=gf0%less%t(i-j)
-                   G0gtr(i,j) =gf0%gtr%t(i-j)
+                   G0%less(i,j)=gf0%less%t(i-j)
+                   G0%gtr(i,j) =gf0%gtr%t(i-j)
                 end forall
              endif
-             call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-             call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
+             call splot("guessG0less.data",G0%less(0:nstep,0:nstep))
+             call splot("guessG0gtr.data",G0%gtr(0:nstep,0:nstep))
           end if
 
        endif
-       call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+       call MPI_BCAST(G0%less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+       call MPI_BCAST(G0%gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
        call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
        call neq_solve_ipt()
 
 
     case(1)
        call msg("Reading self-energy guess and n(k) from input files",lines=1)
-       call sread(trim(irdSlfile),Sless(0:nstep,0:nstep))
-       call sread(trim(irdSgfile),Sgtr(0:nstep,0:nstep))
+       call sread(trim(irdSlfile),Sig%less(0:nstep,0:nstep))
+       call sread(trim(irdSgfile),Sig%gtr(0:nstep,0:nstep))
        call read_nkfile(trim(irdnkfile))
 
 
@@ -161,14 +161,14 @@ contains
              enddo
           enddo
           forall(i=0:nstep,j=0:nstep)
-             G0less(i,j)=gf0%less%t(i-j)
-             G0gtr(i,j) =gf0%gtr%t(i-j)
+             G0%less(i,j)=gf0%less%t(i-j)
+             G0%gtr(i,j) =gf0%gtr%t(i-j)
           end forall
-          call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-          call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
+          call splot("guessG0less.data",G0%less(0:nstep,0:nstep))
+          call splot("guessG0gtr.data",G0%gtr(0:nstep,0:nstep))
        endif
-       call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+       call MPI_BCAST(G0%less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+       call MPI_BCAST(G0%gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
        call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
        call neq_solve_ipt()
 
@@ -200,11 +200,11 @@ contains
              enddo
           enddo
           forall(i=0:nstep,j=0:nstep)
-             G0less(i,j)=gf0%less%t(i-j)
-             G0gtr(i,j) =gf0%gtr%t(i-j)
+             G0%less(i,j)=gf0%less%t(i-j)
+             G0%gtr(i,j) =gf0%gtr%t(i-j)
           end forall
-          call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-          call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
+          call splot("guessG0less.data",G0%less(0:nstep,0:nstep))
+          call splot("guessG0gtr.data",G0%gtr(0:nstep,0:nstep))
 
 
           !Get n(k) within IPT approximation!!
@@ -223,8 +223,8 @@ contains
           call splot("guessnkVSepsk.ipt",epsik,irdnk)
 
        endif
-       call MPI_BCAST(G0less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-       call MPI_BCAST(G0gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+       call MPI_BCAST(G0%less,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+       call MPI_BCAST(G0%gtr,(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
        call MPI_BCAST(irdNk,Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
        call neq_solve_ipt()
 
@@ -282,25 +282,26 @@ contains
     !Get SIgma:
     call msg("Get Sigma(t,t')")
 
+    Sig=zero
     forall(i=0:nstep,j=0:nstep)
-       Sless(i,j) = (U**2)*(G0less(i,j)**2)*G0gtr(j,i)
-       Sgtr (i,j) = (U**2)*(G0gtr(i,j)**2)*G0less(j,i)
+       Sig%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)
+       Sig%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)
     end forall
 
-    !Get impurity GF and use SPT method if required
-    call get_impuritygf
-    if(method=="spt")then
-       call msg("Recalculate Sigma using SPT")
-       forall(i=0:nstep,j=0:nstep)
-          Sless(i,j) = (U**2)*(impGless(i,j)**2)*impGgtr(j,i)
-          Sgtr (i,j) = (U**2)*(impGgtr(i,j)**2)*impGless(j,i)                
-       end forall
-    end if
+    ! !Get impurity GF and use SPT method if required
+    ! call get_impuritygf
+    ! if(method=="spt")then
+    !    call msg("Recalculate Sigma using SPT")
+    !    forall(i=0:nstep,j=0:nstep)
+    !       Sig%less(i,j) = (U**2)*(impG%less(i,j)**2)*impG%gtr(j,i)
+    !       Sig%gtr (i,j) = (U**2)*(impG%gtr(i,j)**2)*impG%less(j,i)                
+    !    end forall
+    ! end if
 
     !Save data:
     if(mpiID==0)then
-       call splot("Sless.data",Sless(0:nstep,0:nstep))
-       call splot("Sgtr.data",Sgtr(0:nstep,0:nstep))
+       call splot("Sless.data",Sig%less(0:nstep,0:nstep))
+       call splot("Sgtr.data",Sig%gtr(0:nstep,0:nstep))
     endif
 
   end subroutine Neq_solve_ipt
@@ -314,28 +315,28 @@ contains
 
 
 
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : evaluate the impurity neq Green's functions
-  !+-------------------------------------------------------------------+
-  subroutine get_impuritygf()
-    integer                               :: i,j
-    real(8)                               :: A,w
-    complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet,Gamma0Ret
-    complex(8),dimension(0:nstep,0:nstep) :: dG0ret,dGret,dSret
+  ! !+-------------------------------------------------------------------+
+  ! !PURPOSE  : evaluate the impurity neq Green's functions
+  ! !+-------------------------------------------------------------------+
+  ! subroutine get_impuritygf()
+  !   integer                               :: i,j
+  !   real(8)                               :: A,w
+  !   complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet,Gamma0Ret
+  !   complex(8),dimension(0:nstep,0:nstep) :: dG0ret,dGret,dSret
 
-    if(update_wfftw)then
-       call get_equilibrium_impuritygf !not tested!
-    else
-       include "obtain_Gimp_nonequilibrium.f90"
-    endif
+  !   if(update_wfftw)then
+  !      call get_equilibrium_impuritygf !not tested!
+  !   else
+  !      include "obtain_Gimp_nonequilibrium.f90"
+  !   endif
 
-    !Save data:
-    if(mpiID==0)then
-       call splot("impGless.data",impGless(0:nstep,0:nstep))
-       call splot("impGgtr.data",impGgtr(0:nstep,0:nstep))
-    endif
+  !   !Save data:
+  !   if(mpiID==0)then
+  !      call splot("impGless.data",impG%less(0:nstep,0:nstep))
+  !      call splot("impGgtr.data",impG%gtr(0:nstep,0:nstep))
+  !   endif
 
-  end subroutine get_impuritygf
+  ! end subroutine get_impuritygf
 
 
 

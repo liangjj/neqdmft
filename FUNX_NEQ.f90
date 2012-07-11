@@ -28,20 +28,18 @@ contains
     integer :: M,i,j,k,itau,jtau,NN
     real(8) :: R,deg
     real(8) :: w,A,An
+    complex(8),dimension(0:nstep,0:nstep) :: locGret,Sret
+    complex(8),dimension(0:nstep,0:nstep) :: locGadv,Sadv
     complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet
-    complex(8),dimension(0:nstep,0:nstep) :: G0ret,locGret,Sret
-    complex(8),dimension(0:nstep,0:nstep) :: G0adv,locGadv,Sadv
-    complex(8),dimension(0:nstep,0:nstep) :: dG0less,dG0gtr
-    complex(8),dimension(0:nstep,0:nstep) :: G0kel,locGkel,Skel
-    complex(8),dimension(0:nstep,0:nstep) :: locGtt,locGat,Stt,Sat
-    complex(8),dimension(:,:),allocatable :: locGmat,Smat,G0mat,GammaMat,UnoMat
+    complex(8),dimension(0:nstep,0:nstep) :: G0ret
+    complex(8),dimension(0:nstep,0:nstep) :: G0adv
     complex(8),dimension(:,:),allocatable,save :: G0less_old,G0gtr_old
 
 
     if(.not.allocated(G0less_old))allocate(G0less_old(0:nstep,0:nstep))
     if(.not.allocated(G0gtr_old))allocate(G0gtr_old(0:nstep,0:nstep))
-    G0less_old=G0less
-    G0gtr_old =G0gtr
+    G0less_old=G0%less
+    G0gtr_old =G0%gtr
 
     call msg("Update WF: Dyson")
     if(update_wfftw)then
@@ -49,13 +47,13 @@ contains
     else
        include "update_G0_nonequilibrium.f90"
     endif
-    G0less = weight*G0less + (1.d0-weight)*G0less_old
-    G0gtr = weight*G0gtr + (1.d0-weight)*G0gtr_old
+    G0%less = weight*G0%less + (1.d0-weight)*G0less_old
+    G0%gtr = weight*G0%gtr + (1.d0-weight)*G0gtr_old
 
     !Save data:
     if(mpiID==0)then
-       call splot("G0less.data",G0less(0:nstep,0:nstep))
-       call splot("G0gtr.data",G0gtr(0:nstep,0:nstep))
+       call splot("G0less.data",G0%less(0:nstep,0:nstep))
+       call splot("G0gtr.data",G0%gtr(0:nstep,0:nstep))
     endif
   end subroutine neq_update_weiss_field
 
@@ -79,7 +77,7 @@ contains
     type(vect2D),dimension(0:nstep)  :: Jloc                   !local Current 
     real(8),dimension(0:nstep)       :: nt,modJloc             !occupation(time)
     if(mpiID==0)then
-       forall(i=0:nstep)nt(i)=-xi*locGless(i,i)
+       forall(i=0:nstep)nt(i)=-xi*locG%less(i,i)
        Jloc=Vzero    
        do ik=1,Lk
           ix=ik2ix(ik);iy=ik2iy(ik)
@@ -119,7 +117,7 @@ contains
 
     if(mpiID==0)then
        if(solve_wfftw)then
-          forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
+          forall(i=0:nstep)test_func(i)=-xi*locG%less(i,i)
        elseif(Efield/=0.d0)then
           Jloc=Vzero
           do ik=1,Lk
@@ -132,7 +130,7 @@ contains
           enddo
           test_func(0:nstep)=modulo(Jloc(0:nstep))
        else
-          forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
+          forall(i=0:nstep)test_func(i)=-xi*locG%less(i,i)
        endif
        converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop,id=0)
     endif
