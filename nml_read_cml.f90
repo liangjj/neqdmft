@@ -41,7 +41,6 @@
      case("EPS")             ;read(nml_var%value,*)eps
      case("IRDG0WFILE")      ;read(nml_var%value,*)irdG0wfile
      case("IRDNKFILE")       ;read(nml_var%value,*)irdNkfile
-     case("IRDSIWFILE")      ;read(nml_var%value,*)irdSiwfile
      case("OMP_NUM_THREADS") ;read(nml_var%value,*)omp_num_threads
         !LatticeN:
      case("NX")              ;read(nml_var%value,*)Nx

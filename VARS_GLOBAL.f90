@@ -25,7 +25,7 @@ MODULE VARS_GLOBAL
   !=========================================================
   integer,protected :: Lmu           !# of bath energies
   integer,protected :: Ltau          !Imaginary time slices
-  integer,protected :: L             !a big number
+  integer           :: L             !a big number
   integer           :: Lk            !total lattice  dimension
   integer           :: Lkreduced     !reduced lattice dimension
   integer           :: Nx,Ny         !lattice grid dimensions
@@ -42,9 +42,13 @@ MODULE VARS_GLOBAL
   real(8)           :: Wbath         !Width of the BATH DOS
   real(8)           :: eps_error
   integer           :: Nsuccess
-  real(8)           :: weight    !mixing weight parameter
+  real(8)           :: weight        !mixing weight parameter
   real(8)           :: wmin,wmax     !
-
+  character(len=32) :: irdG0wfile,irdnkfile !the bath GF file
+  logical           :: plotVF,plot3D,fchi
+  integer           :: size_cutoff
+  logical           :: solve_eq
+  logical           :: g0loc_guess
 
 
 
@@ -78,12 +82,9 @@ MODULE VARS_GLOBAL
   !INITIAL CONDITIONS: BATH DOS, N(\e(k)), Matsubara Self-energy
   !=========================================================
   real(8),allocatable,dimension(:)     :: eq_nk
+  real(8),allocatable,dimension(:)     :: eq_Stau
   complex(8),allocatable,dimension(:)  :: eq_Siw
   complex(8),allocatable,dimension(:)  :: eq_G0w
-  !Files to restart job
-  character(len=32) :: irdNkfile !the n(k) file
-  character(len=32) :: irdSiwfile !the Self-energies file
-  character(len=32) :: irdG0wfile !the bath GF file
 
 
   !NON-EQUILIBRIUM FUNCTIONS:
@@ -127,10 +128,7 @@ MODULE VARS_GLOBAL
 
   !FLAGS
   !=========================================================  
-  logical :: plotVF,plot3D,fchi
-  integer :: size_cutoff
-  logical :: solve_eq
-  logical :: g0loc_guess
+
 
 
   !NAMELISTS:
@@ -140,7 +138,7 @@ MODULE VARS_GLOBAL
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,omp_num_threads,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
        solve_eq,g0loc_guess,&
-       irdNkfile,irdSiwfile,irdG0wfile,&
+       irdNkfile,irdG0wfile,&
        iquench,beta0,xmu0,U0
 
 
@@ -214,7 +212,6 @@ contains
          ' bath_type=[constant] -- ',&
          ' eps=[0.05d0]         -- ',&
          ' irdnkfile =[eqnk.restart]-- ',&
-         ' irdSiwfile=[eqSiw.restart]-- ',&
          ' irdG0wfile=[eqG0w.restart]-- ',&
          ' omp_num_threads=[1]      -- ',&
          ' Nx=[50]      -- ',&
@@ -268,7 +265,6 @@ contains
     eps        = 0.04d0
     irdnkfile  = "eqnk.restart"
     irdG0wfile = "eqG0w.restart"
-    irdSiwfile = "eqSiw.restart"
 
     Nx = 25
     Ny = 25    
@@ -342,9 +338,7 @@ contains
     !Local Green's functions:
     allocate(locGgtr(0:nstep,0:nstep),locGless(0:nstep,0:nstep))
     allocate(locGgmix(0:Ltau,0:nstep),locGlmix(0:nstep,0:Ltau))
-
-    ! allocate(impGgtr(0:nstep,0:nstep),impGless(0:nstep,0:nstep))
-    ! allocate(impGgmix(0:Ltau,0:nstep),impGlmix(0:nstep,0:Ltau))
+    allocate(locGmat(0:Ltau,0:Ltau))
 
     !Momentum-distribution:
     allocate(nk(0:nstep,Lk))

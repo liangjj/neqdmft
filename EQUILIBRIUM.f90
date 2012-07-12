@@ -11,8 +11,7 @@ module EQUILIBRIUM
   private
 
   !Equilibrium Function
-  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_,fg0m_,sold,dummyGiw,Siw
-  real(8),allocatable,dimension(:)    :: dummyGtau,Stau
+  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_,fg0m_,sold
   real(8),allocatable,dimension(:)    :: wr_,nk_
 
   public :: solve_equilibrium_ipt
@@ -63,48 +62,9 @@ contains
        call splot("EQUILIBRIUM/G0_realw.ipt",wr_,fg0_)
        call splot("EQUILIBRIUM/Sigma_realw.ipt",wr_,sigma_)
 
-
        !Save G0(w):
-       call splot(trim(irdG0wfile),wr_,fg0_)   !interacting bath DOS
-       allocate(dummyGiw(L),dummyGtau(0:L))
-       call get_matsubara_gf_from_DOS(wr_,fg0_,dummyGiw,beta)
-       call fftgf_iw2tau(dummyGiw,dummyGtau,beta)
-       call splot("EQUILIBRIUM/G0_iw.ipt",wm,dummyGiw)
-
-       !Save S(iw):
-       allocate(Stau(0:L),Siw(L))
-       forall(i=0:L)Stau(i)=U**2*(dummyGtau(i))**2*dummyGtau(L-i)
-       call fftgf_tau2iw(Stau,Siw,beta)
-       call splot(trim(irdSiwfile),wm,Siw) !interacting Matsubara self-energy
-       call splot("EQUILIBRIUM/Sigma_iw.ipt",wm,Siw)
-
-       !Save interacting momentum-distribution:
-       nk_ = square_lattice_momentum_distribution(Lk)       
-       call splot(trim(irdnkfile),epsik,nk_) 
-       call splot("EQUILIBRIUM/nkVSepsk.ipt",epsik,nk_)
-
-       !Get G(tau) (to be compared with initial conditions summed over k in KB)
-       call get_matsubara_gf_from_DOS(wr_,fg_,dummyGiw,beta)
-       deallocate(dummyGtau);allocate(dummyGtau(0:Ltau))
-       call fftgf_iw2tau(dummyGiw,dummyGtau,beta)       
-       call splot("EQUILIBRIUM/G_tau.ipt",tau,-dummyGtau(Ltau:0:-1))
+       call splot(trim(irdG0wfile),wr_,fg0_)   !interacting bath DOS     
     endif
-    !
-  contains
-    !
-    function square_lattice_momentum_distribution(Lk) result(nk)
-      integer            :: Lk
-      integer            :: ik,i
-      type(matsubara_gf) :: gm
-      real(8)            :: nk(Lk)
-      call allocate_gf(gm,L)
-      do ik=1,Lk
-         gm%iw=one/(xi*wm - epsik(ik) - Siw)
-         call fftgf_iw2tau(gm%iw,gm%tau,beta)
-         nk(ik)=-gm%tau(L)         
-      enddo
-    end function square_lattice_momentum_distribution
-    !
   end subroutine solve_equilibrium_ipt
 
 

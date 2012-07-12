@@ -15,7 +15,7 @@ module KADANOFBAYM
   private
   !Initial conditions arrays:
   complex(8),allocatable,dimension(:)     :: icGkless 
-  complex(8),allocatable,dimension(:,:)   :: icGktau
+  real(8),allocatable,dimension(:,:)      :: icGktau
   !k-dependent GF:
   complex(8),allocatable,dimension(:,:)   :: Gkless,Gkgtr,Gklmix,Gkgmix
   real(8),allocatable,dimension(:)        :: Gktau
@@ -64,7 +64,7 @@ contains
     integer,save :: loop=1
     complex(8)   :: tmpGless(0:nstep,0:nstep),tmpGgtr(0:nstep,0:nstep)
     complex(8)   :: tmpGlmix(0:nstep,0:Ltau)
-    real(8)      :: tmpnk(0:nstep,Lk)
+    real(8)      :: tmpnk(0:nstep,Lk),tmpGmat(-Ltau:Ltau),Dummy(-Ltau:Ltau)
 
     !First loop ever, build the Initial Condition
     if(loop==1)then
@@ -94,7 +94,7 @@ contains
 
        tmpGless(0:nstep,0:nstep) =tmpGless(0:nstep,0:nstep) + Gkless(0:nstep,0:nstep)*wt(ik)
        tmpGgtr(0:nstep,0:nstep)  =tmpGgtr(0:nstep,0:nstep)  + Gkgtr(0:nstep,0:nstep)*wt(ik)
-       tmpGlmix(0:nstep,0:Ltau)  =tmpGlmix(0:nstep,0:Ltau)  + Gklmix(0:nstep,0:Ltau)*wt(ik)
+       tmpGlmix(0:nstep,0:Ltau)  =tmpGlmix(0:nstep,0:Ltau)  + Gklmix(0:nstep,0:Ltau)*wt(ik)      
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gkless(istep,istep)
        call eta(ik,Lk,unit=6)
     enddo
@@ -116,6 +116,7 @@ contains
     call MPI_BCAST(locGless(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
     call MPI_BCAST(locGgtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
     call MPI_BCAST(locGlmix(0:,0:),(nstep+1)*(Ltau+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+
 
     call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
@@ -334,6 +335,7 @@ contains
           Ib = Ib+Vlmix(i)*Gktau(i-itau)*dtau
        enddo
        Iklmix(itau)=I1+Ib
+       print*,I1,Ib
     enddo
     !$OMP END DO
     !$OMP END PARALLEL
@@ -390,13 +392,15 @@ contains
   ! G_k^\rceil(0,tau) = xi*G_k^M(tau>0)  
   !+-------------------------------------------------------------------+
   subroutine build_ic
-    integer    :: ik,i
+    integer    :: ik,i,j
     complex(8) :: funcM(L)
-    real(8)    :: n,funcT(0:Ltau)
+    real(8)    :: n,funcT(0:Ltau),gmtau(-Ltau:Ltau)
+
     call msg("Building initial conditions:")
     call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
     icGkless = xi*eq_Nk
     icGktau  = 0.d0
+    gmtau    = 0.d0
     do ik=1,Lk
        funcM=one/(xi*wm - epsik(ik) - eq_Siw)
        call fftgf_iw2tau(funcM,funcT,beta)
@@ -404,9 +408,10 @@ contains
        icGktau(ik,0:Ltau)=funcT(0:Ltau)
        forall(i=1:Ltau)icGktau(ik,-i)=-funcT(Ltau-i)
        call splot("InitialConditions/icGktau.ipt",tau(0:),icGktau(ik,0:),append=TT)
+       gmtau = gmtau + icGktau(ik,:)*wt(ik)
     enddo
     call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),dimag(icGkless(1:Lk)))
-    return
+    forall(i=0:Ltau,j=0:Ltau)locGmat(i,j)=gmtau(j-i)
   end subroutine build_ic
 
 
@@ -423,7 +428,7 @@ contains
     Gkless(0,0) = icGkless(ik)
     Gkgtr(0,0)  = icGkless(ik)-xi
     forall(i=0:Ltau)
-       Gklmix(0,i)=-xi*icGktau(ik,Ltau-i) ! Gklmix(0,0:)= icGklmix(ik,0:)
+       Gklmix(0,i)=-xi*icGktau(ik,Ltau-i)
        Gkgmix(i,0)= xi*icGktau(ik,i)
     end forall
     Gktau(-Ltau:Ltau)=icGktau(ik,-Ltau:Ltau)
@@ -621,9 +626,11 @@ contains
   subroutine print_out_Gloc()
     integer :: i,j
     if(mpiID==0)then
+       call system("if [ ! -d GLOC ]; then mkdir GLOC; fi")
        call splot("locGless.data",locGless(0:,0:))
        call splot("locGgtr.data",locGgtr(0:,0:))
        call splot("locGlmix.data",locGlmix(0:,0:))
+       call splot("locGmat.data",locGmat(0:,0:))
        call splot("nk.data",nk(0:,:))
 
        forall(i=0:nstep,j=0:nstep)
@@ -644,12 +651,10 @@ contains
           call splot("locChi_21.data",chi(2,1,0:nstep,0:nstep))
           call splot("locChi_22.data",chi(2,2,0:nstep,0:nstep))
        endif
-
        call splot("locGless_t_t.3d",t(0:),t(0:),locGless(0:,0:))
        call splot("locGlmix_t_tau.3d",t(0:),tau(0:),locGlmix(0:,0:))
-       ! do i=0,nstep
-       !    call splot("locnkVSepsik_t.2d",epsik(:),nk(i,:),append=TT)
-       ! enddo
+       call splot("locGmat_tau_tau.3d",tau(0:),tau(0:),locGmat(0:,0:))
+       call system("mv -vf *locG*.3d GLOC/")
     endif
 
 
