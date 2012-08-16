@@ -212,14 +212,14 @@ contains
 
     !Evolve the solution of KB equations for all the k-points:
     forall(it=0:istep)
-       Gkless(it,istep+1) = Gkless(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
-       Gkgtr(istep+1,it)  = Gkgtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
+       Gkless(it,istep+1) = Gkless(it,istep)*conjg(Udelta(ik,istep))-Ikless(it)*conjg(Vdelta(ik,istep))
+       Gkgtr(istep+1,it)  = Gkgtr(istep,it)*Udelta(ik,istep)-Ikgtr(it)*Vdelta(ik,istep)
     end forall
-    Gkgtr(istep+1,istep)=(Gkless(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
-    Gkless(istep+1,istep+1)= Gkless(istep,istep)-xi*dt*Ikdiag
+    Gkgtr(istep+1,istep)=(Gkless(istep,istep)-xi)*Udelta(ik,istep)-Ikgtr(istep)*Vdelta(ik,istep)
+    Gkless(istep+1,istep+1)= Gkless(istep,istep)+xi*dt*Ikdiag
     Gkgtr(istep+1,istep+1) = Gkless(istep+1,istep+1)-xi
 
-    forall(itau=0:Ltau)Gklmix(istep+1,itau)=Gklmix(istep,itau)*Udelta(ik,istep)+Iklmix(itau)*Vdelta(ik,istep)
+    forall(itau=0:Ltau)Gklmix(istep+1,itau)=Gklmix(istep,itau)*Udelta(ik,istep)-Iklmix(itau)*Vdelta(ik,istep)
     forall(itau=0:Ltau)Gkgmix(itau,istep+1)=-conjg(Gklmix(istep+1,Ltau-itau))
 
     !$OMP PARALLEL PRIVATE(i,j)
@@ -335,7 +335,6 @@ contains
           Ib = Ib+Vlmix(i)*Gktau(i-itau)*dtau
        enddo
        Iklmix(itau)=I1+Ib
-       print*,I1,Ib
     enddo
     !$OMP END DO
     !$OMP END PARALLEL
@@ -432,6 +431,10 @@ contains
        Gkgmix(i,0)= xi*icGktau(ik,i)
     end forall
     Gktau(-Ltau:Ltau)=icGktau(ik,-Ltau:Ltau)
+    do i=-Ltau,Ltau
+       write(90,*)dble(i)*beta/dble(Ltau),Gktau(i)
+    enddo
+    write(90,*)""
     return
   end subroutine read_ic
 

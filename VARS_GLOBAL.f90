@@ -135,7 +135,7 @@ MODULE VARS_GLOBAL
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
-       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,omp_num_threads,&
+       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
        solve_eq,g0loc_guess,&
        irdNkfile,irdG0wfile,&
@@ -213,7 +213,6 @@ contains
          ' eps=[0.05d0]         -- ',&
          ' irdnkfile =[eqnk.restart]-- ',&
          ' irdG0wfile=[eqG0w.restart]-- ',&
-         ' omp_num_threads=[1]      -- ',&
          ' Nx=[50]      -- ',&
          ' Ny=[50]      -- ',&    
          ' iquench=[F]  -- ',&
@@ -293,9 +292,6 @@ contains
     write(*,*)"--------------------------------------------"
     write(*,*)""
     if(lprint)call dump_input_file("used.")
-
-    !SET OMP THREADS NUMBER
-    call omp_set_num_threads(omp_num_threads)
 
     return
   contains

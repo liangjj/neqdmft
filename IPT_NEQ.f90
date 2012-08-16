@@ -230,14 +230,14 @@ contains
     call system("if [ ! -d SIGMA ]; then mkdir SIGMA; fi")
 
     forall(i=0:nstep,j=0:nstep)
-       Sgtr (i,j) = (U**2)*(G0gtr(i,j)**2)*G0less(j,i)
-       Sless(i,j) = (U**2)*(G0less(i,j)**2)*G0gtr(j,i)
+       Sgtr (i,j) = -(U**2)*(G0gtr(i,j)**2)*G0less(j,i)
+       Sless(i,j) = -(U**2)*(G0less(i,j)**2)*G0gtr(j,i)
     end forall
 
-    forall(i=0:nstep,itau=0:Ltau)Slmix(i,itau) = -U**2*(G0lmix(i,itau)**2)*G0gmix(itau,i)
+    forall(i=0:nstep,itau=0:Ltau)Slmix(i,itau) = -(U**2)*(G0lmix(i,itau)**2)*G0gmix(itau,i)
     forall(j=0:Ltau)Sgmix(j,:)=-conjg(Slmix(:,Ltau-j))
 
-    forall(i=0:Ltau,j=0:Ltau)Smat(i,j)=(U**2)*(G0mat(i,j)**2)*G0mat(j,i)
+    forall(i=0:Ltau,j=0:Ltau)Smat(i,j)=-(U**2)*(G0mat(i,j)**2)*G0mat(j,i)
 
     !Save data:
     if(mpiID==0)then

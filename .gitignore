@@ -1,0 +1,8 @@
+*.mod
+*.a
+*.o
+repo/
+test/
+.repo/
+*~
+revision.inc
