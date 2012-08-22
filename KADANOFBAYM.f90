@@ -392,7 +392,7 @@ contains
   !+-------------------------------------------------------------------+
   subroutine build_ic
     integer    :: ik,i,j
-    complex(8) :: funcM(L)
+    complex(8) :: funcM(L),ftmp(L)
     real(8)    :: n,funcT(0:Ltau),gmtau(-Ltau:Ltau)
 
     call msg("Building initial conditions:")
@@ -635,6 +635,11 @@ contains
        call splot("locGlmix.data",locGlmix(0:,0:))
        call splot("locGmat.data",locGmat(0:,0:))
        call splot("nk.data",nk(0:,:))
+
+       
+       ! call splot("testGlesst0.ipt",t(0:),locGless(0:,0))
+       ! call splot("testGlmixtau0.ipt",t(0:),locGlmix(0:,0))
+       ! stop
 
        forall(i=0:nstep,j=0:nstep)
           gf%less%t(i-j) = locGless(i,j)

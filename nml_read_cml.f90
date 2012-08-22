@@ -40,6 +40,7 @@
      case("BATH_TYPE")       ;read(nml_var%value,*)bath_type
      case("EPS")             ;read(nml_var%value,*)eps
      case("IRDG0WFILE")      ;read(nml_var%value,*)irdG0wfile
+     case("IRDG0IWFILE")      ;read(nml_var%value,*)irdG0iwfile
      case("IRDNKFILE")       ;read(nml_var%value,*)irdNkfile
      case("OMP_NUM_THREADS") ;read(nml_var%value,*)omp_num_threads
         !LatticeN:

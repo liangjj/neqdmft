@@ -35,7 +35,8 @@ program neqDMFT
   call get_thermostat_bath()    !get the dissipative bath functions
 
   if(solve_eq)call solve_equilibrium_ipt()
-  call neq_init_run            !initialize the run using different guess.
+  call neq_init_run            
+  !initialize the run using different guess.
   !bridge between the eq. and the non-eq solution
 
   iloop=0;converged=.false.

@@ -8,7 +8,7 @@ MODULE VARS_GLOBAL
   !SciFor library
   USE COMMON_VARS
   USE GREENFUNX
-  USE CHRONOBAR
+  USE TIMER
   USE VECTORS
   USE SQUARE_LATTICE
   USE IOTOOLS
@@ -44,7 +44,7 @@ MODULE VARS_GLOBAL
   integer           :: Nsuccess
   real(8)           :: weight        !mixing weight parameter
   real(8)           :: wmin,wmax     !
-  character(len=32) :: irdG0wfile,irdnkfile !the bath GF file
+  character(len=32) :: irdG0wfile,irdG0iwfile,irdnkfile !the bath GF file
   logical           :: plotVF,plot3D,fchi
   integer           :: size_cutoff
   logical           :: solve_eq
@@ -82,9 +82,14 @@ MODULE VARS_GLOBAL
   !INITIAL CONDITIONS: BATH DOS, N(\e(k)), Matsubara Self-energy
   !=========================================================
   real(8),allocatable,dimension(:)     :: eq_nk
-  real(8),allocatable,dimension(:)     :: eq_Stau
-  complex(8),allocatable,dimension(:)  :: eq_Siw
   complex(8),allocatable,dimension(:)  :: eq_G0w
+  !
+  complex(8),allocatable,dimension(:)  :: eq_G0iw
+  real(8),allocatable,dimension(:)     :: eq_G0tau
+  complex(8),allocatable,dimension(:)  :: eq_Siw
+  real(8),allocatable,dimension(:)     :: eq_Stau
+
+
 
 
   !NON-EQUILIBRIUM FUNCTIONS:
@@ -138,7 +143,7 @@ MODULE VARS_GLOBAL
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
        solve_eq,g0loc_guess,&
-       irdNkfile,irdG0wfile,&
+       irdNkfile,irdG0wfile,irdG0iwfile,&
        iquench,beta0,xmu0,U0
 
 
@@ -264,6 +269,7 @@ contains
     eps        = 0.04d0
     irdnkfile  = "eqnk.restart"
     irdG0wfile = "eqG0w.restart"
+    irdG0iwfile = "eqG0iw.restart"
 
     Nx = 25
     Ny = 25    

@@ -13,6 +13,8 @@ module IPT_NEQ
   public  :: neq_init_run
   public  :: neq_solve_ipt
 
+  integer :: Liw,Lw
+  real(8),allocatable,dimension(:)    :: wr_,wm_
 
 contains
 
@@ -24,57 +26,62 @@ contains
     real(8)                             :: en,A,fmesh_,imt
     real(8)                             :: nless,ngtr,xmu_,beta_
     complex(8)                          :: peso
-    logical                             :: checkG0
-    real(8),allocatable,dimension(:)    :: wr_
-    real(8),dimension(-Ltau:Ltau)       :: gmtau
-    real(8),allocatable,dimension(:)    :: dummyGtau,Stau
-    complex(8),allocatable,dimension(:) :: dummyGiw
+    logical                             :: checkG0,checkG0w,checkG0iw
 
+    real(8),dimension(-Ltau:Ltau)       :: tmpGtau
+    real(8),allocatable,dimension(:)    :: eq_G0tau
 
     call system("if [ ! -d GUESS ]; then mkdir GUESS; fi")
 
-    inquire(file=trim(irdG0wfile),exist=checkG0)
-    if(.not.checkG0)inquire(file=trim(irdG0wfile)//".gz",exist=checkG0)
+    inquire(file=trim(irdG0wfile),exist=checkG0w)
+    if(.not.checkG0w)inquire(file=trim(irdG0wfile)//".gz",exist=checkG0w)
+    inquire(file=trim(irdG0iwfile),exist=checkG0iw)
+    if(.not.checkG0iw)inquire(file=trim(irdG0iwfile)//".gz",exist=checkG0iw)
+    checkG0=checkG0w*checkG0iw
 
     !If irdG0wfile EXIST: read it and build the guess-->neqIPT
     if(checkG0)then
        call msg(bold("Continuing the EQUILIBRIUM SOLUTION to the KBM-Contour"))
 
        !READ \GG_0(w) --> eq_G0w(:)
-       L=file_length(trim(irdG0wfile))
-       allocate(eq_G0w(L))
-       allocate(eq_Siw(L))
-       allocate(eq_nk(Lk))
-       allocate(wr_(L))
+       Lw=file_length(trim(irdG0wfile))
+       allocate(eq_G0w(Lw),wr_(Lw))
        call sread(trim(irdG0wfile),wr_,eq_G0w)
        fmesh_=abs(wr_(2)-wr_(1)) !Get G0 mesh:
 
        !Get G0(iw)
-       allocate(dummyGiw(L),dummyGtau(0:Ltau))
-       call get_matsubara_gf_from_DOS(wr_,eq_G0w,dummyGiw,beta)
-       call fftgf_iw2tau(dummyGiw,dummyGtau,beta)
+       Liw=file_length(trim(irdG0iwfile))
+       allocate(eq_G0iw(Liw),wm_(Liw))
+       allocate(eq_G0tau(0:Ltau))
+       call sread(trim(irdG0iwfile),wm_,eq_G0iw)
+       ! call get_matsubara_gf_from_DOS(wr_,eq_G0w,dummyGiw,beta)
+       call fftgf_iw2tau(eq_G0iw,eq_G0tau,beta)
 
        !Get S(iw) w/ IPT:
-       allocate(Stau(0:L))
-       forall(i=0:L)Stau(i)=U**2*(dummyGtau(i))**2*dummyGtau(L-i)
-       call fftgf_tau2iw(Stau,eq_Siw,beta)
+       allocate(eq_Stau(-Ltau:Ltau),eq_Siw(Liw))       
+       forall(i=0:Ltau)eq_Stau(i)=U**2*(eq_G0tau(i))**2*eq_G0tau(Ltau-i)
+       forall(i=1:Ltau)eq_Stau(-i)=-eq_Stau(Ltau-i)
+       call fftgf_tau2iw(eq_Stau(0:),eq_Siw,beta)
+
 
        !Get interacting momentum-distribution n(k):
+       allocate(eq_nk(Lk))
        eq_nk = square_lattice_momentum_distribution(Lk)
        !call read_nkfile(trim(irdnkfile))
 
        if(mpiID==0)then
-          call splot("GUESS/eq_G0_iw.ipt",wm,dummyGiw)
-          call splot("GUESS/eq_G_tau.ipt",tau,-dummyGtau(Ltau:0:-1))
-          call splot("GUESS/eq_Sigma_iw.ipt",wm,eq_Siw)
+          call splot("GUESS/eq_G0_iw.ipt",wm_,eq_G0iw)
+          call splot("GUESS/eq_G0_tau.ipt",tau,-eq_G0tau(Ltau:0:-1))
+          call splot("GUESS/eq_Sigma_iw.ipt",wm_,eq_Siw)
+          call splot("GUESS/eq_Sigma_tau.ipt",tau,-eq_Stau(Ltau:0:-1))
           call splot("GUESS/eq_nkVSepsk.ipt",epsik,eq_nk)
        endif
-       deallocate(dummyGiw,dummyGtau,Stau)
 
+       !Continue interacting solution to the KBM-Contour:
        G0less=zero
        G0gtr=zero
        G0lmix=zero
-       do ik=1,L
+       do ik=1,Lw
           en   = wr_(ik)
           nless= fermi0(en,beta)
           ngtr = fermi0(en,beta)-1.d0
@@ -97,11 +104,11 @@ contains
        forall(j=0:Ltau)G0gmix(j,:)=-conjg(G0lmix(:,Ltau-j))
 
        G0mat=0.d0
-       gmtau(0:Ltau)=xi*G0lmix(0,0:Ltau)
-       forall(i=1:Ltau)gmtau(-i)=-gmtau(Ltau-i)
-       forall(i=0:Ltau,j=0:Ltau)G0mat(i,j)=gmtau(j-i)
+       tmpGtau(0:Ltau)= eq_G0tau(0:Ltau) !xi*G0lmix(0,0:Ltau)
+       forall(i=1:Ltau)tmpGtau(-i)=-tmpGtau(Ltau-i)
+       forall(i=0:Ltau,j=0:Ltau)G0mat(i,j)=tmpGtau(j-i)
 
-       deallocate(wr_)
+       deallocate(wr_,wm_)
 
        if(mpiID==0)then
           call splot("guessG0less.data",G0less(0:nstep,0:nstep))
@@ -115,62 +122,65 @@ contains
        endif
        call neq_solve_ipt()
 
-
-
     else !If irdG0wfile DOES NOT EXIST: start from the non-interacting HF solution Sigma=n-1/2=0
-       call msg(bold("Starting from the non-interacting solution (U-quench!!)"))
-       !Get non-interacting n(k):
-       !Initial conditions:
-       allocate(eq_nk(Lk))
-       allocate(eq_G0w(L))
-       allocate(eq_Siw(L))
-       xmu_=xmu   ; if(iquench)xmu_=xmu0
-       beta_=beta ; if(iquench)beta_=beta0
-       do ik=1,Lk
-          eq_nk(ik)=fermi0((epsik(ik)-xmu_),beta_)
-       enddo
-       if(mpiID==0)call splot("GUESS/eq_nkVSepsk.ipt",epsik,eq_nk)
 
-       !Get guess for Sigma from non-interacting solution (Hartree-Fock approx.):
-       !Equilibrium functions:
-       eq_Siw=zero
-       !Sigma functions
-       Sgtr=zero   ; Sless=zero !to be changed when-out-half-filling
-       Sgmix=zero  ; Slmix=zero
-       Smat=zero
 
-       !These are built for comparison only.
-       !Copy from the code above.
-       ! !WF guess as non-interacting local GF
-       ! G0less=zero ; G0gtr=zero
-       ! G0lmix=zero ; G0gmix=zero
-       ! G0mat=0.d0
+       call error("Can not find "//trim(irdG0wfile)//" and "//trim(irdG0iwfile)//" files")
+
+       ! call msg(bold("Starting from the non-interacting solution (U-quench!!)"))
+       ! !Get non-interacting n(k):
+       ! !Initial conditions:
+       ! allocate(eq_nk(Lk))
+       ! allocate(eq_G0w(L))
+       ! allocate(eq_Siw(L))
+       ! xmu_=xmu   ; if(iquench)xmu_=xmu0
+       ! beta_=beta ; if(iquench)beta_=beta0
        ! do ik=1,Lk
-       !    en   = epsik(ik)
-       !    nless= fermi0(en,beta)
-       !    ngtr = fermi0(en,beta)-1.d0
-       !    do i=0,nstep
-       !       do j=0,nstep
-       !          peso=exp(-xi*en*(t(i)-t(j)))
-       !          G0less(i,j)=G0less(i,j) + xi*nless*wt(ik)*peso
-       !          G0gtr(i,j) =G0gtr(i,j) + xi*ngtr*wt(ik)*peso
-       !       enddo
-       !       do j=0,Ltau
-       !          peso=exp(-xi*en*t(i))*exp(-en*tau(j))/(1.d0+exp(beta*en))
-       !          if(beta*en>35.d0)peso=exp(-xi*en*t(i))*exp(-(tau(j)+beta)*en)
-       !          G0lmix(i,j)=G0lmix(i,j) + xi*nless*wt(ik)*peso
-       !       enddo
-       !    enddo
+       !    eq_nk(ik)=fermi0((epsik(ik)-xmu_),beta_)
        ! enddo
-       ! forall(j=0:Ltau)G0gmix(j,:)=-conjg(G0lmix(:,Ltau-j))
+       ! if(mpiID==0)call splot("GUESS/eq_nkVSepsk.ipt",epsik,eq_nk)
 
-       ! gmtau(0:Ltau)=-dimag(G0lmix(0,0:Ltau))
-       ! forall(i=1:Ltau)gmtau(-i)=-gmtau(Ltau-i)
-       ! forall(i=0:Ltau,j=0:Ltau)G0mat(i,j)=-gmtau(j-i)
+       ! !Get guess for Sigma from non-interacting solution (Hartree-Fock approx.):
+       ! !Equilibrium functions:
+       ! eq_Siw=zero
+       ! !Sigma functions
+       ! Sgtr=zero   ; Sless=zero !to be changed when-out-half-filling
+       ! Sgmix=zero  ; Slmix=zero
+       ! Smat=zero
 
-       ! call splot("G0less_t_t.ipt",t(0:),t(0:),G0less(0:,0:))
-       ! call splot("G0lmix_t_tau.ipt",t(0:),tau(0:),G0lmix(0:,0:))
-       ! call splot("G0mat_tau_tau.ipt",tau(0:),tau(0:),G0mat(0:,0:))
+       ! !These are built for comparison only.
+       ! !Copy from the code above.
+       ! ! !WF guess as non-interacting local GF
+       ! ! G0less=zero ; G0gtr=zero
+       ! ! G0lmix=zero ; G0gmix=zero
+       ! ! G0mat=0.d0
+       ! ! do ik=1,Lk
+       ! !    en   = epsik(ik)
+       ! !    nless= fermi0(en,beta)
+       ! !    ngtr = fermi0(en,beta)-1.d0
+       ! !    do i=0,nstep
+       ! !       do j=0,nstep
+       ! !          peso=exp(-xi*en*(t(i)-t(j)))
+       ! !          G0less(i,j)=G0less(i,j) + xi*nless*wt(ik)*peso
+       ! !          G0gtr(i,j) =G0gtr(i,j) + xi*ngtr*wt(ik)*peso
+       ! !       enddo
+       ! !       do j=0,Ltau
+       ! !          peso=exp(-xi*en*t(i))*exp(-en*tau(j))/(1.d0+exp(beta*en))
+       ! !          if(beta*en>35.d0)peso=exp(-xi*en*t(i))*exp(-(tau(j)+beta)*en)
+       ! !          G0lmix(i,j)=G0lmix(i,j) + xi*nless*wt(ik)*peso
+       ! !       enddo
+       ! !    enddo
+       ! ! enddo
+       ! ! forall(j=0:Ltau)G0gmix(j,:)=-conjg(G0lmix(:,Ltau-j))
+
+       ! ! gmtau(0:Ltau)=-dimag(G0lmix(0,0:Ltau))
+       ! ! forall(i=1:Ltau)gmtau(-i)=-gmtau(Ltau-i)
+       ! ! forall(i=0:Ltau,j=0:Ltau)G0mat(i,j)=-gmtau(j-i)
+
+       ! ! call splot("G0less_t_t.ipt",t(0:),t(0:),G0less(0:,0:))
+       ! ! call splot("G0lmix_t_tau.ipt",t(0:),tau(0:),G0lmix(0:,0:))
+       ! ! call splot("G0mat_tau_tau.ipt",tau(0:),tau(0:),G0mat(0:,0:))
+
     endif
 
 
@@ -181,11 +191,11 @@ contains
       integer            :: ik,i
       type(matsubara_gf) :: gm
       real(8)            :: nk(Lk)
-      call allocate_gf(gm,L)
+      call allocate_gf(gm,Liw)
       do ik=1,Lk
-         gm%iw=one/(xi*wm - epsik(ik) - eq_Siw)
+         gm%iw=one/(xi*wm_ - epsik(ik) - eq_Siw)
          call fftgf_iw2tau(gm%iw,gm%tau,beta)
-         nk(ik)=-gm%tau(L)         
+         nk(ik)=-gm%tau(Liw)         
       enddo
     end function square_lattice_momentum_distribution
 
@@ -237,7 +247,8 @@ contains
     forall(i=0:nstep,itau=0:Ltau)Slmix(i,itau) = -(U**2)*(G0lmix(i,itau)**2)*G0gmix(itau,i)
     forall(j=0:Ltau)Sgmix(j,:)=-conjg(Slmix(:,Ltau-j))
 
-    forall(i=0:Ltau,j=0:Ltau)Smat(i,j)=-(U**2)*(G0mat(i,j)**2)*G0mat(j,i)
+    !forall(i=0:Ltau,j=0:Ltau)Smat(i,j)=-(U**2)*(G0mat(i,j)**2)*G0mat(j,i)
+    forall(i=0:Ltau,j=0:Ltau)Smat(i,j)=eq_Stau(j-i) 
 
     !Save data:
     if(mpiID==0)then
