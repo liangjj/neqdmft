@@ -78,9 +78,7 @@ contains
        endif
 
        !Continue interacting solution to the KBM-Contour:
-       G0less=zero
-       G0gtr=zero
-       G0lmix=zero
+       G0=zero
        do ik=1,Lw
           en   = wr_(ik)
           nless= fermi0(en,beta)
@@ -89,41 +87,35 @@ contains
           do i=0,nstep
              do j=0,nstep
                 peso=exp(-xi*en*(t(i)-t(j)))
-                G0less(i,j)=G0less(i,j) + xi*nless*A*peso
-                G0gtr(i,j) =G0gtr(i,j)  + xi*ngtr*A*peso
+                G0%less(i,j)=G0%less(i,j) + xi*nless*A*peso
+                G0%gtr(i,j) =G0%gtr(i,j)  + xi*ngtr*A*peso
              enddo
           enddo
           do i=0,nstep
              do j=0,Ltau
                 peso=exp(-xi*en*t(i))*exp(-en*tau(j))/(1.d0+exp(beta*en))
                 if(beta*en>35.d0)peso=exp(-xi*en*t(i))*exp(-(tau(j)+beta)*en)
-                G0lmix(i,j)=G0lmix(i,j) + xi*A*peso
+                G0%lmix(i,j)=G0%lmix(i,j) + xi*A*peso
              enddo
           enddo
        enddo
-       forall(j=0:Ltau)G0gmix(j,:)=-conjg(G0lmix(:,Ltau-j))
+       forall(j=0:Ltau)G0%gmix(j,:)=-conjg(G0%lmix(:,Ltau-j))
 
-       G0mat=0.d0
        tmpGtau(0:Ltau)= eq_G0tau(0:Ltau) !xi*G0lmix(0,0:Ltau)
        forall(i=1:Ltau)tmpGtau(-i)=-tmpGtau(Ltau-i)
-       forall(i=0:Ltau,j=0:Ltau)G0mat(i,j)=tmpGtau(j-i)
+       forall(i=0:Ltau,j=0:Ltau)G0%mats(i,j)=tmpGtau(j-i)
 
        deallocate(wr_,wm_)
 
        if(mpiID==0)then
-          call splot("guessG0less.data",G0less(0:nstep,0:nstep))
-          call splot("guessG0gtr.data",G0gtr(0:nstep,0:nstep))
-          call splot("guessG0lmix.data",G0lmix(0:nstep,0:Ltau))
-          call splot("guessG0mat.data",G0mat(0:Ltau,0:Ltau))
-          call splot("guessG0less_t_t.3d",t(0:),t(0:),G0less(0:,0:))
-          call splot("guessG0lmix_t_tau.3d",t(0:),tau(0:),G0lmix(0:,0:))
-          call splot("guessG0mat_tau_tau.3d",tau(0:),tau(0:),G0mat(0:,0:))
-          call system("mv -vf *guess*.ipt *guess*.3d GUESS/")
+          call write_kbm_contour_gf(G0,"guessG0")
+          call splot("GUESS/guessG0less_t_t",t(0:),t(0:),G0%less(0:,0:))
+          call splot("GUESS/guessG0lmix_t_tau",t(0:),tau(0:),G0%lmix(0:,0:))
+          call splot("GUESS/guessG0mat_tau_tau",tau(0:),tau(0:),G0%mats(0:,0:))
        endif
        call neq_solve_ipt()
 
     else !If irdG0wfile DOES NOT EXIST: start from the non-interacting HF solution Sigma=n-1/2=0
-
 
        call error("Can not find "//trim(irdG0wfile)//" and "//trim(irdG0iwfile)//" files")
 
@@ -240,28 +232,22 @@ contains
     call system("if [ ! -d SIGMA ]; then mkdir SIGMA; fi")
 
     forall(i=0:nstep,j=0:nstep)
-       Sgtr (i,j) = -(U**2)*(G0gtr(i,j)**2)*G0less(j,i)
-       Sless(i,j) = -(U**2)*(G0less(i,j)**2)*G0gtr(j,i)
+       S%gtr (i,j) = -(U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)
+       S%less(i,j) = -(U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)
     end forall
 
-    forall(i=0:nstep,itau=0:Ltau)Slmix(i,itau) = -(U**2)*(G0lmix(i,itau)**2)*G0gmix(itau,i)
-    forall(j=0:Ltau)Sgmix(j,:)=-conjg(Slmix(:,Ltau-j))
+    forall(i=0:nstep,itau=0:Ltau)S%lmix(i,itau) = -(U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i)
+    forall(j=0:Ltau)S%gmix(j,:)=-conjg(S%lmix(:,Ltau-j))
 
-    !forall(i=0:Ltau,j=0:Ltau)Smat(i,j)=-(U**2)*(G0mat(i,j)**2)*G0mat(j,i)
-    forall(i=0:Ltau,j=0:Ltau)Smat(i,j)=eq_Stau(j-i) 
+    forall(i=0:Ltau,j=0:Ltau)S%mats(i,j)=eq_Stau(j-i) 
 
     !Save data:
     if(mpiID==0)then
-       call splot("Sless.data",Sless(0:nstep,0:nstep))
-       call splot("Sgtr.data",Sgtr(0:nstep,0:nstep))
-       call splot("Slmix.data",Slmix(0:nstep,0:Ltau))
-       call splot("Smat.data",Smat(0:Ltau,0:Ltau))
-       call splot("Sless_t_t.3d",t(0:),t(0:),Sless(0:,0:))
-       call splot("Slmix_t_tau.3d",t(0:),tau(0:),Slmix(0:,0:))
-       call splot("Smat_tau_tau.3d",tau(0:),tau(0:),Smat(0:,0:))
-       call system("mv -vf *S*_t*.3d SIGMA/")
+       call write_kbm_contour_gf(S,"Sigma")
+       call splot("SIGMA/Sless_t_t",t(0:),t(0:),S%less(0:,0:))
+       call splot("SIGMA/Slmix_t_tau",t(0:),tau(0:),S%lmix(0:,0:))
+       call splot("SIGMA/Smat_tau_tau",tau(0:),tau(0:),S%mats(0:,0:))
     endif
-
   end subroutine Neq_solve_ipt
 
 
@@ -284,7 +270,29 @@ contains
   !   if(update_wfftw)then
   !      call get_equilibrium_impuritygf !not tested!
   !   else
-  !      include "obtain_Gimp_nonequilibrium.f90"
+  ! dSret=zero ; dG0ret=zero ; dGret=zero
+  ! GammaRet=zero ; Gamma0Ret=zero
+  ! !1 - get the Ret components of G_0 && \Sigma:
+  ! forall(i=0:nstep,j=0:nstep)
+  !    dG0ret(i,j)=heaviside(t(i)-t(j))*(G0gtr(i,j) - G0less(i,j))
+  !    dSret(i,j) =heaviside(t(i)-t(j))*(Sgtr(i,j) - Sless(i,j))
+  ! end forall
+  ! !2 - get the  operator: \Gamma_0^R = \Id - \Sigma^R\circ G_0^R && invert it
+  ! Uno=zero  ; forall(i=0:nstep)Uno(i,i)=One/dt
+  ! Gamma0Ret(0:nstep,0:nstep) = Uno-matmul(dSret(0:nstep,0:nstep),dG0ret(0:nstep,0:nstep))*dt
+  ! Gamma0Ret(0:nstep,0:nstep)=Gamma0Ret(0:nstep,0:nstep)*dt**2
+  ! call mat_inversion_GJ(Gamma0Ret(0:nstep,0:nstep))
+  ! !3 - get G_imp^R, G_imp^{>,<} using Dyson equations:
+  ! dGret(0:nstep,0:nstep)    = matmul(dG0ret(0:nstep,0:nstep),Gamma0Ret(0:nstep,0:nstep))*dt 
+  ! GammaRet(0:nstep,0:nstep) = Uno + matmul(dGret(0:nstep,0:nstep),dSret(0:nstep,0:nstep))*dt
+
+  ! impGless(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),&
+  !      matmul(G0less(0:nstep,0:nstep),conjg(transpose(GammaRet(0:nstep,0:nstep)))))*dt**2 +&
+  !      matmul(dGret(0:nstep,0:nstep),matmul(Sless(0:nstep,0:nstep),conjg(transpose(dGret(0:nstep,0:nstep)))))*dt**2
+
+  ! impGgtr(0:nstep,0:nstep)  = matmul(GammaRet(0:nstep,0:nstep),&
+  !      matmul(G0gtr(0:nstep,0:nstep),conjg(transpose(GammaRet(0:nstep,0:nstep)))))*dt**2  +&
+  !      matmul(dGret(0:nstep,0:nstep),matmul(Sgtr(0:nstep,0:nstep),conjg(transpose(dGret(0:nstep,0:nstep)))))*dt**2
   !   endif
   !   !Save data:
   !   if(mpiID==0)then

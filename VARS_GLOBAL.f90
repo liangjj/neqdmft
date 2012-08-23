@@ -5,6 +5,8 @@
 !     AUTHORS  : Adriano Amaricci
 !#####################################################################
 MODULE VARS_GLOBAL
+  !Local:
+  USE CONTOUR_GF
   !SciFor library
   USE COMMON_VARS
   USE GREENFUNX
@@ -95,45 +97,36 @@ MODULE VARS_GLOBAL
   !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
   !WEISS-FIELDS
-  complex(8),allocatable,dimension(:,:) :: G0gtr,G0gmix
-  complex(8),allocatable,dimension(:,:) :: G0less,G0lmix
-  real(8),allocatable,dimension(:,:)    :: G0mat
-
-  !MOMENTUM-DISTRIBUTION
-  real(8),allocatable,dimension(:,:)    :: nk
-
-  !SELF-ENERGIES
-  !Bath:
-  !Sigma_bath^X(t,t`) X=>,<,\lmix,\gmix,Matsubara
-  complex(8),allocatable,dimension(:)   :: S0gtr,S0less
-  complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
-  !Interaction:
-  !Sigma_U^X(t,t`) X=>,<,\lmix,\gmix
-  complex(8),allocatable,dimension(:,:) :: Sgtr,Sgmix
-  complex(8),allocatable,dimension(:,:) :: Sless,Slmix
-  real(8),allocatable,dimension(:,:)    :: Smat
-
+  type(kbm_contour_gf) :: G0
+  ! complex(8),allocatable,dimension(:,:) :: G0gtr,G0gmix
+  ! complex(8),allocatable,dimension(:,:) :: G0less,G0lmix
+  ! real(8),allocatable,dimension(:,:)    :: G0mat
+  !SELF-ENERGY
+  type(kbm_contour_gf) :: S
+  ! complex(8),allocatable,dimension(:,:) :: Sgtr,Sgmix
+  ! complex(8),allocatable,dimension(:,:) :: Sless,Slmix
+  ! real(8),allocatable,dimension(:,:)    :: Smat
   !LOCAL GF
-  complex(8),allocatable,dimension(:,:) :: locGgtr,locGgmix
-  complex(8),allocatable,dimension(:,:) :: locGless,locGlmix
-  real(8),allocatable,dimension(:,:)    :: locGmat
-
+  type(kbm_contour_gf) :: locG
+  ! complex(8),allocatable,dimension(:,:) :: locGgtr,locGgmix
+  ! complex(8),allocatable,dimension(:,:) :: locGless,locGlmix
+  ! real(8),allocatable,dimension(:,:)    :: locGmat
   ! !IMPURITY
   ! complex(8),allocatable,dimension(:,:) :: impGgtr,impGless
   ! complex(8),allocatable,dimension(:,:) :: impGgmix,impGlmix
 
+  !Bath SELF-ENERGY
+  complex(8),allocatable,dimension(:)   :: S0gtr,S0less
+  complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
 
+  !MOMENTUM-DISTRIBUTION
+  real(8),allocatable,dimension(:,:)    :: nk
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
   !=========================================================  
   real(8),allocatable,dimension(:,:,:,:) :: chi
   real(8),allocatable,dimension(:,:,:,:) :: chi_pm
   real(8),allocatable,dimension(:,:,:)   :: chi_dia
-
-
-  !FLAGS
-  !=========================================================  
-
 
 
   !NAMELISTS:
@@ -324,23 +317,24 @@ contains
     real(8)          :: ex
     call msg("Allocating the memory")
     !Weiss-fields:
-    allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
-    allocate(G0gmix(0:Ltau,0:nstep),G0lmix(0:nstep,0:Ltau))
-    allocate(G0mat(0:Ltau,0:Ltau))
+    call allocate_kbm_contour_gf(G0,Nstep,Ltau)
+    ! allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
+    ! allocate(G0gmix(0:Ltau,0:nstep),G0lmix(0:nstep,0:Ltau))
+    ! allocate(G0mat(0:Ltau,0:Ltau))
+    !Interaction self-energies:
+    call allocate_kbm_contour_gf(S,Nstep,Ltau)
+    ! allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
+    ! allocate(Sgmix(0:Ltau,0:nstep),Slmix(0:nstep,0:Ltau))
+    ! allocate(Smat(0:Ltau,0:Ltau))
+    !Local Green's functions:
+    call allocate_kbm_contour_gf(locG,Nstep,Ltau)
+    ! allocate(locGgtr(0:nstep,0:nstep),locGless(0:nstep,0:nstep))
+    ! allocate(locGgmix(0:Ltau,0:nstep),locGlmix(0:nstep,0:Ltau))
+    ! allocate(locGmat(0:Ltau,0:Ltau))
 
     !Bath self-energies:
     allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
     allocate(S0gmix(0:Ltau,0:nstep),S0lmix(0:nstep,0:Ltau))
-
-    !Interaction self-energies:
-    allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
-    allocate(Sgmix(0:Ltau,0:nstep),Slmix(0:nstep,0:Ltau))
-    allocate(Smat(0:Ltau,0:Ltau))
-
-    !Local Green's functions:
-    allocate(locGgtr(0:nstep,0:nstep),locGless(0:nstep,0:nstep))
-    allocate(locGgmix(0:Ltau,0:nstep),locGlmix(0:nstep,0:Ltau))
-    allocate(locGmat(0:Ltau,0:Ltau))
 
     !Momentum-distribution:
     allocate(nk(0:nstep,Lk))

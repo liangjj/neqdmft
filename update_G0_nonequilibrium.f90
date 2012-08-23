@@ -1,10 +1,10 @@
   !=======Component by component inversion==========================
   if(TT)then
      forall(i=0:nstep,j=0:nstep)
-        locGret(i,j)= heaviside(t(i)-t(j))*(locGgtr(i,j) - locGless(i,j))
-        Sret(i,j)   = heaviside(t(i)-t(j))*(Sgtr(i,j) - Sless(i,j))
+        locGret(i,j)= heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
+        Sret(i,j)   = heaviside(t(i)-t(j))*(S%gtr(i,j) - S%less(i,j))
      end forall
-     !forall(i=0:nstep)locGret(i,i)=-xi!locGless(i,i)
+     !forall(i=0:nstep)locGret(i,i)=-xi!locG%less(i,i)
 
      locGadv=conjg(transpose(locGret))
      Sadv=conjg(transpose(Sret))
@@ -15,18 +15,20 @@
      GammaRet(0:nstep,0:nstep) = GammaRet(0:nstep,0:nstep)*dt**2
      call mat_inversion(GammaRet(0:nstep,0:nstep))
      G0ret(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),locGret(0:nstep,0:nstep))*dt
-     forall(i=0:nstep)G0ret(i,i)=-xi
+
+     forall(i=0:nstep)G0ret(i,i)=-xi !??????
+
      G0adv=conjg(transpose(G0ret))
 
-     !G0less = GammaR^-1 * Gless * GammaA^-1  -  gR * Sless * gA
-     G0less(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),matmul(locGless(0:nstep,0:nstep),&
+     !G0%less = GammaR^-1 * Gless * GammaA^-1  -  gR * S%less * gA
+     G0%less(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),matmul(locG%less(0:nstep,0:nstep),&
           conjg(transpose(GammaRet(0:nstep,0:nstep))))*dt)*dt -&
-          matmul(G0ret(0:nstep,0:nstep),matmul(Sless(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
+          matmul(G0ret(0:nstep,0:nstep),matmul(S%less(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
 
-     !G0gtr  = GammaR^-1 * Ggtr * GammaA^-1   -  gR * Sgtr * gA
-     G0gtr(0:nstep,0:nstep)  = matmul(GammaRet(0:nstep,0:nstep),matmul(locGgtr(0:nstep,0:nstep),&
+     !G0%gtr  = GammaR^-1 * Ggtr * GammaA^-1   -  gR * S%gtr * gA
+     G0%gtr(0:nstep,0:nstep)  = matmul(GammaRet(0:nstep,0:nstep),matmul(locG%gtr(0:nstep,0:nstep),&
           conjg(transpose(GammaRet(0:nstep,0:nstep))))*dt)*dt  -&
-          matmul(G0ret(0:nstep,0:nstep),matmul(Sgtr(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
+          matmul(G0ret(0:nstep,0:nstep),matmul(S%gtr(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
   endif
 
 
@@ -36,16 +38,16 @@
   if(FF)then
      !1) build time/antitime-ordered GF: G^t && G^at; S^t && S^at
      forall(i=0:nstep,j=0:nstep,i>=j)
-        locGtt(i,j) = locGgtr(i,j)
-        locGat(i,j) = locGless(i,j)
-        Stt(i,j) = Sgtr(i,j)
-        Sat(i,j) = Sless(i,j)
+        locGtt(i,j) = locG%gtr(i,j)
+        locGat(i,j) = locG%less(i,j)
+        Stt(i,j) = S%gtr(i,j)
+        Sat(i,j) = S%less(i,j)
      end forall
      forall(i=0:nstep,j=0:nstep,i<j)
-        locGtt(i,j) = locGless(i,j)
-        locGat(i,j) = locGgtr(i,j)
-        Stt(i,j) = Sless(i,j)
-        Sat(i,j) = Sgtr(i,j)
+        locGtt(i,j) = locG%less(i,j)
+        locGat(i,j) = locG%gtr(i,j)
+        Stt(i,j) = S%less(i,j)
+        Sat(i,j) = S%gtr(i,j)
      end forall
      !call plot_3D("dGtt3D","X","Y","Z",t(0:nstep),t(0:nstep),locGtt(0:nstep,0:nstep))
      !call plot_3D("dStt3D","X","Y","Z",t(0:nstep),t(0:nstep),Stt(0:nstep,0:nstep))
@@ -56,13 +58,13 @@
      allocate(G0mat(1:2*NN,1:2*NN),GammaMat(1:2*NN,1:2*NN),UnoMat(1:2*NN,1:2*NN))
      forall(i=1:NN,j=1:NN)
         locGmat(i,j)       = locGtt(i-1,j-1)   !++
-        locGmat(i,NN+j)    = locGgtr(i-1,j-1)  !+-
-        locGmat(NN+i,j)    =-locGless(i-1,j-1) !-+
+        locGmat(i,NN+j)    = locG%gtr(i-1,j-1)  !+-
+        locGmat(NN+i,j)    =-locG%less(i-1,j-1) !-+
         locGmat(NN+i,NN+j) =-locGat(i-1,j-1)   !--
         !
         Smat(i,j)       = Stt(i-1,j-1)   !++
-        Smat(i,NN+j)    = Sgtr(i-1,j-1)  !+-
-        Smat(NN+i,j)    =-Sless(i-1,j-1) !-+
+        Smat(i,NN+j)    = S%gtr(i-1,j-1)  !+-
+        Smat(NN+i,j)    =-S%less(i-1,j-1) !-+
         Smat(NN+i,NN+j) =-Sat(i-1,j-1)   !--
      end forall
 
@@ -76,12 +78,12 @@
 
      !4) Extract the bigger&&lesser components
      forall(i=1:NN,j=1:NN)
-        G0gtr(i-1,j-1)  = G0mat(i,j+NN)
-        G0less(i-1,j-1) =-G0mat(NN+i,j)
+        G0%gtr(i-1,j-1)  = G0mat(i,j+NN)
+        G0%less(i-1,j-1) =-G0mat(NN+i,j)
      end forall
 
      forall(i=0:nstep,j=0:nstep)
-        G0ret(i,j)=heaviside(t(i-j))*(G0gtr(i,j) - G0less(i,j))
+        G0ret(i,j)=heaviside(t(i-j))*(G0%gtr(i,j) - G0%less(i,j))
         gf0%ret%t(i-j)=G0ret(i,j)
      end forall
      call fftgf_rt2rw(gf0%ret%t,gf0%ret%w,nstep) ; gf0%ret%w=gf0%ret%w*dt ; call swap_fftrt2rw(gf0%ret%w)

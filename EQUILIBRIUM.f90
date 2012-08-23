@@ -127,7 +127,7 @@ contains
     real(8)    :: funcT(0:L) 
     if(mpiID==0)then
        !Get Sret(w) = FFT(Sret(t-t'))
-       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sgtr(i,j)-Sless(i,j))
+       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(S%gtr(i,j)-S%less(i,j))
        sf%ret%t=exa*sf%ret%t ; call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=dt*sf%ret%w
 
        !Get locGret(w)
@@ -148,9 +148,9 @@ contains
 
 
        forall(i=0:nstep,j=0:nstep)
-          locGless(i,j) = gf%less%t(i-j)
-          locGgtr(i,j)  = gf%gtr%t(i-j)
-          gf%ret%t(i-j) = heaviside(t(i-j))*(locGgtr(i,j)-locGless(i,j))
+          locG%less(i,j) = gf%less%t(i-j)
+          locG%gtr(i,j)  = gf%gtr%t(i-j)
+          gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
        end forall
 
        call get_matsubara_gf_from_dos(wr,sf%ret%w,sigma,beta)
@@ -165,8 +165,8 @@ contains
           nk(:,ik)=n
        enddo
     endif
-    call MPI_BCAST(locGless,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(locGgtr,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locG%less,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locG%gtr,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
     call splot('nkVSepsk.ipt',epsik,nk(nstep/2,:),append=TT)
     call splot('locSM_iw.ipt',wm,sigma,append=TT)
@@ -188,8 +188,8 @@ contains
     real(8) :: R,deg
     real(8) :: w,A,An
     forall(i=0:nstep,j=0:nstep)
-       gf%ret%t(i-j) = heaviside(t(i-j))*(locGgtr(i,j)-locGless(i,j))
-       sf%ret%t(i-j) = heaviside(t(i-j))*(Sgtr(i,j)-Sless(i,j))
+       gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
+       sf%ret%t(i-j) = heaviside(t(i-j))*(S%gtr(i,j)-S%less(i,j))
     end forall
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
     if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0
@@ -207,8 +207,8 @@ contains
     call fftgf_rw2rt(gf0%gtr%w, gf0%gtr%t,nstep)  ; gf0%gtr%t =exa*fmesh/pi2*gf0%gtr%t
     call fftgf_rw2rt(gf0%ret%w, gf0%ret%t,nstep)  ; gf0%ret%t =exa*fmesh/pi2*gf0%ret%t
     forall(i=0:nstep,j=0:nstep)
-       G0less(i,j)= gf0%less%t(i-j)
-       G0gtr(i,j) = gf0%gtr%t(i-j)
+       G0%less(i,j)= gf0%less%t(i-j)
+       G0%gtr(i,j) = gf0%gtr%t(i-j)
     end forall
     ! call splot("updateG0ret_t.ipt",t,gf0%ret%t,append=TT)
     ! call splot("G0less3D",t(0:nstep)/dt,t(0:nstep)/dt,G0less(0:nstep,0:nstep))

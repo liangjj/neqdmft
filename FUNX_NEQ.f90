@@ -10,11 +10,7 @@ module FUNX_NEQ
   USE EQUILIBRIUM
   implicit none
   private
-  !
-  !integer                          :: irdL,irdLM
-  !real(8)                          :: irdfmesh
-  !real(8),allocatable,dimension(:) :: irdwr,irdwm
-  !
+
   public                           :: neq_update_weiss_field
   public                           :: print_observables
   public                           :: convergence_check
@@ -35,13 +31,10 @@ contains
     complex(8),dimension(0:nstep,0:nstep) :: G0kel,locGkel,Skel
     complex(8),dimension(0:nstep,0:nstep) :: locGtt,locGat,Stt,Sat
     complex(8),dimension(:,:),allocatable :: locGmat,Smat,G0mat,GammaMat,UnoMat
-    complex(8),dimension(:,:),allocatable,save :: G0less_old,G0gtr_old
+    type(kbm_contour_gf),save             :: G0_old
 
-
-    if(.not.allocated(G0less_old))allocate(G0less_old(0:nstep,0:nstep))
-    if(.not.allocated(G0gtr_old))allocate(G0gtr_old(0:nstep,0:nstep))
-    G0less_old=G0less
-    G0gtr_old =G0gtr
+    if(G0_old%status.EQV..false.)call allocate_kbm_contour_gf(G0_old,Nstep,Ltau)
+    G0_old=G0
 
     call msg("Update WF: Dyson")
     if(update_wfftw)then
@@ -49,14 +42,15 @@ contains
     else
        include "update_G0_nonequilibrium.f90"
     endif
-    G0less = weight*G0less + (1.d0-weight)*G0less_old
-    G0gtr = weight*G0gtr + (1.d0-weight)*G0gtr_old
+
+    G0%less = weight*G0%less + (1.d0-weight)*G0_old%less
+    G0%gtr  = weight*G0%gtr + (1.d0-weight)*G0_old%gtr
+    G0%lmix = weight*G0%lmix + (1.d0-weight)*G0_old%lmix
+    G0%gmix = weight*G0%gmix + (1.d0-weight)*G0_old%gmix
+    G0%mats = weight*G0%mats + (1.d0-weight)*G0_old%mats
 
     !Save data:
-    if(mpiID==0)then
-       call splot("G0less.data",G0less(0:nstep,0:nstep))
-       call splot("G0gtr.data",G0gtr(0:nstep,0:nstep))
-    endif
+    if(mpiID==0)call write_kbm_contour_gf(G0,"G0")
   end subroutine neq_update_weiss_field
 
 
@@ -79,7 +73,7 @@ contains
     type(vect2D),dimension(0:nstep)  :: Jloc                   !local Current 
     real(8),dimension(0:nstep)       :: nt,modJloc             !occupation(time)
     if(mpiID==0)then
-       forall(i=0:nstep)nt(i)=-xi*locGless(i,i)
+       forall(i=0:nstep)nt(i)=-xi*locG%less(i,i)
        Jloc=Vzero    
        do ik=1,Lk
           ix=ik2ix(ik);iy=ik2iy(ik)
@@ -119,7 +113,7 @@ contains
 
     if(mpiID==0)then
        if(solve_wfftw)then
-          forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
+          forall(i=0:nstep)test_func(i)=-xi*locG%less(i,i)
        elseif(Efield/=0.d0)then
           Jloc=Vzero
           do ik=1,Lk
@@ -132,7 +126,7 @@ contains
           enddo
           test_func(0:nstep)=modulo(Jloc(0:nstep))
        else
-          forall(i=0:nstep)test_func(i)=-xi*locGless(i,i)
+          forall(i=0:nstep)test_func(i)=-xi*locG%less(i,i)
        endif
        converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop,id=0)
     endif
