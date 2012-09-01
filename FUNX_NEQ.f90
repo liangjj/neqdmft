@@ -50,7 +50,10 @@ contains
     G0%mats = weight*G0%mats + (1.d0-weight)*G0_old%mats
 
     !Save data:
-    if(mpiID==0)call write_kbm_contour_gf(G0,"G0")
+    if(mpiID==0)then
+       call write_kbm_contour_gf(G0,reg_filename(data_dir)//"/G0")
+       if(plot3D)call plot_kbm_contour_gf(G0,t(0:),tau(0:),"PLOT/G0")
+    end if
   end subroutine neq_update_weiss_field
 
 

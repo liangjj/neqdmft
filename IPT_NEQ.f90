@@ -31,7 +31,7 @@ contains
     real(8),dimension(-Ltau:Ltau)       :: tmpGtau
     real(8),allocatable,dimension(:)    :: eq_G0tau
 
-    call system("if [ ! -d GUESS ]; then mkdir GUESS; fi")
+    call create_data_dir("InitialConditions")
 
     inquire(file=trim(irdG0wfile),exist=checkG0w)
     if(.not.checkG0w)inquire(file=trim(irdG0wfile)//".gz",exist=checkG0w)
@@ -70,11 +70,11 @@ contains
        !call read_nkfile(trim(irdnkfile))
 
        if(mpiID==0)then
-          call splot("GUESS/eq_G0_iw.ipt",wm_,eq_G0iw)
-          call splot("GUESS/eq_G0_tau.ipt",tau,-eq_G0tau(Ltau:0:-1))
-          call splot("GUESS/eq_Sigma_iw.ipt",wm_,eq_Siw)
-          call splot("GUESS/eq_Sigma_tau.ipt",tau,-eq_Stau(Ltau:0:-1))
-          call splot("GUESS/eq_nkVSepsk.ipt",epsik,eq_nk)
+          call splot("InitialConditions/ic_G0_iw.ipt",wm_,eq_G0iw)
+          call splot("InitialConditions/ic_G0_tau.ipt",tau,-eq_G0tau(Ltau:0:-1))
+          call splot("InitialConditions/ic_Sigma_iw.ipt",wm_,eq_Siw)
+          call splot("InitialConditions/ic_Sigma_tau.ipt",tau,-eq_Stau(Ltau:0:-1))
+          call splot("InitialConditions/ic_nkVSepsk.ipt",epsik,eq_nk)
        endif
 
        !Continue interacting solution to the KBM-Contour:
@@ -99,7 +99,7 @@ contains
              enddo
           enddo
        enddo
-       forall(j=0:Ltau)G0%gmix(j,:)=-conjg(G0%lmix(:,Ltau-j))
+       forall(j=0:Ltau)G0%gmix(j,:)=conjg(G0%lmix(:,Ltau-j))
 
        tmpGtau(0:Ltau)= eq_G0tau(0:Ltau) !xi*G0lmix(0,0:Ltau)
        forall(i=1:Ltau)tmpGtau(-i)=-tmpGtau(Ltau-i)
@@ -108,10 +108,8 @@ contains
        deallocate(wr_,wm_)
 
        if(mpiID==0)then
-          call write_kbm_contour_gf(G0,"guessG0")
-          call splot("GUESS/guessG0less_t_t",t(0:),t(0:),G0%less(0:,0:))
-          call splot("GUESS/guessG0lmix_t_tau",t(0:),tau(0:),G0%lmix(0:,0:))
-          call splot("GUESS/guessG0mat_tau_tau",tau(0:),tau(0:),G0%mats(0:,0:))
+          call write_kbm_contour_gf(G0,reg_filename(data_dir)//"/guessG0")
+          if(plot3D)call plot_kbm_contour_gf(G0,t(0:),tau(0:),"PLOT/guessG0")
        endif
        call neq_solve_ipt()
 
@@ -130,7 +128,7 @@ contains
        ! do ik=1,Lk
        !    eq_nk(ik)=fermi0((epsik(ik)-xmu_),beta_)
        ! enddo
-       ! if(mpiID==0)call splot("GUESS/eq_nkVSepsk.ipt",epsik,eq_nk)
+       ! if(mpiID==0)call splot("InitialConditions/eq_nkVSepsk.ipt",epsik,eq_nk)
 
        ! !Get guess for Sigma from non-interacting solution (Hartree-Fock approx.):
        ! !Equilibrium functions:
@@ -229,7 +227,6 @@ contains
 
     !Get SIgma:
     call msg("Get Sigma(t,t')")
-    call system("if [ ! -d SIGMA ]; then mkdir SIGMA; fi")
 
     forall(i=0:nstep,j=0:nstep)
        S%gtr (i,j) = -(U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)
@@ -237,16 +234,14 @@ contains
     end forall
 
     forall(i=0:nstep,itau=0:Ltau)S%lmix(i,itau) = -(U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i)
-    forall(j=0:Ltau)S%gmix(j,:)=-conjg(S%lmix(:,Ltau-j))
+    forall(j=0:Ltau)S%gmix(j,:)=conjg(S%lmix(:,Ltau-j))
 
     forall(i=0:Ltau,j=0:Ltau)S%mats(i,j)=eq_Stau(j-i) 
 
     !Save data:
     if(mpiID==0)then
-       call write_kbm_contour_gf(S,"Sigma")
-       call splot("SIGMA/Sless_t_t",t(0:),t(0:),S%less(0:,0:))
-       call splot("SIGMA/Slmix_t_tau",t(0:),tau(0:),S%lmix(0:,0:))
-       call splot("SIGMA/Smat_tau_tau",tau(0:),tau(0:),S%mats(0:,0:))
+       call write_kbm_contour_gf(S,reg_filename(data_dir)//"/Sigma")
+       if(plot3D)call plot_kbm_contour_gf(S,t(0:),tau(0:),"PLOT/Sigma")
     endif
   end subroutine Neq_solve_ipt
 

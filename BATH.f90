@@ -26,7 +26,7 @@ contains
     real(8)          :: ngtr,nless,arg
 
     call msg("Get Bath. Type: "//bold_green(trim(adjustl(trim(bath_type))))//" dissipative bath",id=0)
-    if(mpiID==0)call system("if [ ! -d BATH ]; then mkdir BATH; fi")
+    call create_data_dir("Bath")
     allocate(bath_dens(Lw),wfreq(Lw))
 
     select case(trim(adjustl(trim(bath_type))))
@@ -50,7 +50,7 @@ contains
 
     end select
 
-    if(mpiID==0)call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
+    if(mpiID==0)call splot("Bath/DOSbath.lattice",wfreq,bath_dens)
 
     S0less=zero ; S0gtr=zero
     S0lmix=zero; S0gmix=zero
@@ -70,12 +70,11 @@ contains
           enddo
        enddo
     enddo
-    forall(i=0:Ltau)S0gmix(i,:)=-conjg(S0lmix(:,Ltau-i))
+    forall(i=0:Ltau)S0gmix(i,:)=conjg(S0lmix(:,Ltau-i))
     if(mpiID==0)then
-       call splot("BATH/S0less_t.ipt",t,S0less)
-       call splot("BATH/S0gtr_t.ipt",t,S0gtr)
-       call splot("S0lmix_t_tau.ipt",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))
-       call system("mv -vf *S0*t_tau.ipt BATH/")
+       call splot("Bath/S0less_t.ipt",t,S0less)
+       call splot("Bath/S0gtr_t.ipt",t,S0gtr)
+       if(plot3D)call splot("Bath/S0lmix_t_tau",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))
     endif
   end subroutine get_thermostat_bath
 

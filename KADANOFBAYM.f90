@@ -18,8 +18,6 @@ module KADANOFBAYM
   real(8),allocatable,dimension(:,:)      :: icGktau
   !k-dependent GF:
   type(kbm_contour_gf)                    :: Gk
-  type(kbm_contour_gf)                    :: tmpG
-  real(8),allocatable,dimension(:)        :: Gktau
   !Vector for KB propagation solution
   complex(8),allocatable,dimension(:)     :: Ikless,Ikgtr
   complex(8),allocatable,dimension(:)     :: Ikless0,Ikgtr0
@@ -27,6 +25,8 @@ module KADANOFBAYM
   real(8)                                 :: Ikdiag
   !Auxiliary operators:
   complex(8),allocatable,dimension(:,:)   :: Udelta,Vdelta
+  !
+  !G1,G2 for update with Volterra 2nd order eqs:
   !
   public                                  :: neq_get_localgf
 
@@ -61,9 +61,10 @@ contains
   !fermion system" Computer Physics Communications,123(1999),123-142
   !+-------------------------------------------------------------------+
   subroutine kadanoff_baym_localgf()
-    integer      :: istep,i,j,ik
-    integer,save :: loop=1
-    real(8)      :: tmpnk(0:nstep,Lk)!,tmpGmat(-Ltau:Ltau)
+    integer              :: istep,i,j,ik
+    integer,save         :: loop=1
+    real(8),allocatable  :: tmpnk(:,:)
+    type(kbm_contour_gf) :: tmpG,tmpG1,tmpG2
 
     !First loop ever, build the Initial Condition
     if(loop==1)then
@@ -76,17 +77,22 @@ contains
     call msg("Entering Kadanoff-Baym")
 
     !Set to Zero loc GF:
-    locG=zero
+    locG=zero ; locG1=zero ; locG2=zero
 
-    !Tmp array for MPI storage
+    !Tmp array for MPI storage, set to zero
     call allocate_kbm_contour_gf(tmpG,Nstep,Ltau)
-    tmpG=zero
+    call allocate_kbm_contour_gf(tmpG1,Nstep,Ltau)
+    call allocate_kbm_contour_gf(tmpG2,Nstep,Ltau)
+    tmpG=zero ; tmpG1=zero ; tmpG2=zero
+    
+    !set to zero n(k,t)
+    allocate(tmpnk(0:nstep,Lk))
     tmpnk=0.d0 ; nk=0.d0
+
 
     !=============START K-POINTS LOOP======================
     call start_timer
     call allocate_kbm_contour_gf(Gk,Nstep,Ltau)
-    allocate(Gktau(-Ltau:Ltau))
     do ik=1+mpiID,Lk,mpiSIZE
        Gk=zero
 
@@ -99,37 +105,61 @@ contains
           call GFstep(2,ik,istep) !2nd-pass
        enddo
 
-       tmpG%less(0:nstep,0:nstep) =tmpG%less(0:nstep,0:nstep) + Gk%less(0:nstep,0:nstep)*wt(ik)
-       tmpG%gtr(0:nstep,0:nstep)  =tmpG%gtr(0:nstep,0:nstep)  + Gk%gtr(0:nstep,0:nstep)*wt(ik)
-       tmpG%lmix(0:nstep,0:Ltau)  =tmpG%lmix(0:nstep,0:Ltau)  + Gk%lmix(0:nstep,0:Ltau)*wt(ik)      
+       !sum over k-point
+       call kbm_contour_gf_sum(tmpG,Gk,wt(ik))
+
+       !get G1=sum_k h(k,t)G(t,t')
+       do i=0,nstep
+          tmpG1%less(i,0:) = tmpG1%less(i,0:) + Hkt(ik,i)*Gk%less(i,0:)*wt(ik)
+          tmpG1%gtr(i,0:)  = tmpG1%gtr(i,0:)  + Hkt(ik,i)*Gk%gtr(i,0:)*wt(ik)
+          tmpG1%lmix(i,0:) = tmpG1%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*wt(ik)
+       end do
+       tmpG1%gmix(0:,0:) = tmpG1%gmix(0:,0:) + Hkt(ik,0)*Gk%gmix(0:,0:)*wt(ik)
+       tmpG1%mats(0:,0:) = tmpG1%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*wt(ik)
+
+       !get G2=sum_k h(k,t)G(t,t')h(k,t')
+       do i=0,nstep
+          do j=0,nstep
+             tmpG2%less(i,j) = tmpG2%less(i,j) + Hkt(ik,i)*Gk%less(i,j)*Hkt(ik,j)*wt(ik)
+             tmpG2%gtr(i,j)  = tmpG2%gtr(i,j)  + Hkt(ik,i)*Gk%gtr(i,j)*Hkt(ik,j)*wt(ik)
+          enddo
+          tmpG2%lmix(i,0:) = tmpG2%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*Hkt(ik,0)*wt(ik)
+          tmpG2%gmix(0:,i) = tmpG2%gmix(0:,i) + Hkt(ik,0)*Gk%gmix(0:,i)*Hkt(ik,i)*wt(ik)
+       enddo
+       tmpG2%mats(0:,0:) = tmpG2%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*Hkt(ik,0)*wt(ik)
+
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gk%less(istep,istep)
        call eta(ik,Lk,unit=6)
     enddo
     call stop_timer
     call deallocate_kbm_contour_gf(Gk)
-    deallocate(Gktau)
     call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
     !=============END K-POINTS LOOP======================
 
 
-    call MPI_REDUCE(tmpG%less(0:,0:),locG%less(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpG%gtr(0:,0:),locG%gtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpG%lmix(0:,0:),locG%lmix(0:,0:),(nstep+1)*(Ltau+1),MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
-
+    !Reduce Contour GF to master:
+    call MPI_REDUCE_kbm_contour_gf(tmpG,locG)
+    call MPI_REDUCE_kbm_contour_gf(tmpG1,locG1)
+    call MPI_REDUCE_kbm_contour_gf(tmpG2,locG2)
     call deallocate_kbm_contour_gf(tmpG)
-    !Gloc^>(t',t)= - Gloc^>(t,t')^T
-    if(mpiID==0)then
-       forall(i=0:nstep,j=0:nstep,i>j)locG%less(i,j)=-conjg(locG%less(j,i))
-       forall(i=0:nstep,j=0:nstep,i<j)locG%gtr(i,j) =-conjg(locG%gtr(j,i))
-       forall(i=0:Ltau)locG%gmix(i,:)=-conjg(locG%lmix(:,Ltau-i))
-    endif
-    call MPI_BCAST(locG%less(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(locG%gtr(0:,0:),(nstep+1)*(nstep+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(locG%lmix(0:,0:),(nstep+1)*(Ltau+1),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call deallocate_kbm_contour_gf(tmpG1)
+    call deallocate_kbm_contour_gf(tmpG2)
+
+    ! !Gloc^>(t',t)= - Gloc^>(t,t')^T
+    ! if(mpiID==0)then
+    !    ! forall(i=0:nstep,j=0:nstep,i>j)locG%less(i,j)=-conjg(locG%less(j,i))
+    !    ! forall(i=0:nstep,j=0:nstep,i<j)locG%gtr(i,j) =-conjg(locG%gtr(j,i))
+    !    ! forall(i=0:Ltau)locG%gmix(i,:)=-conjg(locG%lmix(:,Ltau-i))
+    ! endif
+
+    !Bcast the local contour GF to every node
+    call MPI_BCAST_kbm_contour_gf(locG)
+    call MPI_BCAST_kbm_contour_gf(locG1)
+    call MPI_BCAST_kbm_contour_gf(locG2)
 
     call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
+    deallocate(tmpnk)
 
     call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
   end subroutine kadanoff_baym_localgf
@@ -149,12 +179,16 @@ contains
     call msg("Allocating KB memory:")
     !Initial conditions for the KBE solution:
     allocate(icGkless(Lk),icGktau(Lk,-Ltau:Ltau))        
+
     !Predictor-corrector solver arrays: store the time-step
     allocate(Ikless(0:nstep),Ikgtr(0:nstep))
     allocate(Ikless0(0:nstep),Ikgtr0(0:nstep))
     allocate(Iklmix(0:Ltau),Iklmix0(0:Ltau))
+
     !Aux. operators
     allocate(Udelta(Lk,0:nstep),Vdelta(Lk,0:nstep))
+
+    !Chi
     if(fchi)allocate(chi_dia(2,2,0:nstep),chi_pm(2,2,0:nstep,0:nstep))
   end subroutine allocate_funx
 
@@ -175,7 +209,8 @@ contains
     integer :: i,j,itau
     integer :: it
 
-    if(ips == 1)then
+    select case(ips)
+    case(1)
        !First Pass: get collision integrals up to t=T=istep
        Ikless0 = zero
        Ikgtr0  = zero
@@ -187,14 +222,15 @@ contains
        Iklmix0  = iklmix
        Ikdiag   = real(Ikgtr(istep))-real(Ikless(istep))
 
-    elseif(ips==2)then
+    case(2)
        !Second Pass: get collision integrals up to t=T+\Delta=istep+1
        call get_Ikcollision(istep+1)
        Ikless   = (Ikless  + Ikless0)/2.d0
        Ikgtr    = (Ikgtr   + Ikgtr0)/2.d0
        Iklmix   = (Iklmix  + Iklmix0)/2.d0
        Ikdiag   = (real(Ikgtr(istep+1))-real(Ikless(istep+1)) + Ikdiag)/2.d0
-    endif
+
+    end select
 
     !Evolve the solution of KB equations for all the k-points:
     forall(it=0:istep)
@@ -206,12 +242,12 @@ contains
     Gk%gtr(istep+1,istep+1) = Gk%less(istep+1,istep+1)-xi
 
     forall(itau=0:Ltau)Gk%lmix(istep+1,itau)=Gk%lmix(istep,itau)*Udelta(ik,istep)-Iklmix(itau)*Vdelta(ik,istep)
-    forall(itau=0:Ltau)Gk%gmix(itau,istep+1)=-conjg(Gk%lmix(istep+1,Ltau-itau))
+    forall(itau=0:Ltau)Gk%gmix(itau,istep+1)=conjg(Gk%lmix(istep+1,Ltau-itau))
 
     !$OMP PARALLEL PRIVATE(i,j)
     !$OMP DO
-    do i=0,istep+1!nstep
-       do j=0,istep+1!nstep
+    do i=0,istep+1
+       do j=0,istep+1
           if(i>j)Gk%less(i,j)=-conjg(Gk%less(j,i))
           if(i<j)Gk%gtr(i,j)=-conjg(Gk%gtr(j,i)) 
        enddo
@@ -219,7 +255,6 @@ contains
     !$OMP END DO
     !$OMP END PARALLEL
 
-    return
   end subroutine GFstep
 
 
@@ -318,7 +353,8 @@ contains
        I1=sum(Vret(0:Nt)*Gk%lmix(0:Nt,itau))*dt
        Ib=zero
        do i=0,Ltau
-          Ib = Ib+Vlmix(i)*Gktau(i-itau)*dtau
+          Ib = Ib+Vlmix(i)*Gk%mats(i,itau)*dtau
+          ! Ib = Ib+Vlmix(i)*Gktau(i-itau)*dtau
        enddo
        Iklmix(itau)=I1+Ib
     enddo
@@ -378,25 +414,23 @@ contains
   !+-------------------------------------------------------------------+
   subroutine build_ic
     integer    :: ik,i,j
-    complex(8) :: funcM(L),ftmp(L)
-    real(8)    :: n,funcT(0:Ltau),gmtau(-Ltau:Ltau)
-
+    complex(8) :: funcM(L)
+    real(8)    :: n,funcT(0:Ltau)
     call msg("Building initial conditions:")
     call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
-    icGkless = xi*eq_Nk
-    icGktau  = 0.d0
-    gmtau    = 0.d0
+    icGkless = xi*eq_Nk ; icGktau  = 0.d0
     do ik=1,Lk
        funcM=one/(xi*wm - epsik(ik) - eq_Siw)
        call fftgf_iw2tau(funcM,funcT,beta)
-       n=-funcT(Ltau) !; nk(:,ik)=n
+       n=-funcT(Ltau)
        icGktau(ik,0:Ltau)=funcT(0:Ltau)
        forall(i=1:Ltau)icGktau(ik,-i)=-funcT(Ltau-i)
-       call splot("InitialConditions/icGktau.ipt",tau(0:),icGktau(ik,0:),append=TT)
-       gmtau = gmtau + icGktau(ik,:)*wt(ik)
     enddo
+    !Print:
     call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),dimag(icGkless(1:Lk)))
-    forall(i=0:Ltau,j=0:Ltau)locG%mats(i,j)=gmtau(j-i)
+    do ik=1,Lk
+       call splot("InitialConditions/icGktau.ipt",tau(0:),icGktau(ik,0:),append=TT)
+    enddo
   end subroutine build_ic
 
 
@@ -409,18 +443,19 @@ contains
 
 
   subroutine read_ic(ik)
-    integer :: ik,i
+    integer :: ik,i,j
     Gk%less(0,0) = icGkless(ik)
     Gk%gtr(0,0)  = icGkless(ik)-xi
     forall(i=0:Ltau)
        Gk%lmix(0,i)=-xi*icGktau(ik,Ltau-i)
        Gk%gmix(i,0)= xi*icGktau(ik,i)
     end forall
-    Gktau(-Ltau:Ltau)=icGktau(ik,-Ltau:Ltau)
-    do i=-Ltau,Ltau
-       write(90,*)dble(i)*beta/dble(Ltau),Gktau(i)
-    enddo
-    write(90,*)""
+    !Gktau(-Ltau:Ltau)=icGktau(ik,-Ltau:Ltau)
+    forall(i=0:Ltau,j=0:Ltau)Gk%mats(i,j)=icGktau(ik,i-j)
+    ! do i=-Ltau,Ltau
+    !    write(90,*)dble(i)*beta/dble(Ltau),Gktau(i)
+    ! enddo
+    ! write(90,*)""
     return
   end subroutine read_ic
 
@@ -471,7 +506,17 @@ contains
     kt=kgrid(i,j) - Ak
     Hbar=square_lattice_dispersion(kt)
   end function Hbar
-
+  function Hkt(ik,istep)
+    integer,intent(in) :: ik,istep  
+    integer      :: i,j
+    complex(8)   :: Hkt
+    type(vect2D) :: kt,Ak
+    i=ik2ix(ik)
+    j=ik2iy(ik)
+    Ak=Afield(t(istep),Ek)
+    kt=kgrid(i,j) - Ak
+    Hkt=square_lattice_dispersion(kt)
+  end function Hkt
 
 
   !******************************************************************
@@ -615,9 +660,21 @@ contains
   subroutine print_out_Gloc()
     integer :: i,j
     if(mpiID==0)then
-       call system("if [ ! -d GLOC ]; then mkdir GLOC; fi")
-       call write_kbm_contour_gf(locG,"locG")
-       call splot("nk.data",nk(0:,:))
+
+       call write_kbm_contour_gf(locG,reg_filename(data_dir)//"/locG")
+       call write_kbm_contour_gf(locG1,reg_filename(data_dir)//"/locG1")
+       call write_kbm_contour_gf(locG2,reg_filename(data_dir)//"/locG2")
+       call splot(reg_filename(data_dir)//"/nk.data",nk(0:,:))
+
+       if(plot3D)then
+          call plot_kbm_contour_gf(locG,t(0:),tau(0:),"PLOT/locG")
+          call plot_kbm_contour_gf(locG1,t(0:),tau(0:),"PLOT/locG1")
+          call plot_kbm_contour_gf(locG2,t(0:),tau(0:),"PLOT/locG2")
+       end if
+       ! call splot("testGlesst0.ipt",t(0:),locGless(0:,0))
+       ! call splot("testGlmixtau0.ipt",t(0:),locGlmix(0:,0))
+       ! stop
+
 
        forall(i=0:nstep,j=0:nstep)
           gf%less%t(i-j) = locG%less(i,j)
@@ -631,19 +688,20 @@ contains
        call splot("locGret_t.ipt",t,gf%ret%t,append=TT)
        call splot("locGret_realw.ipt",wr,gf%ret%w,append=TT)
        call splot("locDOS.ipt",wr,-aimag(gf%ret%w)/pi,append=TT)
-       if(fchi)then
-          call splot("locChi_11.data",chi(1,1,0:nstep,0:nstep))
-          call splot("locChi_12.data",chi(1,2,0:nstep,0:nstep))
-          call splot("locChi_21.data",chi(2,1,0:nstep,0:nstep))
-          call splot("locChi_22.data",chi(2,2,0:nstep,0:nstep))
-       endif
-       call splot("GLOC/locGless_t_t",t(0:),t(0:),locG%less(0:,0:))
-       call splot("GLOC/locGlmix_t_tau",t(0:),tau(0:),locG%lmix(0:,0:))
-       call splot("GLOC/locGmat_tau_tau",tau(0:),tau(0:),locG%mats(0:,0:))
 
-       ! call splot("testGlesst0.ipt",t(0:),locGless(0:,0))
-       ! call splot("testGlmixtau0.ipt",t(0:),locGlmix(0:,0))
-       ! stop
+       if(fchi)then
+          call splot(reg_filename(data_dir)//"/locChi_11.data",chi(1,1,0:,0:))
+          call splot(reg_filename(data_dir)//"/locChi_12.data",chi(1,2,0:,0:))
+          call splot(reg_filename(data_dir)//"/locChi_21.data",chi(2,1,0:,0:))
+          call splot(reg_filename(data_dir)//"/locChi_22.data",chi(2,2,0:,0:))
+          if(plot3D)then
+             call splot("PLOT/locChi_11",t(0:),t(0:),chi(1,1,0:,0:))
+             call splot("PLOT/locChi_12",t(0:),t(0:),chi(1,2,0:,0:))
+             call splot("PLOT/locChi_21",t(0:),t(0:),chi(2,1,0:,0:))
+             call splot("PLOT/locChi_22",t(0:),t(0:),chi(2,2,0:,0:))
+          endif
+       endif
+
     endif
   end subroutine print_out_Gloc
 

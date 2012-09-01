@@ -30,8 +30,8 @@ contains
     complex(8) :: zeta
     real(8)    :: n,z,wmax_
     if(mpiID==0)then
-       call system("if [ ! -d EQUILIBRIUM ]; then mkdir EQUILIBRIUM; fi")
        call msg("Solving Equilibrium problem:")
+       call create_data_dir("Equilibrium")
        !
        allocate(fg_(L))
        allocate(sigma_(L))
@@ -64,13 +64,13 @@ contains
           sigma_= weight*sigma_ + (1.d0-weight)*sold
           sold  = sigma_
           converged=check_convergence(sigma_,eps_error,nsuccess,nloop)
-          call splot("EQUILIBRIUM/nVSiloop.ipt",loop,n,append=TT)
+          call splot("Equilibrium/nVSiloop.ipt",loop,n,append=TT)
        enddo
-       call close_file("EQUILIBRIUM/nVSiloop.ipt")
-       call splot("EQUILIBRIUM/DOS.ipt",wr_,-aimag(fg_)/pi)
-       call splot("EQUILIBRIUM/G_realw.ipt",wr_,fg_)
-       call splot("EQUILIBRIUM/G0_realw.ipt",wr_,fg0_)
-       call splot("EQUILIBRIUM/Sigma_realw.ipt",wr_,sigma_)
+       call close_file("Equilibrium/nVSiloop.ipt")
+       call splot("Equilibrium/DOS.ipt",wr_,-aimag(fg_)/pi)
+       call splot("Equilibrium/G_realw.ipt",wr_,fg_)
+       call splot("Equilibrium/G0_realw.ipt",wr_,fg0_)
+       call splot("Equilibrium/Sigma_realw.ipt",wr_,sigma_)
 
 
        sm_%iw=zero ; sold=sm_%iw
@@ -89,14 +89,14 @@ contains
           sm_%iw = weight*sm_%iw + (1.d0-weight)*sold ; sold=sm_%iw
           converged=check_convergence(sm_%iw,eps_error,Nsuccess,Nloop)
           z=1.d0 - dimag(sm_%iw(1))/wm_(1);z=1.d0/z
-          call splot("EQUILIBRIUM/zetaVSiloop.ipt",iloop,z,append=TT)
-          call splot("EQUILIBRIUM/nmVSiloop.ipt",loop,n,append=TT)
+          call splot("Equilibrium/zetaVSiloop.ipt",iloop,z,append=TT)
+          call splot("Equilibrium/nmVSiloop.ipt",loop,n,append=TT)
        enddo
-       call close_file("EQUILIBRIUM/nmVSiloop.ipt")
-       call close_file("EQUILIBRIUM/zetaVSiloop.ipt")
-       call splot("EQUILIBRIUM/G_iw.ipt",wm_,fm_%iw)
-       call splot("EQUILIBRIUM/G0_iw.ipt",wm_,f0m_%iw)
-       call splot("EQUILIBRIUM/Sigma_iw.ipt",wm_,sm_%iw)
+       call close_file("Equilibrium/nmVSiloop.ipt")
+       call close_file("Equilibrium/zetaVSiloop.ipt")
+       call splot("Equilibrium/G_iw.ipt",wm_,fm_%iw)
+       call splot("Equilibrium/G0_iw.ipt",wm_,f0m_%iw)
+       call splot("Equilibrium/Sigma_iw.ipt",wm_,sm_%iw)
 
        !Save G0(w):
        call splot(trim(irdG0wfile),wr_,fg0_)   !interacting bath DOS     

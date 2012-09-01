@@ -53,9 +53,6 @@ MODULE VARS_GLOBAL
   logical           :: g0loc_guess
 
 
-
-
-
   !FREQS & TIME ARRAYS:
   !=========================================================  
   real(8),dimension(:),allocatable :: wr,t,wm,tau,taureal
@@ -98,22 +95,10 @@ MODULE VARS_GLOBAL
   !=========================================================  
   !WEISS-FIELDS
   type(kbm_contour_gf) :: G0
-  ! complex(8),allocatable,dimension(:,:) :: G0gtr,G0gmix
-  ! complex(8),allocatable,dimension(:,:) :: G0less,G0lmix
-  ! real(8),allocatable,dimension(:,:)    :: G0mat
   !SELF-ENERGY
   type(kbm_contour_gf) :: S
-  ! complex(8),allocatable,dimension(:,:) :: Sgtr,Sgmix
-  ! complex(8),allocatable,dimension(:,:) :: Sless,Slmix
-  ! real(8),allocatable,dimension(:,:)    :: Smat
   !LOCAL GF
-  type(kbm_contour_gf) :: locG
-  ! complex(8),allocatable,dimension(:,:) :: locGgtr,locGgmix
-  ! complex(8),allocatable,dimension(:,:) :: locGless,locGlmix
-  ! real(8),allocatable,dimension(:,:)    :: locGmat
-  ! !IMPURITY
-  ! complex(8),allocatable,dimension(:,:) :: impGgtr,impGless
-  ! complex(8),allocatable,dimension(:,:) :: impGgmix,impGlmix
+  type(kbm_contour_gf) :: locG,locG1,locG2
 
   !Bath SELF-ENERGY
   complex(8),allocatable,dimension(:)   :: S0gtr,S0less
@@ -129,12 +114,14 @@ MODULE VARS_GLOBAL
   real(8),allocatable,dimension(:,:,:)   :: chi_dia
 
 
+  character(len=32) :: data_dir
+
   !NAMELISTS:
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
-       method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
+       method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
        solve_eq,g0loc_guess,&
        irdNkfile,irdG0wfile,irdG0iwfile,&
        iquench,beta0,xmu0,U0
@@ -200,6 +187,7 @@ contains
          ' solve_wfftw =[F] -- ',&
          ' plotVF=[F]       -- ',&
          ' plot3D=[F]       -- ',&
+         ' data_dir=[DATAneq]       -- ',&
          ' fchi=[F]         -- ',&
          ' equench=[F]      -- ',&
          ' L=[1024]         -- ',&
@@ -252,6 +240,7 @@ contains
     solve_eq      = .true.
     g0loc_guess   = .false.
     iquench       = .false.
+    data_dir      = "DATAneq"
 
     L          = 1024
     Ltau       = 32
@@ -292,6 +281,9 @@ contains
     write(*,*)""
     if(lprint)call dump_input_file("used.")
 
+    call create_data_dir(reg_filename(data_dir))
+    if(plot3D)call create_data_dir("PLOT")
+
     return
   contains
     subroutine dump_input_file(prefix)
@@ -318,19 +310,12 @@ contains
     call msg("Allocating the memory")
     !Weiss-fields:
     call allocate_kbm_contour_gf(G0,Nstep,Ltau)
-    ! allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
-    ! allocate(G0gmix(0:Ltau,0:nstep),G0lmix(0:nstep,0:Ltau))
-    ! allocate(G0mat(0:Ltau,0:Ltau))
     !Interaction self-energies:
     call allocate_kbm_contour_gf(S,Nstep,Ltau)
-    ! allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
-    ! allocate(Sgmix(0:Ltau,0:nstep),Slmix(0:nstep,0:Ltau))
-    ! allocate(Smat(0:Ltau,0:Ltau))
     !Local Green's functions:
     call allocate_kbm_contour_gf(locG,Nstep,Ltau)
-    ! allocate(locGgtr(0:nstep,0:nstep),locGless(0:nstep,0:nstep))
-    ! allocate(locGgmix(0:Ltau,0:nstep),locGlmix(0:nstep,0:Ltau))
-    ! allocate(locGmat(0:Ltau,0:Ltau))
+    call allocate_kbm_contour_gf(locG1,Nstep,Ltau)
+    call allocate_kbm_contour_gf(locG2,Nstep,Ltau)
 
     !Bath self-energies:
     allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))

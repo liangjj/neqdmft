@@ -25,7 +25,7 @@ program neqDMFT
   call read_input_init("inputFILE.in",printf=.true.)
   include "grid_setup.f90"
   include "build_square_lattice.f90"
-
+  
   !SET THE ELECTRIC FIELD:use constant field by default
   Ek = set_efield_vector(Ex,Ey)
   if(mpiID==0)call print_Afield_form(t(0:nstep))
