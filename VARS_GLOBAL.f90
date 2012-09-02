@@ -311,7 +311,7 @@ contains
     !Weiss-fields:
     call allocate_kbm_contour_gf(G0,Nstep,Ltau)
     !Interaction self-energies:
-    call allocate_kbm_contour_gf(S,Nstep,Ltau)
+    call allocate_kbm_contour_gf(Sigma,Nstep,Ltau)
     !Local Green's functions:
     call allocate_kbm_contour_gf(locG,Nstep,Ltau)
     call allocate_kbm_contour_gf(locG1,Nstep,Ltau)

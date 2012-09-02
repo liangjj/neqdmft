@@ -123,7 +123,7 @@ contains
     integer    :: i,j,ik
     complex(8) :: A,zetan
     real(8)    :: w,n
-    complex(8) :: funcM(L),sigma(L)
+    complex(8) :: funcM(L),sigmaM(L)
     real(8)    :: funcT(0:L) 
     if(mpiID==0)then
        !Get Sret(w) = FFT(Sret(t-t'))
@@ -153,11 +153,12 @@ contains
           gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
        end forall
 
-       call get_matsubara_gf_from_dos(wr,sf%ret%w,sigma,beta)
+       !This is just to get n(k)
+       call get_matsubara_gf_from_dos(wr,sf%ret%w,sigmaM,beta)
        do ik=1,Lk
           funcM=zero
           do i=1,L
-             w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigma(i)
+             w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigmaM(i)
              funcM(i)=one/(zetan - epsik(ik))
           enddo
           call fftgf_iw2tau(funcM,funcT,beta)
@@ -169,7 +170,7 @@ contains
     call MPI_BCAST(locG%gtr,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
     call splot('nkVSepsk.ipt',epsik,nk(nstep/2,:),append=TT)
-    call splot('locSM_iw.ipt',wm,sigma,append=TT)
+    call splot('locSM_iw.ipt',wm,sigmaM,append=TT)
     call splot("eqG_w.ipt",wr,gf%ret%w,append=TT)
     call splot("eqSigma_w.ipt",wr,sf%ret%w,append=TT)
     return

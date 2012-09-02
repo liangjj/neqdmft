@@ -1,5 +1,5 @@
   !=======Component by component inversion==========================
-  if(TT)then
+  if(FF)then
      forall(i=0:nstep,j=0:nstep)
         locGret(i,j)= heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
         Sret(i,j)   = heaviside(t(i)-t(j))*(Sigma%gtr(i,j) - Sigma%less(i,j))
@@ -15,9 +15,9 @@
      GammaRet(0:nstep,0:nstep) = GammaRet(0:nstep,0:nstep)*dt**2
      call mat_inversion(GammaRet(0:nstep,0:nstep))
      G0ret(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),locGret(0:nstep,0:nstep))*dt
-
-     forall(i=0:nstep)G0ret(i,i)=-xi !??????
-
+     !### COMMENTING THIS LINE THE RESULTS ARE IDENTICAL WITH THE TWO METHODS OF UPDATE ###
+     !forall(i=0:nstep)G0ret(i,i)=-xi !???
+     !#####################################################################################
      G0adv=conjg(transpose(G0ret))
 
      !G0%less = GammaR^-1 * Gless * GammaA^-1  -  gR * Sigma%less * gA
@@ -33,61 +33,31 @@
 
 
 
+  !Matrix update, from testKELDYSHMATGF3
+  if(TT)then
+     !Build Gloc matrix
+     allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
+     mat_locG = build_keldysh_matrix_gf(locG,nstep)
 
-  !=======Inversion of the Keldysh-Schwinger Matrix==========================
-  if(FF)then
-     !1) build time/antitime-ordered GF: G^t && G^at; S^t && S^at
-     forall(i=0:nstep,j=0:nstep,i>=j)
-        locGtt(i,j) = locG%gtr(i,j)
-        locGat(i,j) = locG%less(i,j)
-        Stt(i,j) = Sigma%gtr(i,j)
-        Sat(i,j) = Sigma%less(i,j)
-     end forall
-     forall(i=0:nstep,j=0:nstep,i<j)
-        locGtt(i,j) = locG%less(i,j)
-        locGat(i,j) = locG%gtr(i,j)
-        Stt(i,j) = Sigma%less(i,j)
-        Sat(i,j) = Sigma%gtr(i,j)
-     end forall
-     !call plot_3D("dGtt3D","X","Y","Z",t(0:nstep),t(0:nstep),locGtt(0:nstep,0:nstep))
-     !call plot_3D("dStt3D","X","Y","Z",t(0:nstep),t(0:nstep),Stt(0:nstep,0:nstep))
+     !Build Sigma matrix
+     allocate(mat_Sigma(0:2*nstep+1,0:2*nstep+1))
+     mat_Sigma = build_keldysh_matrix_gf(Sig,nstep)
 
-     !2) Build the KS matrices: \FF = {{FF^t , FF^>}, {-FF^<, -FF^at}}
-     NN=nstep+1                  !Size of the KS matrices
-     allocate(locGmat(1:2*NN,1:2*NN),Smat(1:2*NN,1:2*NN))
-     allocate(G0mat(1:2*NN,1:2*NN),GammaMat(1:2*NN,1:2*NN),UnoMat(1:2*NN,1:2*NN))
-     forall(i=1:NN,j=1:NN)
-        locGmat(i,j)       = locGtt(i-1,j-1)   !++
-        locGmat(i,NN+j)    = locG%gtr(i-1,j-1)  !+-
-        locGmat(NN+i,j)    =-locG%less(i-1,j-1) !-+
-        locGmat(NN+i,NN+j) =-locGat(i-1,j-1)   !--
-        !
-        Smat(i,j)       = Stt(i-1,j-1)   !++
-        Smat(i,NN+j)    = Sigma%gtr(i-1,j-1)  !+-
-        Smat(NN+i,j)    =-Sigma%less(i-1,j-1) !-+
-        Smat(NN+i,NN+j) =-Sat(i-1,j-1)   !--
-     end forall
+     !Allocate space for other matrices:
+     allocate(mat_Delta(0:2*nstep+1,0:2*nstep+1))
+     allocate(mat_Gamma(0:2*nstep+1,0:2*nstep+1))
+     allocate(mat_G0(0:2*nstep+1,0:2*nstep+1))
 
-     !3)Begin inversion of Dyson equation: 
-     !G = g + g*S*G ; G = g*[I + S*G] \== g*\G ==> g = G * {\G}^-1
-     UnoMat=zero   ; forall(i=1:2*NN)UnoMat(i,i)=One/dt !Form the delta function
-     GammaMat = UnoMat+matmul(Smat,locGmat)*dt          !Form \G operator
-     GammaMat = GammaMat*dt**2                          !Prepare for the inversion     
-     call mat_inversion_GJ(GammaMat)                       !Inversion
-     G0mat    = matmul(locGmat,GammaMat)*dt             !Update G0 operators:
+     mat_Delta=zero ; forall(i=0:2*nstep+1)mat_Delta(i,i)=One/dt
+     mat_Gamma = mat_Delta + matmul(mat_Sigma,mat_locG)*dt
+     mat_Gamma = mat_Gamma*dt**2
+     call mat_inversion(mat_Gamma)
+     mat_G0  = matmul(mat_locG,mat_Gamma)*dt
 
-     !4) Extract the bigger&&lesser components
-     forall(i=1:NN,j=1:NN)
-        G0%gtr(i-1,j-1)  = G0mat(i,j+NN)
-        G0%less(i-1,j-1) =-G0mat(NN+i,j)
-     end forall
+     G0%less = -mat_G0(0:Nstep,Nstep+1:2*Nstep+1)
+     G0%gtr  =  mat_G0(Nstep+1:2*Nstep+1,0:Nstep)
 
-     forall(i=0:nstep,j=0:nstep)
-        G0ret(i,j)=heaviside(t(i-j))*(G0%gtr(i,j) - G0%less(i,j))
-        gf0%ret%t(i-j)=G0ret(i,j)
-     end forall
-     call fftgf_rt2rw(gf0%ret%t,gf0%ret%w,nstep) ; gf0%ret%w=gf0%ret%w*dt ; call swap_fftrt2rw(gf0%ret%w)
-
-     deallocate(locGmat,Smat,G0mat,GammaMat,UnoMat)
+     deallocate(mat_locG,mat_Sigma,mat_G0,mat_Delta,mat_Gamma)
   endif
+
 

@@ -240,8 +240,8 @@ contains
 
     !Save data:
     if(mpiID==0)then
-       call write_kbm_contour_gf(S,reg_filename(data_dir)//"/Sigma")
-       if(plot3D)call plot_kbm_contour_gf(S,t(0:),tau(0:),"PLOT/Sigma")
+       call write_kbm_contour_gf(Sigma,reg_filename(data_dir)//"/Sigma")
+       if(plot3D)call plot_kbm_contour_gf(Sigma,t(0:),tau(0:),"PLOT/Sigma")
     endif
   end subroutine Neq_solve_ipt
 
