@@ -42,10 +42,11 @@ MODULE VARS_GLOBAL
   character(len=16) :: bath_type     !choose the shape of the BATH
   character(len=16) :: field_profile !choose the profile of the electric field
   real(8)           :: Wbath         !Width of the BATH DOS
-  real(8)           :: eps_error
-  integer           :: Nsuccess
+  real(8)           :: eps_error     !convergence error threshold
+  integer           :: Nsuccess      !number of convergence success
   real(8)           :: weight        !mixing weight parameter
   real(8)           :: wmin,wmax     !
+  real(8)           :: tmin,tmax
   character(len=32) :: irdG0wfile,irdG0iwfile,irdnkfile !the bath GF file
   logical           :: plotVF,plot3D,fchi
   integer           :: size_cutoff
@@ -55,8 +56,15 @@ MODULE VARS_GLOBAL
 
   !FREQS & TIME ARRAYS:
   !=========================================================  
-  real(8),dimension(:),allocatable :: wr,t,wm,tau,taureal
-  real(8)                          :: dtaureal
+  real(8),dimension(:),allocatable    :: wr,t,wm,tau,taureal
+  real(8)                             :: dtaureal
+
+  !KADANOFF-BAYM-MATSUBARA CONTOUR:
+  !=========================================================  
+  integer                               :: t1min,t1max,t2min,t2max,t3min,t3max
+  real(8),allocatable,dimension(:)      :: tloc
+  complex(8),allocatable,dimension(:)   :: dtloc
+
 
   !LATTICE (weight & dispersion) ARRAYS:
   !=========================================================  
@@ -74,8 +82,13 @@ MODULE VARS_GLOBAL
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
-  type(keldysh_equilibrium_gf)        :: gf0,gf,sf
+
+  !Frequency domain:
+  type(keldysh_equilibrium_gf)        :: gf0
+  type(keldysh_equilibrium_gf)        :: gf
+  type(keldysh_equilibrium_gf)        :: sf
   real(8),dimension(:),allocatable    :: exa
+
 
 
   !INITIAL CONDITIONS: BATH DOS, N(\e(k)), Matsubara Self-energy
@@ -87,9 +100,6 @@ MODULE VARS_GLOBAL
   real(8),allocatable,dimension(:)     :: eq_G0tau
   complex(8),allocatable,dimension(:)  :: eq_Siw
   real(8),allocatable,dimension(:)     :: eq_Stau
-
-
-
 
   !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
@@ -271,7 +281,7 @@ contains
        print*,"Can not find INPUT file"
        print*,"Dumping a default version in default."//trim(inputFILE)
        call dump_input_file("default.")
-       call abort("Can not find INPUT file, dumping a default version in default."//trim(inputFILE))
+       call error("Can not find INPUT file, dumping a default version in default."//trim(inputFILE))
     endif
     include "nml_read_cml.f90"
 
@@ -309,10 +319,10 @@ contains
     real(8)          :: ex
     call msg("Allocating the memory")
     !Weiss-fields:
-    call allocate_kbm_contour_gf(G0,Nstep,Ltau)
     !Interaction self-energies:
-    call allocate_kbm_contour_gf(Sigma,Nstep,Ltau)
     !Local Green's functions:
+    call allocate_kbm_contour_gf(G0,Nstep,Ltau)
+    call allocate_kbm_contour_gf(Sigma,Nstep,Ltau)
     call allocate_kbm_contour_gf(locG,Nstep,Ltau)
     call allocate_kbm_contour_gf(locG1,Nstep,Ltau)
     call allocate_kbm_contour_gf(locG2,Nstep,Ltau)
@@ -341,13 +351,75 @@ contains
     enddo
   end subroutine global_memory_allocation
 
-
-
-
   !******************************************************************
   !******************************************************************
   !******************************************************************
 
+
+  function build_keldysh_matrix_gf(G,N) result(matG)
+    type(keldysh_contour_gf)              :: G
+    complex(8),dimension(0:2*N+1,0:2*N+1) :: matG
+    integer                               :: i,j,N
+    forall(i=0:N,j=0:N)
+       matG(i,j)         = step(t(i)-t(j))*G%gtr(i,j) + step(t(j)-t(i))*G%less(i,j)
+       matG(i,N+1+j)     =-G%less(i,j)
+       matG(N+1+i,j)     = G%gtr(i,j)
+       matG(N+1+i,N+1+j) =-(step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
+    end forall
+  end function build_keldysh_matrix_gf
+
+  function mproduct_kbm_matrix_gf(A,B) result(C)
+    complex(8),dimension(0:2*Nstep+Ltau+2,0:2*Nstep+Ltau+2),intent(in)  :: A,B
+    complex(8),dimension(0:2*Nstep+Ltau+2,0:2*Nstep+Ltau+2)             :: C
+    integer :: i,j,k
+    C=zero
+    do i=0,2*Nstep+Ltau+2
+       do j=0,2*Nstep+Ltau+2
+          do k=0,2*Nstep+Ltau+2
+             C(i,j)=C(i,j) + conjg(A(i,k))*B(k,j)*dtloc(k)
+          enddo
+       enddo
+    enddo
+  end function mproduct_kbm_matrix_gf
+
+  subroutine scatter_kbm_matrix_gf(matG,N,L,G)
+    integer              :: i,N,L
+    complex(8)           :: matG(0:2*N+L+2,0:2*N+L+2)
+    type(kbm_contour_gf) :: G
+    if(.not.G%status)call error("Error 1")
+    if(G%N/=N)call error("Error 2: N")
+    if(G%L/=L)call error("Error 3: L")
+    G%less(0:N,0:N) =  matG(0:N,N+1:2*N+1) !matG12
+    G%gtr(0:N,0:N)  = -matG(N+1:2*N+1,0:N) !matG21
+    G%lmix(0:N,0:L) = -matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
+    forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,Ltau-i))
+    G%mats(0:L,0:L) = aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))+zero
+  end subroutine scatter_kbm_matrix_gf
+
+  function build_kbm_matrix_gf(G,N,L) result(matG)
+    type(kbm_contour_gf)  :: G
+    integer               :: i,j,N,L
+    complex(8),dimension(0:2*N+L+2,0:2*N+L+2) :: matG
+    forall(i=0:N,j=0:N)
+       matG(i,        j)   = step(t(i)-t(j))*G%gtr(i,j)  + step(t(j)-t(i))*G%less(i,j)
+       matG(i,    N+1+j)   =-G%less(i,j)
+       matG(N+1+i,    j)   = G%gtr(i,j)
+       matG(N+1+i,N+1+j)   =-(step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
+    end forall
+    forall(i=0:N,j=0:L)
+       matG(i    ,2*N+2+j) = G%lmix(i,j)
+       matG(N+1+i,2*N+2+j) = G%lmix(i,j)
+    end forall
+    forall(i=0:L,j=0:N)
+       matG(2*N+2+i,    j) = conjg(G%lmix(j,L-i)) !=G%gmix
+       matG(2*N+2+i,N+1+j) = -conjg(G%lmix(j,L-i)) !=G%gmix
+    end forall
+    forall(i=0:L,j=0:L)matG(2*N+2+i,2*N+2+j) = xi*G%mats(i,j)
+  end function build_kbm_matrix_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
 
 
   pure function fermi0(x,beta)

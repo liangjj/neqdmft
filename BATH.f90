@@ -74,8 +74,10 @@ contains
     if(mpiID==0)then
        call splot("Bath/S0less_t.ipt",t,S0less)
        call splot("Bath/S0gtr_t.ipt",t,S0gtr)
-       if(plot3D)call splot("Bath/S0lmix_t_tau",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))
+       call splot("Bath/S0lmix_t_tau",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))
+       call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
     endif
+
   end subroutine get_thermostat_bath
 
 
