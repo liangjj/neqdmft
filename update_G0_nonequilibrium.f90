@@ -2,7 +2,7 @@
   if(TT)then
      forall(i=0:nstep,j=0:nstep)
         locGret(i,j)= heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
-        Sret(i,j)   = heaviside(t(i)-t(j))*(S%gtr(i,j) - S%less(i,j))
+        Sret(i,j)   = heaviside(t(i)-t(j))*(Sigma%gtr(i,j) - Sigma%less(i,j))
      end forall
      !forall(i=0:nstep)locGret(i,i)=-xi!locG%less(i,i)
 
@@ -20,15 +20,15 @@
 
      G0adv=conjg(transpose(G0ret))
 
-     !G0%less = GammaR^-1 * Gless * GammaA^-1  -  gR * S%less * gA
+     !G0%less = GammaR^-1 * Gless * GammaA^-1  -  gR * Sigma%less * gA
      G0%less(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),matmul(locG%less(0:nstep,0:nstep),&
           conjg(transpose(GammaRet(0:nstep,0:nstep))))*dt)*dt -&
-          matmul(G0ret(0:nstep,0:nstep),matmul(S%less(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
+          matmul(G0ret(0:nstep,0:nstep),matmul(Sigma%less(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
 
-     !G0%gtr  = GammaR^-1 * Ggtr * GammaA^-1   -  gR * S%gtr * gA
+     !G0%gtr  = GammaR^-1 * Ggtr * GammaA^-1   -  gR * Sigma%gtr * gA
      G0%gtr(0:nstep,0:nstep)  = matmul(GammaRet(0:nstep,0:nstep),matmul(locG%gtr(0:nstep,0:nstep),&
           conjg(transpose(GammaRet(0:nstep,0:nstep))))*dt)*dt  -&
-          matmul(G0ret(0:nstep,0:nstep),matmul(S%gtr(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
+          matmul(G0ret(0:nstep,0:nstep),matmul(Sigma%gtr(0:nstep,0:nstep),G0adv(0:nstep,0:nstep))*dt)*dt
   endif
 
 
@@ -40,14 +40,14 @@
      forall(i=0:nstep,j=0:nstep,i>=j)
         locGtt(i,j) = locG%gtr(i,j)
         locGat(i,j) = locG%less(i,j)
-        Stt(i,j) = S%gtr(i,j)
-        Sat(i,j) = S%less(i,j)
+        Stt(i,j) = Sigma%gtr(i,j)
+        Sat(i,j) = Sigma%less(i,j)
      end forall
      forall(i=0:nstep,j=0:nstep,i<j)
         locGtt(i,j) = locG%less(i,j)
         locGat(i,j) = locG%gtr(i,j)
-        Stt(i,j) = S%less(i,j)
-        Sat(i,j) = S%gtr(i,j)
+        Stt(i,j) = Sigma%less(i,j)
+        Sat(i,j) = Sigma%gtr(i,j)
      end forall
      !call plot_3D("dGtt3D","X","Y","Z",t(0:nstep),t(0:nstep),locGtt(0:nstep,0:nstep))
      !call plot_3D("dStt3D","X","Y","Z",t(0:nstep),t(0:nstep),Stt(0:nstep,0:nstep))
@@ -63,8 +63,8 @@
         locGmat(NN+i,NN+j) =-locGat(i-1,j-1)   !--
         !
         Smat(i,j)       = Stt(i-1,j-1)   !++
-        Smat(i,NN+j)    = S%gtr(i-1,j-1)  !+-
-        Smat(NN+i,j)    =-S%less(i-1,j-1) !-+
+        Smat(i,NN+j)    = Sigma%gtr(i-1,j-1)  !+-
+        Smat(NN+i,j)    =-Sigma%less(i-1,j-1) !-+
         Smat(NN+i,NN+j) =-Sat(i-1,j-1)   !--
      end forall
 

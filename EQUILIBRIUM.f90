@@ -127,7 +127,7 @@ contains
     real(8)    :: funcT(0:L) 
     if(mpiID==0)then
        !Get Sret(w) = FFT(Sret(t-t'))
-       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(S%gtr(i,j)-S%less(i,j))
+       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
        sf%ret%t=exa*sf%ret%t ; call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=dt*sf%ret%w
 
        !Get locGret(w)
@@ -189,7 +189,7 @@ contains
     real(8) :: w,A,An
     forall(i=0:nstep,j=0:nstep)
        gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
-       sf%ret%t(i-j) = heaviside(t(i-j))*(S%gtr(i,j)-S%less(i,j))
+       sf%ret%t(i-j) = heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
     end forall
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
     if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0

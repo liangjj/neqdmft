@@ -145,13 +145,6 @@ contains
     call deallocate_kbm_contour_gf(tmpG1)
     call deallocate_kbm_contour_gf(tmpG2)
 
-    ! !Gloc^>(t',t)= - Gloc^>(t,t')^T
-    ! if(mpiID==0)then
-    !    ! forall(i=0:nstep,j=0:nstep,i>j)locG%less(i,j)=-conjg(locG%less(j,i))
-    !    ! forall(i=0:nstep,j=0:nstep,i<j)locG%gtr(i,j) =-conjg(locG%gtr(j,i))
-    !    ! forall(i=0:Ltau)locG%gmix(i,:)=-conjg(locG%lmix(:,Ltau-i))
-    ! endif
-
     !Bcast the local contour GF to every node
     call MPI_BCAST_kbm_contour_gf(locG)
     call MPI_BCAST_kbm_contour_gf(locG1)
@@ -292,8 +285,8 @@ contains
     !$OMP PARALLEL PRIVATE(i)
     !$OMP DO
     do i=0,Nt
-       Vless(i)= S%less(i,Nt)    + S0less(i-Nt)
-       Vgtr(i) = S%gtr(Nt,i)     + S0gtr(Nt-i)
+       Vless(i)= Sigma%less(i,Nt)    + S0less(i-Nt)
+       Vgtr(i) = Sigma%gtr(Nt,i)     + S0gtr(Nt-i)
        Vret(i) = SretF(Nt,i)    + S0retF(Nt-i)
        Vadv(i) = conjg(Vret(i)) 
     end do
@@ -303,8 +296,8 @@ contains
     !$OMP PARALLEL PRIVATE(i)
     !$OMP DO
     do i=0,Ltau
-       Vlmix(i)= S%lmix(Nt,i) + S0lmix(Nt,i)
-       Vgmix(i)= S%gmix(i,Nt) + S0gmix(i,Nt)
+       Vlmix(i)= Sigma%lmix(Nt,i) + S0lmix(Nt,i)
+       Vgmix(i)= Sigma%gmix(i,Nt) + S0gmix(i,Nt)
     end do
     !$OMP END DO
     !$OMP END PARALLEL
@@ -390,7 +383,7 @@ contains
   pure function SretF(i,j)      
     integer,intent(in) :: i,j
     complex(8)         :: SretF
-    SretF = heaviside(t(i-j))*(S%gtr(i,j)-S%less(i,j))
+    SretF = heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
   end function SretF
   !-------------------------------------------------------!
 

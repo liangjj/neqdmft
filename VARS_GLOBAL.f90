@@ -96,7 +96,7 @@ MODULE VARS_GLOBAL
   !WEISS-FIELDS
   type(kbm_contour_gf) :: G0
   !SELF-ENERGY
-  type(kbm_contour_gf) :: S
+  type(kbm_contour_gf) :: Sigma
   !LOCAL GF
   type(kbm_contour_gf) :: locG,locG1,locG2
 
