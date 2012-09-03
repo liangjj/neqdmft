@@ -18,6 +18,7 @@
   t1  = 1000000.d0              !infinite time SHIT!!
   tau0= 1.d0
   w0  = 20.d0
+  omega0=pi
   field_profile='constant'
 
   !     Flags:
@@ -45,7 +46,6 @@
   irdnkfile  = "eqnk.restart"
   irdSlfile  = "Sless.restart"
   irdSgfile  = "Sgtr.restart"
-  omp_num_threads =1      
 
   !     LatticeN
   Nx = 25

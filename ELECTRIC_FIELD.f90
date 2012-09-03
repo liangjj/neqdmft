@@ -59,6 +59,9 @@ contains
        zm=cmplx(t-t0,-tau**2*w0,8)/(sqrt(2.d0)*tau)
        field =-real(sqrt(pi/2.d0)/2.d0*tau*exp(-(tau*w0)**2/2.d0)*(zerf(zm)+zerf(zp)),8)
 
+    case("ac")
+       field=sin(Omega0*(t-t0))/Omega0
+
     case("ramp")                !!RAMP CONSTANT FIELD:
        field=-(24.d0*pi*(t+(t-t0)*step(t-t0)+2.d0*(t1-t)*step(t-t0)*step(t-t1)-&
             2.d0*(t0-t1)*step(t-t0)*step(t0-t1))+                              &

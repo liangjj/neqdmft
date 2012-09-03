@@ -20,6 +20,7 @@
      case("T1")		;read(nml_var%value,*)t1
      case("TAU0")	;read(nml_var%value,*)tau0
      case("W0")		;read(nml_var%value,*)w0
+     case("OMEGA0")	;read(nml_var%value,*)omega0
      case("FIELD_PROFILE");read(nml_var%value,*)field_profile
         !flags:
      case("IRDEQ")	        ;read(nml_var%value,*)irdeq
@@ -43,7 +44,6 @@
      case("IRDNKFILE")	;read(nml_var%value,*)irdNkfile
      case("IRDSLFILE")	;read(nml_var%value,*)irdSlfile
      case("IRDSGFILE")	;read(nml_var%value,*)irdSgfile
-     case("OMP_NUM_THREADS") ;read(nml_var%value,*)omp_num_threads
         !LatticeN:
      case("NX")		;read(nml_var%value,*)Nx
      case("NY")		;read(nml_var%value,*)Ny

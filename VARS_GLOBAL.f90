@@ -8,7 +8,7 @@ MODULE VARS_GLOBAL
   !SciFor library
   USE COMMON_VARS
   USE GREENFUNX
-  USE CHRONOBAR
+  USE TIMER
   USE VECTORS
   USE SQUARE_LATTICE
   USE IOTOOLS
@@ -72,7 +72,7 @@ MODULE VARS_GLOBAL
   real(8)         :: Ex,Ey         !Electric field vectors as input
   real(8)         :: t0,t1         !turn on/off time, t0 also center of the pulse
   real(8)         :: w0,tau0       !parameters for pulsed light
-
+  real(8)         :: omega0        !parameter for the Oscilatting field
 
   !EQUILIUBRIUM/WIGNER TRANSFORMED GREEN'S FUNCTION 
   !=========================================================
@@ -135,8 +135,8 @@ MODULE VARS_GLOBAL
   !NAMELISTS:
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
-       Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
-       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,omp_num_threads,&
+       Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,Nx,Ny,&
+       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
        iquench,beta0,xmu0,U0,irdG0file,irdnkfile,irdSlfile,irdSgfile,&
        solve_eq,g0loc_guess
@@ -192,6 +192,7 @@ contains
          ' t1=[10^6]                -- Switching off time parameter for the Electric field',&
          ' tau0=[1]                 -- Width of gaussian packect envelope for the impulsive Electric field',&
          ' w0=[20]                  -- Frequency of the of the impulsive Electric field',&
+         ' omega0=[pi]              -- Frequency of the of the Oscillating Electric field',&        
          ' field_profile=[constant] -- Type of electric field profile (constant,gaussian,ramp)',&
          ' irdeq=[F]        -- ',&
          ' method=[ipt]     -- ',&
@@ -210,7 +211,6 @@ contains
          ' eps=[0.05d0]         -- ',&
          ' irdG0file=[eqG0w.restart]-- ',&
          ' irdnkfile =[eqnk.restart]-- ',&
-         ' omp_num_threads=[1]      -- ',&
          ' Nx=[50]      -- ',&
          ' Ny=[50]      -- ',&    
          ' iquench=[F]  -- ',&
@@ -239,9 +239,6 @@ contains
     write(*,*)"--------------------------------------------"
     write(*,*)""
     if(present(printf).AND.printf.eq..true.)call dump_input_file("used.")
-
-    !SET OMP THREADS NUMBER
-    call omp_set_num_threads(omp_num_threads)
 
     return
   contains
