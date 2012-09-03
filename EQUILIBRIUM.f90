@@ -7,17 +7,20 @@
 module EQUILIBRIUM
   USE VARS_GLOBAL
   USE IPT_SOPT
+  USE IPT_MATS
   implicit none
   private
 
   !Equilibrium Function
-  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_,fg0m_,sold
-  real(8),allocatable,dimension(:)    :: wr_,nk_
+  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_,sold
+  type(matsubara_gf)                 :: sm_,fm_,f0m_
+  real(8),allocatable,dimension(:)    :: wr_,nk_,wm_
+
 
   public :: solve_equilibrium_ipt
   public :: update_equilibrium_weiss_field
   public :: get_equilibrium_localgf
-  ! public :: get_equilibrium_impuritygf
+  !public :: get_equilibrium_impuritygf
 
 contains
 
@@ -25,19 +28,25 @@ contains
     integer    :: i,j,loop
     logical    :: converged
     complex(8) :: zeta
-    real(8)    :: n,wmax_    
+    real(8)    :: n,z,wmax_
     if(mpiID==0)then
-       call system("if [ ! -d EQUILIBRIUM ]; then mkdir EQUILIBRIUM; fi")
        call msg("Solving Equilibrium problem:")
+       call create_data_dir("Equilibrium")
        !
        allocate(fg_(L))
        allocate(sigma_(L))
-       allocate(fg0_(L),fg0m_(L))
+       allocate(fg0_(L))
        allocate(sold(L))
-       allocate(wr_(L),nk_(Lk))
+       !
+       call allocate_gf(fm_,L)
+       call allocate_gf(f0m_,L)
+       call allocate_gf(sm_,L)
+       !
+       allocate(wr_(L),nk_(Lk),wm_(L))
        !
        wmax_= min(20.d0,wmax)
        wr_ = linspace(-wmax_,wmax_,L)
+       wm_ = pi/beta*real(2*arange(1,L)-1,8)
        !
        sigma_=zero ; sold=sigma_
        loop=0 ; converged=.false.             
@@ -48,41 +57,56 @@ contains
              zeta  = cmplx(wr_(i),eps) - sigma_(i)
              fg_(i) = sum_overk_zeta(zeta,epsik,wt)
           enddo
-          n     = sum(aimag(fg_)*fermi(wr_,beta))/sum(aimag(fg_))
-          fg0_  = one/(one/fg_ + sigma_)
+          n      = sum(aimag(fg_)*fermi(wr_,beta))/sum(aimag(fg_))
+          fg0_   = one/(one/fg_ + sigma_)
           sigma_= solve_ipt_sopt(fg0_,wr_)
           sigma_= weight*sigma_ + (1.d0-weight)*sold
           sold  = sigma_
           converged=check_convergence(sigma_,eps_error,nsuccess,nloop)
-          call splot("EQUILIBRIUM/nVSiloop.ipt",loop,n,append=TT)
+          call splot("Equilibrium/nVSiloop.ipt",loop,n,append=TT)
        enddo
-       call close_file("EQUILIBRIUM/nVSiloop.ipt")
-       !
-       nk_ = square_lattice_momentum_distribution(Lk)
-       call get_matsubara_gf_from_DOS(wr_,fg0_,fg0m_,beta)
-       !
-       call splot("EQUILIBRIUM/DOS.ipt",wr_,-aimag(fg_)/pi)
-       call splot("EQUILIBRIUM/G_realw.ipt",wr_,fg_)
-       call splot("EQUILIBRIUM/G0_realw.ipt",wr_,fg0_)
-       call splot("EQUILIBRIUM/Sigma_realw.ipt",wr_,sigma_)
-       call splot("EQUILIBRIUM/nkVSepsk.ipt",epsik,nk_)
-       call splot("EQUILIBRIUM/G0_iw.ipt",wm,fg0m_)
+       call close_file("Equilibrium/nVSiloop.ipt")
+
+       call splot("Equilibrium/DOS.ipt",wr_,-aimag(fg_)/pi)
+       call splot("Equilibrium/G_realw.ipt",wr_,fg_)
+       call splot("Equilibrium/G0_realw.ipt",wr_,fg0_)
+       call splot("Equilibrium/Sigma_realw.ipt",wr_,sigma_)
 
 
-       !Prepare output to start neq-KB equations solution
-       call splot(trim(irdG0file),wr_,fg0_)
+       sm_%iw=zero ; sold=sm_%iw
+       loop=0 ; converged=.false.             
+       do while (.not.converged)
+          loop=loop+1
+          write(*,"(A,i5)",advance="no")"DMFT-loop",loop
+          do i=1,L
+             zeta    = xi*wm_(i) - sm_%iw(i)
+             fm_%iw(i) = sum_overk_zeta(zeta,epsik,wt)
+          enddo
+          call  fftgf_iw2tau(fm_%iw,fm_%tau,beta)
+          n     =-real(fm_%tau(L))
+          f0m_%iw= one/(one/fm_%iw + sm_%iw)
+          sm_%iw = solve_ipt_matsubara(f0m_%iw)
+          sm_%iw = weight*sm_%iw + (1.d0-weight)*sold ; sold=sm_%iw
+          converged=check_convergence(sm_%iw,eps_error,Nsuccess,Nloop)
+          z=1.d0 - dimag(sm_%iw(1))/wm_(1);z=1.d0/z
+          call splot("Equilibrium/zetaVSiloop.ipt",iloop,z,append=TT)
+          call splot("Equilibrium/nmVSiloop.ipt",loop,n,append=TT)
+       enddo
+       call close_file("Equilibrium/nmVSiloop.ipt")
+       call close_file("Equilibrium/zetaVSiloop.ipt")
+       call splot("Equilibrium/G_iw.ipt",wm_,fm_%iw)
+       call splot("Equilibrium/G0_iw.ipt",wm_,f0m_%iw)
+       call splot("Equilibrium/Sigma_iw.ipt",wm_,sm_%iw)
+
+       !Save G0(w):
+       call splot(trim(irdG0wfile),wr_,fg0_)   !interacting bath DOS     
+       call splot(trim(irdG0iwfile),wm_,f0m_%iw)
+
        call splot(trim(irdnkfile),epsik,nk_)
-       ! call linear_spline(fg0_,wr_,gf0%ret%w,wr)
-       ! gf0%less%w = less_component_w(gf0%ret%w,wr,beta)
-       ! gf0%gtr%w  = gtr_component_w(gf0%ret%w,wr,beta)
-       ! call fftgf_rw2rt(gf0%less%w,gf0%less%t,nstep) ; gf0%less%t=exa*fmesh/pi2*gf0%less%t
-       ! call fftgf_rw2rt(gf0%gtr%w, gf0%gtr%t,nstep)  ; gf0%gtr%t =exa*fmesh/pi2*gf0%gtr%t
-       ! forall(i=0:nstep,j=0:nstep)
-       !    Sless(i,j)=(U**2)*(gf0%less%t(i-j)**2)*gf0%gtr%t(j-i)
-       !    Sgtr(i,j) =(U**2)*(gf0%gtr%t(i-j)**2)*gf0%less%t(j-i)
-       ! end forall
-       ! call splot(trim(irdSlfile),Sless(0:nstep,0:nstep))
-       ! call splot(trim(irdSgfile),Sgtr(0:nstep,0:nstep))
+
+       nk_ = square_lattice_momentum_distribution(Lk)
+       call splot("Equilibrium/nkVSepsk.ipt",epsik,nk_)
+
 
     endif
 
@@ -93,15 +117,12 @@ contains
       integer            :: Lk
       integer            :: ik,i
       type(matsubara_gf) :: gm,sm
-      real(8)            :: nk(Lk),wm(M),w
-      call allocate_gf(gm,M)
-      call allocate_gf(sm,M)
-      wm   = pi/beta*real(2*arange(1,M)-1,8)
-      call get_matsubara_gf_from_DOS(wr_,sigma_,sm%iw,beta)
+      real(8)            :: nk(Lk)
+      call allocate_gf(gm,L)
       do ik=1,Lk
-         gm%iw=one/(xi*wm - epsik(ik) - sm%iw)
+         gm%iw=one/(xi*wm_ - epsik(ik) - sm%iw)
          call fftgf_iw2tau(gm%iw,gm%tau,beta)
-         nk(ik)=-gm%tau(M)
+         nk(ik)=-gm%tau(L)
       enddo
     end function square_lattice_momentum_distribution
   end subroutine solve_equilibrium_ipt
@@ -131,11 +152,11 @@ contains
     integer    :: i,j,ik
     complex(8) :: A,zetan
     real(8)    :: w,n
-    complex(8) :: funcM(L),sigma(L)
+    complex(8) :: funcM(L),sigmaM(L)
     real(8)    :: funcT(0:L) 
     if(mpiID==0)then
        !Get Sret(w) = FFT(Sret(t-t'))
-       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sig%gtr(i,j)-Sig%less(i,j))
+       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
        sf%ret%t=exa*sf%ret%t ; call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=dt*sf%ret%w
 
        !Get locGret(w)
@@ -161,11 +182,12 @@ contains
           gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
        end forall
 
-       call get_matsubara_gf_from_dos(wr,sf%ret%w,sigma,beta)
+       !This is just to get n(k)
+       call get_matsubara_gf_from_dos(wr,sf%ret%w,sigmaM,beta)
        do ik=1,Lk
           funcM=zero
           do i=1,L
-             w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigma(i)
+             w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigmaM(i)
              funcM(i)=one/(zetan - epsik(ik))
           enddo
           call fftgf_iw2tau(funcM,funcT,beta)
@@ -177,7 +199,7 @@ contains
     call MPI_BCAST(locG%gtr,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
     call splot('nkVSepsk.ipt',epsik,nk(nstep/2,:),append=TT)
-    call splot('locSM_iw.ipt',wm,sigma,append=TT)
+    call splot('locSM_iw.ipt',wm,sigmaM,append=TT)
     call splot("eqG_w.ipt",wr,gf%ret%w,append=TT)
     call splot("eqSigma_w.ipt",wr,sf%ret%w,append=TT)
     return
@@ -197,7 +219,7 @@ contains
     real(8) :: w,A,An
     forall(i=0:nstep,j=0:nstep)
        gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
-       sf%ret%t(i-j) = heaviside(t(i-j))*(Sig%gtr(i,j)-Sig%less(i,j))
+       sf%ret%t(i-j) = heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
     end forall
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
     if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0

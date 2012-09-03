@@ -9,7 +9,7 @@ module BATH
   USE VARS_GLOBAL
   implicit none
   private
-  integer,parameter                :: Lw=1024 !# of frequencies
+  integer,parameter                :: Lw=2048 !# of frequencies
   real(8),allocatable,dimension(:) :: bath_dens,wfreq
   public                           :: get_thermostat_bath
 
@@ -26,7 +26,7 @@ contains
     real(8)          :: ngtr,nless,arg
 
     call msg("Get Bath. Type: "//bold_green(trim(adjustl(trim(bath_type))))//" dissipative bath",id=0)
-    if(mpiID==0)call system("if [ ! -d BATH ]; then mkdir BATH; fi")
+    call create_data_dir("Bath")
     allocate(bath_dens(Lw),wfreq(Lw))
 
     select case(trim(adjustl(trim(bath_type))))
@@ -51,10 +51,11 @@ contains
     end select
 
 
+    S0=zero
     do iw=1,Lw
        en   = wfreq(iw)
        nless= fermi0(en,beta)
-       ngtr = fermi0(en,beta)-1.d0
+       ngtr = fermi0(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
        do i=0,nstep
           do j=0,nstep
              peso=exp(-xi*(t(i)-t(j))*en)
@@ -65,8 +66,8 @@ contains
     enddo
 
     if(mpiID==0)then
-       call splot("BATH/S0less_t.ipt",S0%less)
-       call splot("BATH/S0gtr_t.ipt",S0%gtr)
+       call write_keldysh_contour_gf(S0,"Bath/S0less_t.ipt")
+       if(plot3D)call plot_keldysh_contour_gf(S0,t(0:),"PLOT/S0")
        call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
     endif
 

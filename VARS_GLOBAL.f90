@@ -5,6 +5,8 @@
 !     AUTHORS  : Adriano Amaricci
 !#####################################################################
 MODULE VARS_GLOBAL
+  !Local:
+  USE CONTOUR_GF
   !SciFor library
   USE COMMON_VARS
   USE GREENFUNX
@@ -44,15 +46,16 @@ MODULE VARS_GLOBAL
   integer           :: Nsuccess      !number of convergence success
   real(8)           :: weight        !mixing weight parameter
   real(8)           :: wmin,wmax     !min/max frequency
-  logical           :: solve_eq      !Solve equilibrium Flag:
-  logical           :: g0loc_guess   !use non-interacting local GF as guess.
+  real(8)           :: tmin,tmax     !min/max time
   logical           :: plotVF,plot3D,fchi
   integer           :: size_cutoff
-
+  logical           :: solve_eq      !Solve equilibrium Flag:
+  logical           :: g0loc_guess   !use non-interacting local GF as guess.
+  !
 
   !FILES TO RESTART
   !=========================================================
-  character(len=32) :: irdG0file,irdNkfile,irdSlfile,irdSgfile
+  character(len=32) :: irdG0wfile,irdG0iwfile,irdNkfile,irdSfile
 
 
   !FREQS & TIME ARRAYS:
@@ -84,49 +87,37 @@ MODULE VARS_GLOBAL
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
-  !Equilibrium initial conditions: Bath DOS, n(\e(k))
-  real(8),allocatable,dimension(:)     :: irdNk,irdG0tau
-  complex(8),allocatable,dimension(:)  :: irdG0w,irdG0iw
 
   !Frequency domain:
   type(keldysh_equilibrium_gf)        :: gf0
   type(keldysh_equilibrium_gf)        :: gf
   type(keldysh_equilibrium_gf)        :: sf
+  real(8),dimension(:),allocatable    :: exa
 
 
-  !NON-EQUILIBRIUM GREEN'S FUNCTION: 4 = G^<,G^>
+  !INITIAL CONDITIONS: BATH DOS, N(\e(k)), Matsubara Self-energy
+  !=========================================================
+  real(8),allocatable,dimension(:)     :: eq_nk
+  complex(8),allocatable,dimension(:)  :: eq_G0w
+  !
+  complex(8),allocatable,dimension(:)  :: eq_G0iw
+  real(8),allocatable,dimension(:)     :: eq_G0tau
+  complex(8),allocatable,dimension(:)  :: eq_Siw
+  real(8),allocatable,dimension(:)     :: eq_Stau
+
+  !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
-  type keldysh_contour_gf
-     complex(8),dimension(:,:),pointer  :: less,gtr
-  end type keldysh_contour_gf
-
-  interface assignment(=)
-     module procedure keldysh_contour_gf_equality,keldysh_contour_gf_equality_
-  end interface assignment(=)
+  !WEISS-FIELDS
+  type(keldysh_contour_gf) :: G0
+  !SELF-ENERGY
+  type(keldysh_contour_gf) :: Sigma
+  !LOCAL GF
+  type(keldysh_contour_gf) :: locG,locG1,locG2
+  !Bath SELF-ENERGY
+  type(keldysh_contour_gf) :: S0
 
   !MOMENTUM-DISTRIBUTION
-  !=========================================================  
   real(8),allocatable,dimension(:,:)    :: nk
-
-  !NON-INTERACTING
-  !=========================================================  
-  type(keldysh_contour_gf) :: G0
-
-  !SELF-ENERGIES
-  !=========================================================  
-  !Sigma^V_k,mu(t,t`)
-  type(keldysh_contour_gf) :: S0
-  !Sigma^U(t,t`)
-  type(keldysh_contour_gf) :: Sig
-
-  !INTERACTING
-  !=========================================================  
-  type(keldysh_contour_gf) :: locG
-
-  !IMPURITY
-  !=========================================================  
-  type(keldysh_contour_gf) :: impG
-
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
   !=========================================================  
@@ -135,19 +126,18 @@ MODULE VARS_GLOBAL
   real(8),allocatable,dimension(:,:,:)   :: chi_dia
 
 
-
-  !Other:
-  real(8),dimension(:),allocatable    :: exa
-
+  character(len=32) :: data_dir
 
   !NAMELISTS:
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
        Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
-       method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,&
-       iquench,beta0,xmu0,U0,irdG0file,irdnkfile,irdSlfile,irdSgfile,&
-       solve_eq,g0loc_guess
+       method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
+       solve_eq,g0loc_guess,&
+       irdNkfile,irdG0wfile,irdSfile,&
+       iquench,beta0,xmu0,U0
+
 
 contains
 
@@ -160,8 +150,10 @@ contains
     character(len=*) :: inputFILE
     integer          :: i
     logical,optional :: printf
+    logical          :: lprint
     logical          :: control
 
+    lprint=.false. ; if(present(printf))lprint=printf
     call version(revision)
 
     allocate(help_buffer(60))
@@ -208,6 +200,7 @@ contains
          ' solve_wfftw =[F] -- ',&
          ' plotVF=[F]       -- ',&
          ' plot3D=[F]       -- ',&
+         ' data_dir=[DATAneq]       -- ',&
          ' fchi=[F]         -- ',&
          ' equench=[F]      -- ',&
          ' L=[1024]         -- ',&
@@ -217,8 +210,9 @@ contains
          ' wbath=[10.0]     -- ',&
          ' bath_type=[constant] -- ',&
          ' eps=[0.05d0]         -- ',&
-         ' irdG0file=[eqG0w.restart]-- ',&
+         ' irdG0wfile=[eqG0w.restart]-- ',&
          ' irdnkfile =[eqnk.restart]-- ',&
+         ' irdSfile=[Sigma.restart]-- ',&
          ' Nx=[50]      -- ',&
          ' Ny=[50]      -- ',&    
          ' iquench=[F]  -- ',&
@@ -228,7 +222,59 @@ contains
          '  '])
     call parse_cmd_help(help_buffer)
 
-    include "nml_default_values.f90"
+    !     Variables:
+    dt            = 0.157080
+    beta          = 100.0
+    U             = 6.0
+    Efield        = 0.0
+    Vpd           = 0.0
+    ts            = 1.0
+    nstep         = 50
+    nloop         = 30
+    eps_error     = 1.d-4
+    Nsuccess      = 2
+    weight        = 0.9d0
+    !     Efield:
+    Ex            = 1.d0
+    Ey            = 1.d0
+    t0            = 0.d0
+    t1            = 1000000.d0              !infinite time SHIT!!
+    tau0          = 1.d0
+    w0            = 20.d0
+    omega0        =pi
+    field_profile ='constant'
+    !     Flags:
+    method        = 'ipt'
+    irdeq         = .false.
+    update_wfftw  = .false.
+    solve_wfftw   = .false.
+    plotVF        = .false.
+    plot3D        = .true.
+    fchi          = .false.
+    equench       = .false.
+    solve_eq      = .false.
+    g0loc_guess   = .false.
+    iquench       = .false.
+    !     Parameters:
+    L             = 1024
+    Ltau          = 32
+    Lmu           = 2048
+    Lkreduced     = 200
+    wbath         = 10.0
+    bath_type     = "constant"
+    eps           = 0.05d0
+    irdG0wfile    = "eqG0w.restart"
+    irdnkfile     = "eqnk.restart"
+    irdSfile      = "Sigma.restart"
+    data_dir      = "DATAneq"
+    !     LatticeN
+    Nx            = 25
+    Ny            = 25    
+    !     Quench
+    beta0         = 100.0
+    U0            = 6.0
+    xmu0          = 0.0    
+
     inquire(file=adjustl(trim(inputFILE)),exist=control)
     if(control)then
        open(10,file=adjustl(trim(inputFILE)))
@@ -238,15 +284,19 @@ contains
        print*,"Can not find INPUT file"
        print*,"Dumping a default version in default."//trim(inputFILE)
        call dump_input_file("default.")
-       call abort("Can not find INPUT file, dumping a default version in default."//trim(inputFILE))
+       call error("Can not find INPUT file, dumping a default version in default."//trim(inputFILE))
     endif
+
     include "nml_read_cml.f90"
 
     write(*,*)"CONTROL PARAMETERS"
     write(*,nml=variables)
     write(*,*)"--------------------------------------------"
     write(*,*)""
-    if(present(printf).AND.printf.eq..true.)call dump_input_file("used.")
+    if(lprint)call dump_input_file("used.")
+
+    call create_data_dir(reg_filename(data_dir))
+    if(plot3D)call create_data_dir("PLOT")
 
     return
   contains
@@ -272,19 +322,31 @@ contains
     integer          :: i
     real(8)          :: ex
     call msg("Allocating the memory")
-    call allocate_keldysh_contour_gf(G0,nstep)
-    call allocate_keldysh_contour_gf(S0,nstep)
-    call allocate_keldysh_contour_gf(Sig,nstep)
+    !Weiss-fields:
+    !Interaction self-energies:
+    !Local Green's functions:
+    call allocate_keldysh_contour_gf(G0,nstep)    
+    call allocate_keldysh_contour_gf(Sigma,nstep)
     call allocate_keldysh_contour_gf(locG,nstep)
-    call allocate_keldysh_contour_gf(impG,nstep)
-    allocate(nk(0:nstep,Lk),irdnk(Lk))
+    call allocate_keldysh_contour_gf(locG1,nstep)
+    call allocate_keldysh_contour_gf(locG2,nstep)
+    !call allocate_keldysh_contour_gf(impG,nstep)
 
+    !Bath self-energies:
+    call allocate_keldysh_contour_gf(S0,nstep)
+
+    !Momentum-distribution:
+    allocate(nk(0:nstep,Lk))
+
+    !Equilibrium/Wigner rotated Green's function
     call allocate_gf(gf0,nstep)
     call allocate_gf(gf,nstep)
     call allocate_gf(sf,nstep)
 
+    !Susceptibility/Optical response
     if(fchi)allocate(chi(2,2,0:nstep,0:nstep))
 
+    !Other:
     allocate(exa(-nstep:nstep))
     ex=-1.d0       
     do i=-nstep,nstep
@@ -292,46 +354,6 @@ contains
        exa(i)=ex
     enddo
   end subroutine global_memory_allocation
-
-
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-  subroutine keldysh_contour_gf_equality(G1,G2)
-    type(keldysh_contour_gf),intent(inout) :: G1
-    type(keldysh_contour_gf),intent(in)    :: G2
-    G1%less = G2%less
-    G1%gtr = G2%gtr
-  end subroutine keldysh_contour_gf_equality
-
-  subroutine keldysh_contour_gf_equality_(G1,C)
-    type(keldysh_contour_gf),intent(inout) :: G1
-    complex(8),intent(in) :: C
-    G1%less = C
-    G1%gtr = C
-  end subroutine keldysh_contour_gf_equality_
-
-
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-
-  subroutine allocate_keldysh_contour_gf(G,N)
-    type(keldysh_contour_gf) :: G
-    integer                  :: i,j,N
-    nullify(G%less,G%gtr)
-    allocate(G%less(0:N,0:N),G%gtr(0:N,0:N))
-    G%less=zero
-    G%gtr =zero
-  end subroutine allocate_keldysh_contour_gf
-
-
 
   !******************************************************************
   !******************************************************************

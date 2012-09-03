@@ -45,7 +45,7 @@ contains
   pure function Afield(t,E)
     type(vect2D),intent(in) :: E
     real(8),intent(in)      :: t
-    real(8)                 :: field,tau
+    real(8)                 :: field,tau1
     type(vect2D)            :: Afield
     complex(8)              :: zp,zm
 
@@ -54,10 +54,11 @@ contains
        field=-(step(t-t0)*(t-t0 + (t1-t)*step(t-t1) - (t1-t0)*step(t0-t1)))
 
     case("pulse")               !!LIGHT PULSE (for Pump&Probe)
-       tau=tau0/pi2
-       zp=cmplx(t-t0,tau**2*w0,8)/(sqrt(2.d0)*tau)
-       zm=cmplx(t-t0,-tau**2*w0,8)/(sqrt(2.d0)*tau)
-       field =-real(sqrt(pi/2.d0)/2.d0*tau*exp(-(tau*w0)**2/2.d0)*(zerf(zm)+zerf(zp)),8)
+       tau1=tau0/pi2
+       zp=cmplx(t-t0,tau1**2*w0,8)/(sqrt(2.d0)*tau1)
+       zm=cmplx(t-t0,-tau1**2*w0,8)/(sqrt(2.d0)*tau1)
+       field =-real(sqrt(pi/2.d0)/2.d0*tau1*exp(-(tau1*w0)**2/2.d0)*(zerf(zm)+zerf(zp)),8)
+
 
     case("ac")
        field=sin(Omega0*(t-t0))/Omega0

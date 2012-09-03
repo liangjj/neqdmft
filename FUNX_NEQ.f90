@@ -10,11 +10,7 @@ module FUNX_NEQ
   USE EQUILIBRIUM
   implicit none
   private
-  !
-  !integer                          :: irdL,irdLM
-  !real(8)                          :: irdfmesh
-  !real(8),allocatable,dimension(:) :: irdwr,irdwm
-  !
+
   public                           :: neq_update_weiss_field
   public                           :: print_observables
   public                           :: convergence_check
@@ -38,13 +34,10 @@ contains
     complex(8),dimension(:,:),allocatable :: mat_Gamma
     complex(8),dimension(:,:),allocatable :: mat_G0,mat_Sigma,mat_locG
     !
-    complex(8),dimension(:,:),allocatable,save :: G0less_old,G0gtr_old
+    type(keldysh_contour_gf),save             :: G0_old
 
-
-    if(.not.allocated(G0less_old))allocate(G0less_old(0:nstep,0:nstep))
-    if(.not.allocated(G0gtr_old))allocate(G0gtr_old(0:nstep,0:nstep))
-    G0less_old=G0%less
-    G0gtr_old =G0%gtr
+    if(G0_old%status.EQV..false.)call allocate_keldysh_contour_gf(G0_old,Nstep)
+    G0_old=G0    
 
     call msg("Update WF: Dyson")
     if(update_wfftw)then
@@ -52,14 +45,14 @@ contains
     else
        include "update_G0_nonequilibrium.f90"
     endif
-    G0%less = weight*G0%less + (1.d0-weight)*G0less_old
-    G0%gtr = weight*G0%gtr + (1.d0-weight)*G0gtr_old
+    G0%less = weight*G0%less + (1.d0-weight)*G0_old%less
+    G0%gtr  = weight*G0%gtr  + (1.d0-weight)*G0_old%gtr
 
     !Save data:
     if(mpiID==0)then
-       call splot("G0less.data",G0%less(0:nstep,0:nstep))
-       call splot("G0gtr.data",G0%gtr(0:nstep,0:nstep))
-    endif
+       call write_keldysh_contour_gf(G0,reg_filename(data_dir)//"/G0")
+       if(plot3D)call plot_keldysh_contour_gf(G0,t(0:),"PLOT/G0")
+    end if
   end subroutine neq_update_weiss_field
 
 
