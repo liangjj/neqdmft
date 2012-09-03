@@ -6,15 +6,26 @@ MODULE CONTOUR_GF
   implicit none
   private
 
-  type keldysh_contour_gf
+  type :: keldysh_contour_gf
      complex(8),dimension(:,:),pointer  :: less,gtr
+     logical                            :: status
+     integer                            :: N
   end type keldysh_contour_gf
 
-  interface assignment(=)
-     module procedure keldysh_contour_gf_equality,keldysh_contour_gf_equality_
-  end interface assignment(=)
+  interface keldysh_contour_gf_sum
+     module procedure keldysh_contour_gf_sum_d,keldysh_contour_gf_sum_z
+  end interface keldysh_contour_gf_sum
 
-  
+  public :: keldysh_contour_gf
+  public :: allocate_keldysh_contour_gf
+  public :: deallocate_keldysh_contour_gf
+  public :: write_keldysh_contour_gf,read_keldysh_contour_gf,plot_keldysh_contour_gf
+  public :: mpi_reduce_keldysh_contour_gf
+  public :: mpi_bcast_keldysh_contour_gf
+  public :: keldysh_contour_gf_sum
+
+
+
   type :: kbm_contour_gf
      complex(8),dimension(:,:),pointer  :: less,gtr
      complex(8),dimension(:,:),pointer  :: lmix,gmix
@@ -24,19 +35,25 @@ MODULE CONTOUR_GF
   end type kbm_contour_gf
 
   interface operator(*)
-     module procedure kbm_contour_gf_scalarL_d,kbm_contour_gf_scalarL_c,&
+     module procedure &
+          keldysh_contour_gf_scalarL_d,keldysh_contour_gf_scalarL_c,&
+          keldysh_contour_gf_scalarR_d,keldysh_contour_gf_scalarR_c,&
+          kbm_contour_gf_scalarL_d,kbm_contour_gf_scalarL_c,&
           kbm_contour_gf_scalarR_d,kbm_contour_gf_scalarR_c
   end interface operator(*)
 
   interface assignment(=)
-     module procedure kbm_contour_gf_equality_
+     module procedure &
+          keldysh_contour_gf_equality,&
+          keldysh_contour_gf_equality_,&
+          kbm_contour_gf_equality_
   end interface assignment(=)
 
   interface kbm_contour_gf_sum
      module procedure kbm_contour_gf_sum_d,kbm_contour_gf_sum_z
   end interface kbm_contour_gf_sum
 
-  public :: kbm_contour_gf,keldysh_contour_gf
+  public :: kbm_contour_gf
   public :: allocate_kbm_contour_gf
   public :: deallocate_kbm_contour_gf
   public :: write_kbm_contour_gf,read_kbm_contour_gf,plot_kbm_contour_gf
@@ -79,15 +96,178 @@ contains
     type(keldysh_contour_gf) :: G
     integer                  :: i,j,N
     nullify(G%less,G%gtr)
+    G%N=N
     allocate(G%less(0:N,0:N),G%gtr(0:N,0:N))
     G%less=zero
     G%gtr =zero
+    G%status=.true.
   end subroutine allocate_keldysh_contour_gf
 
 
   !******************************************************************
   !******************************************************************
   !******************************************************************
+
+
+  subroutine deallocate_keldysh_contour_gf(G)
+    type(keldysh_contour_gf) :: G
+    deallocate(G%less,G%gtr)
+    G%N=0
+    G%status=.false.
+  end subroutine deallocate_keldysh_contour_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  subroutine write_keldysh_contour_gf(G,file)
+    type(keldysh_contour_gf) :: G
+    character(len=*)         :: file
+    integer                  :: N
+    N=G%N+1
+    if( (size(G%less)/=N**2) .OR. (size(G%gtr)/=N**2) )&
+         call error("ERROR contour_gf/write_keldysh_contour_gf: wrong dimensions")
+    call splot(trim(file)//"_less.data",G%less(0:,0:))
+    call splot(trim(file)//"_gtr.data",G%gtr(0:,0:))
+  end subroutine write_keldysh_contour_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  subroutine read_keldysh_contour_gf(G,file)
+    type(keldysh_contour_gf) :: G
+    character(len=*)     :: file
+    integer              :: N,L
+    N=G%N+1
+    if( (size(G%less)/=N**2) .OR. (size(G%gtr)/=N**2) )&
+         call error("ERROR contour_gf/write_keldysh_contour_gf: wrong dimensions")
+    call sread(trim(file)//"_less.data",G%less(0:,0:))
+    call sread(trim(file)//"_gtr.data",G%gtr(0:,0:))
+  end subroutine read_keldysh_contour_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  subroutine plot_keldysh_contour_gf(G,t,file)
+    type(keldysh_contour_gf)  :: G
+    character(len=*)      :: file
+    real(8),dimension(0:) :: t
+    integer               :: N
+    N=G%N+1
+    if( (size(G%less)/=N**2) .OR. (size(G%gtr)/=N**2) )&
+         call error("ERROR contour_gf/plot_keldysh_contour_gf: wrong dimensions")
+    call splot(reg_filename(file)//"_less_t_t",t(0:),t(0:),G%less(0:,0:))
+    call splot(reg_filename(file)//"_gtr_t_t",t(0:),t(0:),G%gtr(0:,0:))
+  end subroutine plot_keldysh_contour_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
+  subroutine keldysh_contour_gf_sum_d(Ga,Gb,C)
+    type(keldysh_contour_gf)  :: Ga
+    type(keldysh_contour_gf)  :: Gb
+    real(8)               :: C
+    Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
+    Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
+  end subroutine keldysh_contour_gf_sum_d
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  subroutine keldysh_contour_gf_sum_z(Ga,Gb,C)
+    type(keldysh_contour_gf)  :: Ga
+    type(keldysh_contour_gf)  :: Gb
+    complex(8)            ::C
+    Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
+    Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
+  end subroutine keldysh_contour_gf_sum_z
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  function keldysh_contour_gf_scalarL_d(C,G) result(F)
+    real(8),intent(in) :: C
+    type(keldysh_contour_gf),intent(in) :: G
+    type(keldysh_contour_gf) :: F
+    F%less(0:,0:)= C*G%less(0:,0:)
+    F%gtr(0:,0:) = C*G%gtr(0:,0:)
+  end function keldysh_contour_gf_scalarL_d
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  function keldysh_contour_gf_scalarL_c(C,G) result(F)
+    complex(8),intent(in) :: C
+    type(keldysh_contour_gf),intent(in) :: G
+    type(keldysh_contour_gf) :: F
+    F%less(0:,0:)=C*G%less(0:,0:)
+    F%gtr(0:,0:)=C*G%gtr(0:,0:)
+  end function keldysh_contour_gf_scalarL_c
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  function keldysh_contour_gf_scalarR_d(G,C) result(F)
+    real(8),intent(in) :: C
+    type(keldysh_contour_gf),intent(in) :: G
+    type(keldysh_contour_gf) :: F
+    F%less(0:,0:)=G%less(0:,0:)*C
+    F%gtr(0:,0:)=G%gtr(0:,0:)*C
+  end function keldysh_contour_gf_scalarR_d
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  function keldysh_contour_gf_scalarR_c(G,C) result(F)
+    complex(8),intent(in) :: C
+    type(keldysh_contour_gf),intent(in) :: G
+    type(keldysh_contour_gf) :: F
+    F%less(0:,0:)=G%less(0:,0:)*C
+    F%gtr(0:,0:)=G%gtr(0:,0:)*C
+  end function keldysh_contour_gf_scalarR_c
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  !This a rough implementation: just a shortcut:
+  subroutine mpi_reduce_keldysh_contour_gf(tmpG,G)
+    type(keldysh_contour_gf) :: tmpG
+    type(keldysh_contour_gf) :: G
+    if( .not.g%status )call error("ERROR contour_gf/mpi_reduce_keldysh_contour_gf: object function not allocated.")
+    if( (G%N /= tmpG%N) )call error("ERROR contour_gf/mpi_reduce_keldysh_contour_gf: wrong dimensions.")
+    call MPI_REDUCE(tmpG%less(0:,0:),G%less(0:,0:),size(tmpG%less(0:,0:)),&
+         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_REDUCE(tmpG%gtr(0:,0:),G%gtr(0:,0:),size(tmpG%gtr(0:,0:)),&
+         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
+  end subroutine mpi_reduce_keldysh_contour_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+  subroutine mpi_bcast_keldysh_contour_gf(G)
+    type(keldysh_contour_gf),intent(inout) :: G
+    if( .not.g%status )call error("ERROR contour_gf/mpi_bcast_keldysh_contour_gf: object function not allocated.")    
+    call MPI_BCAST(G%less(0:,0:),size(G%less(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_BCAST(G%gtr(0:,0:),size(G%gtr(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
+  end subroutine mpi_bcast_keldysh_contour_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
 
 
 
