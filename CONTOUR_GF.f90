@@ -12,15 +12,6 @@ MODULE CONTOUR_GF
      integer                            :: N
   end type keldysh_contour_gf
 
-  interface operator(*)
-     module procedure keldysh_contour_gf_scalarL_d,keldysh_contour_gf_scalarL_c,&
-          keldysh_contour_gf_scalarR_d,keldysh_contour_gf_scalarR_c
-  end interface operator(*)
-
-  interface assignment(=)
-     module procedure keldysh_contour_gf_equality,keldysh_contour_gf_equality_
-  end interface assignment(=)
-
   interface keldysh_contour_gf_sum
      module procedure keldysh_contour_gf_sum_d,keldysh_contour_gf_sum_z
   end interface keldysh_contour_gf_sum
@@ -31,11 +22,7 @@ MODULE CONTOUR_GF
   public :: write_keldysh_contour_gf,read_keldysh_contour_gf,plot_keldysh_contour_gf
   public :: mpi_reduce_keldysh_contour_gf
   public :: mpi_bcast_keldysh_contour_gf
-  public :: assignment(=)
-  public :: operator(*)
   public :: keldysh_contour_gf_sum
-
-
 
 
 
@@ -48,12 +35,18 @@ MODULE CONTOUR_GF
   end type kbm_contour_gf
 
   interface operator(*)
-     module procedure kbm_contour_gf_scalarL_d,kbm_contour_gf_scalarL_c,&
+     module procedure &
+          keldysh_contour_gf_scalarL_d,keldysh_contour_gf_scalarL_c,&
+          keldysh_contour_gf_scalarR_d,keldysh_contour_gf_scalarR_c,&
+          kbm_contour_gf_scalarL_d,kbm_contour_gf_scalarL_c,&
           kbm_contour_gf_scalarR_d,kbm_contour_gf_scalarR_c
   end interface operator(*)
 
   interface assignment(=)
-     module procedure kbm_contour_gf_equality_
+     module procedure &
+          keldysh_contour_gf_equality,&
+          keldysh_contour_gf_equality_,&
+          kbm_contour_gf_equality_
   end interface assignment(=)
 
   interface kbm_contour_gf_sum
@@ -92,7 +85,6 @@ contains
     G1%less = C
     G1%gtr = C
   end subroutine keldysh_contour_gf_equality_
-
 
 
   !******************************************************************
