@@ -25,12 +25,12 @@ MODULE VARS_GLOBAL
   !=========================================================
   integer,protected :: Lmu           !# of bath energies
   integer,protected :: Ltau          !Imaginary time slices
-  integer,protected :: L             !a big number
+  integer           :: L             !a big number
   integer           :: Lk            !total lattice  dimension
   integer           :: Lkreduced     !reduced lattice dimension
   integer           :: Nx,Ny         !lattice grid dimensions
   integer           :: nstep         !Number of Time steps
-  real(8)           :: beta0,xmu0,U0 !quench variables        
+  real(8)           :: beta0,xmu0,U0 !quench variables
   logical           :: iquench       !quench flag
   logical           :: Equench       !initial condition with (T) or without (F) electric field
   logical           :: irdeq         !irdeq=TT read inputs from equilbrium solution
@@ -57,7 +57,14 @@ MODULE VARS_GLOBAL
 
   !FREQS & TIME ARRAYS:
   !=========================================================  
-  real(8),dimension(:),allocatable :: wr,t,wm,tau
+  real(8),dimension(:),allocatable    :: wr,t,wm,tau,taureal
+  real(8)                             :: dtaureal
+
+  !KADANOFF-BAYM-MATSUBARA CONTOUR:
+  !=========================================================  
+  integer                               :: t1min,t1max,t2min,t2max,t3min,t3max
+  real(8),allocatable,dimension(:)      :: tloc
+  complex(8),allocatable,dimension(:)   :: dtloc
 
 
   !LATTICE (weight & dispersion) ARRAYS:
@@ -74,7 +81,8 @@ MODULE VARS_GLOBAL
   real(8)         :: w0,tau0       !parameters for pulsed light
   real(8)         :: omega0        !parameter for the Oscilatting field
 
-  !EQUILIUBRIUM/WIGNER TRANSFORMED GREEN'S FUNCTION 
+
+  !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
   !Equilibrium initial conditions: Bath DOS, n(\e(k))
   real(8),allocatable,dimension(:)     :: irdNk,irdG0tau
