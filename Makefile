@@ -3,26 +3,28 @@ EXE   = neqDMFT
 DIREXE= $(HOME)/.bin
 
 #=========================================================================
-include $(SFDIR)/etc/lib.mk
-include $(SFDIR)/etc/libdmft.mk
+include lib.mk
 #=========================================================================
 
 .SUFFIXES: .f90 
 OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o FUNX_NEQ.o KADANOFBAYM.o
 
 #=================STANDARD COMPILATION====================================
-all:	FLAG=$(STD)
+normal:	FLAG=$(STD)
 	ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
-all: 	compile
+	INC=$(SFMODS)
+normal: compile
 
 #================OPTIMIZED COMPILATION====================================
 opt: 	FLAG=$(OPT)
 	ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
+	INC=$(SFMODS)
 opt: 	compile
 
 #================DEBUGGIN COMPILATION=====================================
 debug:	FLAG=$(DEB)
 	ARGS=$(LIBDMFT_DEB) $(SFMODS_DEB) $(SFLIBS_DEB)
+	INC=$(SFMODS_DEB)
 debug:	compile
 
 
@@ -47,7 +49,7 @@ data: 	version $(OBJS)
 
 
 .f90.o:	
-	$(FC) $(FLAG) -c $< $(SFMODS) 
+	$(FC) $(FLAG) -c $< $(INC)
 
 
 
@@ -58,5 +60,5 @@ clean:
 
 
 #=========================================================================
-include $(SFDIR)/etc/version.mk
+include version.mk
 #=========================================================================

@@ -43,6 +43,7 @@ contains
     endif
     if(fchi)call get_chi
     call print_out_Gloc()
+    stop
   end subroutine neq_get_localgf
 
 
