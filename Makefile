@@ -3,8 +3,7 @@ EXE   = neqDMFT
 DIREXE= $(HOME)/.bin
 
 #=========================================================================
-include $(SFDIR)/etc/lib.mk
-include $(SFDIR)/etc/libdmft.mk
+include lib.mk
 #=========================================================================
 
 .SUFFIXES: .f90 
@@ -24,7 +23,6 @@ opt: 	compile
 debug:	FLAG=$(DEB)
 	ARGS=$(LIBDMFT_DEB) $(SFMODS_DEB) $(SFLIBS_DEB)
 debug:	compile
-
 
 
 compile: version $(OBJS)
@@ -58,5 +56,5 @@ clean:
 
 
 #=========================================================================
-include $(SFDIR)/etc/version.mk
+include version.mk
 #=========================================================================

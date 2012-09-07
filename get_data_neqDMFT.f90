@@ -5,11 +5,11 @@ program getDATA
   USE FUNX_NEQ
   USE DLPLOT
   implicit none
+  !Add here the extra variables 
   integer                                :: i,j,ik,loop,narg,iarg,k,ia,ir,irel,iave
   character(len=16)                      :: DIR
-  character(len=4)                       :: char
   complex(8),dimension(:,:),allocatable  :: locGret,Sret,impGret,G0ret
-  complex(8),dimension(:,:),allocatable  :: guessG0less,guessG0gtr
+  type(keldysh_contour_gf)               :: guessG0
   logical                                :: file
   !Wigner variables:
   real(8),dimension(:),allocatable       :: trel,tave
@@ -19,7 +19,7 @@ program getDATA
   real(8),dimension(:,:),allocatable     :: nf_wgn
 
   call read_input_init("used.inputFILE.in",printf=.false.)
-  include "grid_setup.f90"
+  include "grid_setup.f90"  
   Lk   = square_lattice_dimension(Nx,Ny)
   allocate(epsik(Lk),wt(Lk))
   wt   = square_lattice_structure(Lk,Nx,Ny)
@@ -38,27 +38,21 @@ contains
     logical :: control
 
     call create_data_dir(DIR)
-    write(*,"(A)")"Results are in ",trim(adjustl(trim(DIR)))
-
-    inquire(file="DATAsrc.tgz",exist=control)
-    if(control)call system("tar xavf DATAsrc.tgz && mv -vf DATAsrc/* . && rm -rfv DATAsrc*")
+    call msg("Results are in "//trim(adjustl(trim(DIR))),id=0)   
 
     call massive_allocation()
 
     call get_thermostat_bath()
 
     !Read the functions:
-    call sread("locGless.data",locGless(0:nstep,0:nstep))
-    call sread("locGgtr.data",locGgtr(0:nstep,0:nstep))
-    call sread("Sless.data",Sless(0:nstep,0:nstep))
-    call sread("Sgtr.data",Sgtr(0:nstep,0:nstep))
-    call sread("impGless.data",impGless(0:nstep,0:nstep))
-    call sread("impGgtr.data",impGgtr(0:nstep,0:nstep))
-    call sread("nk.data",nk(0:nstep,1:Lk))
-    call sread("guessG0less.data",guessG0less(0:nstep,0:nstep)) !
-    call sread("guessG0gtr.data",guessG0gtr(0:nstep,0:nstep))
-    call sread("G0less.data",G0less(0:nstep,0:nstep))
-    call sread("G0gtr.data",G0gtr(0:nstep,0:nstep))
+    call read_keldysh_contour_gf(G0,reg_filename(data_dir)//"/G0")
+    call read_keldysh_contour_gf(locG,reg_filename(data_dir)//"/locG")
+    call read_keldysh_contour_gf(locG1,reg_filename(data_dir)//"/locG1")
+    call read_keldysh_contour_gf(locG2,reg_filename(data_dir)//"/locG2")
+    call read_keldysh_contour_gf(Sigma,reg_filename(data_dir)//"/Sigma")
+    call read_keldysh_contour_gf(guessG0,"InitialConditions/guessG0")
+
+    call sread(reg_filename(data_dir)//"/nk.data",nk(0:nstep,1:Lk))
 
     if(fchi)then
        call sread("locChi_11.data",chi(1,1,0:nstep,0:nstep))
@@ -68,10 +62,8 @@ contains
     endif
 
     forall(i=0:nstep,j=0:nstep)
-       locGret(i,j)   = heaviside(t(i)-t(j))*(locGgtr(i,j) - locGless(i,j))
-       Sret(i,j)      = heaviside(t(i)-t(j))*(Sgtr(i,j)    - Sless(i,j))
-       impGret(i,j)   = heaviside(t(i)-t(j))*(impGgtr(i,j) - impGless(i,j))
-       G0ret(i,j)     = heaviside(t(i)-t(j))*(G0gtr(i,j)   - G0less(i,j))
+       locGret(i,j)   = heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
+       G0ret(i,j)     = heaviside(t(i)-t(j))*(G0%gtr(i,j)   - G0%less(i,j))
     end forall
 
     call get_plot_quasiWigner_functions( trim(adjustl(trim(DIR))) )
@@ -88,21 +80,13 @@ contains
 
   !+-------------------------------------------------------------------+
   subroutine massive_allocation
-    allocate(G0gtr(0:nstep,0:nstep),G0less(0:nstep,0:nstep))
-    allocate(guessG0gtr(0:nstep,0:nstep),guessG0less(0:nstep,0:nstep))
-    allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
-    allocate(Sgtr(0:nstep,0:nstep),Sless(0:nstep,0:nstep))
-    allocate(locGless(0:nstep,0:nstep),locGgtr(0:nstep,0:nstep))
-    allocate(impGless(0:nstep,0:nstep),impGgtr(0:nstep,0:nstep))
+    call global_memory_allocation() !allocate memory as in the main code
+    !+ something extra:
+    call allocate_keldysh_contour_gf(guessG0,nstep)
     allocate(locGret(0:nstep,0:nstep))
     allocate(Sret(0:nstep,0:nstep))
-    allocate(impGret(0:nstep,0:nstep))
     allocate(G0ret(0:nstep,0:nstep))
-    allocate(nk(0:nstep,Lk))
 
-    call allocate_gf(gf0,nstep)
-    call allocate_gf(gf,nstep)
-    call allocate_gf(sf,nstep)
     allocate(trel(-nstep:nstep),tave(0:nstep))
     allocate(wgnGless(-nstep:nstep,0:nstep),&
          wgnGgtr(-nstep:nstep,0:nstep),     &
@@ -113,30 +97,23 @@ contains
     allocate(gfret_wgn(0:nstep,-nstep:nstep),gfless_wgn(0:nstep,-nstep:nstep),sfret_wgn(0:nstep,-nstep:nstep))
     allocate(nf_wgn(0:nstep,-nstep:nstep))
     if(fchi)then
-       allocate(chi_dia(2,2,0:nstep),chi_pm(2,2,0:nstep,0:nstep))
        allocate(chi(2,2,0:nstep,0:nstep))
     endif
   end subroutine massive_allocation
   !+-------------------------------------------------------------------+
 
   !+-------------------------------------------------------------------+
-  subroutine massive_deallocation
-    deallocate(G0gtr,G0less)
-    deallocate(guessG0gtr,guessG0less)
-    deallocate(S0gtr,S0less)
-    deallocate(Sgtr,Sless)
-    deallocate(locGless,locGgtr)
-    deallocate(impGless,impGgtr)
-    deallocate(locGret)
-    deallocate(Sret)
-    deallocate(impGret)
-    deallocate(G0ret)
+  subroutine massive_deallocation   
+    deallocate(locGret,Sret,G0ret)
     deallocate(nk)
     call deallocate_gf(gf0)
     call deallocate_gf(gf)
     call deallocate_gf(sf)
+    deallocate(trel,tave)
+    deallocate(wgnGless,wgnGgtr,wgnSless,wgnSgtr,wgnGret,wgnSret)
+    deallocate(gfret_wgn,gfless_wgn,sfret_wgn)
+    deallocate(nf_wgn)
     if(fchi)then
-       deallocate(chi_dia,chi_pm)
        deallocate(chi)
     endif
   end subroutine massive_deallocation
@@ -206,8 +183,8 @@ contains
           epi(i,ik)   = square_lattice_dispersion(kt)
           Jk          = nk(i,ik)*square_lattice_velocity(kt)
           Jkvec(i,ix,iy)  = Jk
-          Jloc(i)         = Jloc(i) +  2.d0*wt(ik)*Jk
-          Jheat(i)        = Jheat(i)+  2.d0*wt(ik)*epi(i,ik)*Jk
+          Jloc(i)         = Jloc(i) +  wt(ik)*Jk !todo *2.d0 spin degeneracy
+          Jheat(i)        = Jheat(i)+  wt(ik)*epi(i,ik)*Jk !todo *2.d0 spin degeneracy
           if(i>0)Stot(i)  = Stot(i) -  wt(ik)*(nk(i,ik)*log(nk(i,ik))+(1.d0-nk(i,ik))*log(1.d0-nk(i,ik)))
        enddo
     enddo
@@ -218,7 +195,7 @@ contains
 
     !OCCUPATION :
     call msg("Get occupation")
-    forall(i=0:nstep)nt(i)=-xi*locGless(i,i)
+    forall(i=0:nstep)nt(i)=-xi*locG%less(i,i)
 
     !OCCUPATION density:
     forall(i=0:nstep,ik=1:Lk)nDens(ik2ix(ik),ik2iy(ik),i)=npi(i,ik)
@@ -243,8 +220,8 @@ contains
     do it=0,nstep
        I1=zero; Ib=zero
        do i=1,it
-          I1 = I1 + SretF(it,i)*locGless(i,it) + Sless(it,i)*conjg(GretF(it,i))
-          Ib = Ib + S0retF(it-i)*locGless(i,it) + S0less(it-i)*conjg(GretF(it,i))
+          I1 = I1 + SretF(it,i)*locG%less(i,it) + Sigma%less(it,i)*conjg(GretF(it,i))
+          Ib = Ib + S0retF(it,i)*locG%less(i,it) + S0%less(it,i)*conjg(GretF(it,i))
        enddo
        Epot(it)= -xi*I1*dt/2.d0
        Eb(it)= -xi*Ib*dt/2.d0
@@ -325,46 +302,19 @@ contains
 
     if(fchi)then
        call splot("sigma_cond.ipt",t(0:nstep),t(0:nstep),scond(1,1,0:nstep,0:nstep))
-       ! call splot("sigma_cond_12.ipt",t(0:nstep),t(0:nstep),scond(1,2,0:nstep,0:nstep))
-       ! call splot("sigma_cond_21.ipt",t(0:nstep),t(0:nstep),scond(2,1,0:nstep,0:nstep))
-       ! call splot("sigma_cond_22.ipt",t(0:nstep),t(0:nstep),scond(2,2,0:nstep,0:nstep))
        call splot("red_sigma_cond.ipt",t(0:nstep),t(0:nstep),sscond(1,1,0:nstep,0:nstep))
-       ! call splot("red_sigma_cond_12.ipt",t(0:nstep),t(0:nstep),sscond(1,2,0:nstep,0:nstep))
-       ! call splot("red_sigma_cond_21.ipt",t(0:nstep),t(0:nstep),sscond(2,1,0:nstep,0:nstep))
-       ! call splot("red_sigma_cond_22.ipt",t(0:nstep),t(0:nstep),sscond(2,2,0:nstep,0:nstep))
-       ! call splot("im_sigma_cond_11.ipt",t(0:nstep),t(0:nstep),aimag(scond(1,1,0:nstep,0:nstep)))
-       ! call splot("im_sigma_cond_12.ipt",t(0:nstep),t(0:nstep),aimag(scond(1,2,0:nstep,0:nstep)))
-       ! call splot("im_sigma_cond_21.ipt",t(0:nstep),t(0:nstep),aimag(scond(2,1,0:nstep,0:nstep)))
-       ! call splot("im_sigma_cond_22.ipt",t(0:nstep),t(0:nstep),aimag(scond(2,2,0:nstep,0:nstep)))
     endif
 
     !Local functions:
     !===========================================================================
-    if(plot3D)then
+    if(.not.plot3D)then         !functions have not be plotted during run, plot them now
        if(Efield/=0.d0 .or. Vpd/=0.0)call dplot_3d_surface_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",&
             kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
-       call splot("guessG0less3D",t(0:nstep)/dt,t(0:nstep)/dt,guessG0less(0:nstep,0:nstep))
-       call splot("guessG0gtr3D",t(0:nstep)/dt,t(0:nstep)/dt,guessG0gtr(0:nstep,0:nstep))
-       call splot("G0less3D",t(0:nstep)/dt,t(0:nstep)/dt,G0less(0:nstep,0:nstep))
-       call splot("G0gtr3D",t(0:nstep)/dt,t(0:nstep)/dt,G0gtr(0:nstep,0:nstep))
-       call splot("locGless3D",t(0:nstep)/dt,t(0:nstep)/dt,locGless)
-       call splot("locGgtr3D",t(0:nstep)/dt,t(0:nstep)/dt,locGgtr)
-       call splot("impGless3D",t(0:nstep)/dt,t(0:nstep)/dt,impGless)
-       call splot("impGgtr3D",t(0:nstep)/dt,t(0:nstep)/dt,impGgtr)
-       call splot("Sless3D",t(0:nstep)/dt,t(0:nstep)/dt,Sless)
-       call splot("Sgtr3D",t(0:nstep)/dt,t(0:nstep)/dt,Sgtr)
-       ! call plot_movie("gif_nVSepiVSt",reduced_epsik,reduced_npi(0:nstep,:),Xlabel="$\Huge\epsilon(k)$",Ylabel="$\Huge n_{\pi}(t)$",wlp="wlp")
-       ! call plot_3D("guessG0less3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,guessG0less(0:nstep,0:nstep))
-       ! call plot_3D("guessG0gtr3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,guessG0gtr(0:nstep,0:nstep))
-       ! call plot_3D("G0less3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,G0less(0:nstep,0:nstep))
-       ! call plot_3D("G0gtr3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,G0gtr(0:nstep,0:nstep))
-       ! call plot_3D("locGless3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,locGless)
-       ! call plot_3D("locGgtr3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,locGgtr)
-       ! call plot_3D("impGless3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,impGless)
-       ! call plot_3D("impGgtr3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,impGgtr)
-       ! call plot_3D("Sless3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,Sless)
-       ! call plot_3D("Sgtr3D","X/$\Delta t$","Y/$\Delta t$","Z",t(0:nstep)/dt,t(0:nstep)/dt,Sgtr)
-       !call system("mv -vf *3D "//dir//"/ 2>/dec/null")
+       call create_data_dir("PLOT")
+       call plot_keldysh_contour_gf(guessG0,t(0:),"PLOT/guessG0")
+       call plot_keldysh_contour_gf(G0,t(0:),"PLOT/G0")
+       call plot_keldysh_contour_gf(locG,t(0:),"PLOT/locG")
+       call plot_keldysh_contour_gf(Sigma,t(0:),"PLOT/Sigma")
     endif
     call system("rm -rf "//dir//"/3d* 2>/dev/null")
     call system("rm -rf "//dir//"/*3D 2>/dev/null")
@@ -386,8 +336,8 @@ contains
     complex(8),dimension(2*nstep)      :: gfkel
 
     forall(i=0:nstep,j=0:nstep)
-       gf%less%t(i-j) = locGless(i,j)
-       gf%gtr%t(i-j)  = locGgtr(i,j)
+       gf%less%t(i-j) = locG%less(i,j)
+       gf%gtr%t(i-j)  = locG%gtr(i,j)
        gf%ret%t(i-j)  = locGret(i,j)
     end forall
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
@@ -399,14 +349,14 @@ contains
     call splot(dir//"/locDOS.ipt",wr,-aimag(gf%ret%w)/pi)
 
     forall(i=0:nstep,j=0:nstep)
-       gf0%less%t(i-j)= G0less(i,j)
-       gf0%gtr%t(i-j) = G0gtr(i,j)
+       gf0%less%t(i-j)= G0%less(i,j)
+       gf0%gtr%t(i-j) = G0%gtr(i,j)
        gf0%ret%t(i-j) = G0ret(i,j)
-       gf%less%t(i-j) = impGless(i,j)
-       gf%gtr%t(i-j)  = impGgtr(i,j)
-       gf%ret%t(i-j)  = impGret(i,j)
-       sf%less%t(i-j) = Sless(i,j)
-       sf%gtr%t(i-j)  = Sgtr(i,j)
+       ! gf%less%t(i-j) = impGless(i,j)
+       ! gf%gtr%t(i-j)  = impGgtr(i,j)
+       ! gf%ret%t(i-j)  = impGret(i,j)
+       sf%less%t(i-j) = Sigma%less(i,j)
+       sf%gtr%t(i-j)  = Sigma%gtr(i,j)
        sf%ret%t(i-j)  = Sret(i,j)
     end forall
     if(heaviside(0.d0)==1.d0)gf0%ret%t(0)=gf0%ret%t(0)/2.d0 !; gf0%ret%t(0)=-xi
@@ -421,9 +371,9 @@ contains
        call splot(dir//"/G0gtr_t.ipt",t(-nstep:nstep),gf0%gtr%t)
        call splot(dir//"/G0ret_t.ipt",t(-nstep:nstep),gf0%ret%t)
     endif
-    call splot(dir//"/impGless_t.ipt",t(-nstep:nstep),gf%less%t)
-    call splot(dir//"/impGgtr_t.ipt",t(-nstep:nstep),gf%gtr%t)
-    call splot(dir//"/impGret_t.ipt",t(-nstep:nstep),gf%ret%t)
+    ! call splot(dir//"/impGless_t.ipt",t(-nstep:nstep),gf%less%t)
+    ! call splot(dir//"/impGgtr_t.ipt",t(-nstep:nstep),gf%gtr%t)
+    ! call splot(dir//"/impGret_t.ipt",t(-nstep:nstep),gf%ret%t)
     call splot(dir//"/Sless_t.ipt",t(-nstep:nstep),sf%less%t)
     call splot(dir//"/Sgtr_t.ipt",t(-nstep:nstep),sf%gtr%t)
     call splot(dir//"/Sret_t.ipt",t(-nstep:nstep),sf%ret%t)
@@ -439,11 +389,11 @@ contains
     else
        call splot(dir//"/G0ret_realw.ipt",wr,gf0%ret%t)
     endif
-    call splot(dir//"/impGret_realw.ipt",wr,gf%ret%t)
+    ! call splot(dir//"/impGret_realw.ipt",wr,gf%ret%t)
     call splot(dir//"/Sret_realw.ipt",wr,sf%ret%t)
     call splot(dir//"/DOS.ipt",wr,-aimag(gf%ret%t)/pi)
 
-    forall(i=0:nstep,j=0:nstep)gtkel(i-j) = locGless(i,j)
+    forall(i=0:nstep,j=0:nstep)gtkel(i-j) = locG%less(i,j)
     call fftgf_rt2rw(gtkel,gfkel,nstep) ; gfkel=gfkel*dt ; call swap_fftrt2rw(gfkel)
     phi(1:(2*nstep-1)) = xi*gfkel(1:(2*nstep-1))/aimag(gf%ret%t(1:(2*nstep-1)))/2.d0
     do i=1,2*nstep
@@ -466,9 +416,9 @@ contains
 
     !Perform the Wigner Rotation:
     print*,"Perform Wigner Rotation:"
-    wgnGless= wigner_transform(locGless,nstep)
+    wgnGless= wigner_transform(locG%less,nstep)
     wgnGret = wigner_transform(locGret,nstep)
-    wgnSless= wigner_transform(Sless,nstep)
+    wgnSless= wigner_transform(Sigma%less,nstep)
     wgnSret = wigner_transform(Sret,nstep)
     call system("if [ ! -d WIGNER ]; then mkdir WIGNER; fi")
     ! call plot_3D("wgnGless3D","X","Y","Z",trel(-nstep:nstep)/dt,tave(1:nstep)/dt,wgnGless(-nstep:nstep,1:nstep))
@@ -593,7 +543,7 @@ contains
   function GretF(i,j)      
     integer,intent(in) :: i,j
     complex(8)         :: GretF
-    GretF = heaviside(t(i)-t(j))*(locGgtr(i,j)-locGless(i,j))
+    GretF = heaviside(t(i)-t(j))*(locG%gtr(i,j)-locG%less(i,j))
   end function GretF
   !-------------------------------------------------------!
 
@@ -602,16 +552,16 @@ contains
   function SretF(i,j)      
     integer,intent(in) :: i,j
     complex(8)         :: SretF
-    SretF = heaviside(t(i)-t(j))*(Sgtr(i,j)-Sless(i,j))
+    SretF = heaviside(t(i)-t(j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
   end function SretF
   !-------------------------------------------------------!
 
 
   !-------------------------------------------------------!
-  function S0retF(i)
-    integer,intent(in) :: i
+  function S0retF(i,j)
+    integer,intent(in) :: i,j
     complex(8)         :: S0retF
-    S0retF = heaviside(t(i))*(S0gtr(i)-S0less(i))
+    S0retF = heaviside(t(i)-t(j))*(S0%gtr(i,j)-S0%less(i,j))
   end function S0retF
   !-------------------------------------------------------!
 

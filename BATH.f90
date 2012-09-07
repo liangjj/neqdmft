@@ -66,9 +66,9 @@ contains
     enddo
 
     if(mpiID==0)then
-       call write_keldysh_contour_gf(S0,"Bath/S0less_t.ipt")
+       call write_keldysh_contour_gf(S0,"Bath/S0")
+       call splot("Bath/DOSbath.lattice",wfreq,bath_dens)
        if(plot3D)call plot_keldysh_contour_gf(S0,t(0:),"PLOT/S0")
-       call splot("BATH/DOSbath.lattice",wfreq,bath_dens)
     endif
 
   end subroutine get_thermostat_bath

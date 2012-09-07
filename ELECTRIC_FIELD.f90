@@ -61,7 +61,11 @@ contains
 
 
     case("ac")
-       field=sin(Omega0*(t-t0))/Omega0
+       field=-sin(Omega0*(t-t0))/Omega0
+
+
+    case("ac1")
+       field=-(t+sin(Omega0*(t-t0))/Omega0)
 
     case("ramp")                !!RAMP CONSTANT FIELD:
        field=-(24.d0*pi*(t+(t-t0)*step(t-t0)+2.d0*(t1-t)*step(t-t0)*step(t-t1)-&
