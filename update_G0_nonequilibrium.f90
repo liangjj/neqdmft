@@ -78,17 +78,16 @@
   forall(i=t1min:t3max,j=t1min:t3max)mat_calG(i,j)=&
        dot_product(mat_locG(i,0:),(mat_Gamma(0:,j)*dtloc(0:)))
 
-  call splot("mat_calG11",t(0:),t(0:),mat_calG(t1min:t1max,t1min:t1max))
-  call splot("mat_calG12",t(0:),t(0:),mat_calG(t1min:t1max,t2min:t2max))
-  call splot("mat_calG13",t(0:),tau(0:),mat_calG(t1min:t1max,t3min:t3max))
-  call splot("mat_calG21",t(0:),t(0:),mat_calG(t2min:t2max,t1min:t1max))
-  call splot("mat_calG22",t(0:),t(0:),mat_calG(t2min:t2max,t2min:t2max))
-  call splot("mat_calG23",t(0:),tau(0:),mat_calG(t2min:t2max,t3min:t3max))
-  call splot("mat_calG31",tau(0:),t(0:),mat_calG(t3min:t3max,t1min:t1max))
-  call splot("mat_calG32",tau(0:),t(0:),mat_calG(t3min:t3max,t2min:t2max))
-  call splot("mat_calG33",tau(0:),tau(0:),mat_calG(t3min:t3max,t3min:t3max))
-  call splot("mat_calG",tloc(0:),tloc(0:),mat_calG)
-
+  ! call splot("mat_calG11",t(0:),t(0:),mat_calG(t1min:t1max,t1min:t1max))
+  ! call splot("mat_calG12",t(0:),t(0:),mat_calG(t1min:t1max,t2min:t2max))
+  ! call splot("mat_calG13",t(0:),tau(0:),mat_calG(t1min:t1max,t3min:t3max))
+  ! call splot("mat_calG21",t(0:),t(0:),mat_calG(t2min:t2max,t1min:t1max))
+  ! call splot("mat_calG22",t(0:),t(0:),mat_calG(t2min:t2max,t2min:t2max))
+  ! call splot("mat_calG23",t(0:),tau(0:),mat_calG(t2min:t2max,t3min:t3max))
+  ! call splot("mat_calG31",tau(0:),t(0:),mat_calG(t3min:t3max,t1min:t1max))
+  ! call splot("mat_calG32",tau(0:),t(0:),mat_calG(t3min:t3max,t2min:t2max))
+  ! call splot("mat_calG33",tau(0:),tau(0:),mat_calG(t3min:t3max,t3min:t3max))
+  ! call splot("mat_calG",tloc(0:),tloc(0:),mat_calG)
 
   call scatter_kbm_matrix_gf(mat_calG,Nstep,Ltau,G0)
-  call plot_kbm_contour_gf(G0,t(0:Nstep),tau(0:Ltau),"calG")
+  call plot_kbm_contour_gf(G0,t(0:Nstep),tau(0:Ltau),"PLOT/calG")

@@ -42,8 +42,7 @@ contains
        call kadanoff_baym_localgf()
     endif
     if(fchi)call get_chi
-    call print_out_Gloc()
-    stop
+    call print_out_Gloc()   
   end subroutine neq_get_localgf
 
 

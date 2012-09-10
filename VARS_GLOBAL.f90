@@ -52,6 +52,7 @@ MODULE VARS_GLOBAL
   integer           :: size_cutoff
   logical           :: solve_eq
   logical           :: g0loc_guess
+  logical           :: volterra
 
 
   !FREQS & TIME ARRAYS:
@@ -132,7 +133,7 @@ MODULE VARS_GLOBAL
        Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
-       solve_eq,g0loc_guess,&
+       solve_eq,g0loc_guess,volterra,&
        irdNkfile,irdG0wfile,irdG0iwfile,&
        iquench,beta0,xmu0,U0
 
@@ -249,6 +250,7 @@ contains
     equench       = .false.
     solve_eq      = .true.
     g0loc_guess   = .false.
+    volterra      = .false.
     iquench       = .false.
     data_dir      = "DATAneq"
 
@@ -393,7 +395,7 @@ contains
     G%gtr(0:N,0:N)  = -matG(N+1:2*N+1,0:N) !matG21
     G%lmix(0:N,0:L) = -matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
     forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,Ltau-i))
-    G%mats(0:L,0:L) = aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))+zero
+    G%mats(0:L,0:L) = -aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))+zero
   end subroutine scatter_kbm_matrix_gf
 
   function build_kbm_matrix_gf(G,N,L) result(matG)

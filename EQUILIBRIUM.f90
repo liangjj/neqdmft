@@ -74,7 +74,7 @@ contains
 
 
        sm_%iw=zero ; sold=sm_%iw
-       loop=0 ; converged=.false.             
+       loop=0 ; converged=.false.
        do while (.not.converged)
           loop=loop+1
           write(*,"(A,i5)",advance="no")"DMFT-loop",loop
