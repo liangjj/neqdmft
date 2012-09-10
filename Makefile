@@ -10,23 +10,19 @@ include lib.mk
 OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o FUNX_NEQ.o KADANOFBAYM.o
 
 #=================STANDARD COMPILATION====================================
-normal:	FLAG=$(STD)
-	ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
-	INC=$(SFMODS)
-normal: compile
+all:	FLAG=$(STD)
+		ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
+all: 	compile
 
 #================OPTIMIZED COMPILATION====================================
 opt: 	FLAG=$(OPT)
-	ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
-	INC=$(SFMODS)
+		ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
 opt: 	compile
 
 #================DEBUGGIN COMPILATION=====================================
 debug:	FLAG=$(DEB)
 	ARGS=$(LIBDMFT_DEB) $(SFMODS_DEB) $(SFLIBS_DEB)
-	INC=$(SFMODS_DEB)
 debug:	compile
-
 
 
 compile: version $(OBJS)
@@ -49,7 +45,7 @@ data: 	version $(OBJS)
 
 
 .f90.o:	
-	$(FC) $(FLAG) -c $< $(INC)
+	$(FC) $(FLAG) -c $< $(SFMODS) 
 
 
 
