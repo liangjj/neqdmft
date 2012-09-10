@@ -227,14 +227,14 @@ contains
 
     !Evolve the solution of KB equations for all the k-points:
     forall(it=0:istep)
-       Gk%less(it,istep+1) = Gk%less(it,istep)*conjg(Udelta(ik,istep))-Ikless(it)*conjg(Vdelta(ik,istep))
-       Gk%gtr(istep+1,it)  = Gk%gtr(istep,it)*Udelta(ik,istep)-Ikgtr(it)*Vdelta(ik,istep)
+       Gk%less(it,istep+1) = Gk%less(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
+       Gk%gtr(istep+1,it)  = Gk%gtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
     end forall
-    Gk%gtr(istep+1,istep)=(Gk%less(istep,istep)-xi)*Udelta(ik,istep)-Ikgtr(istep)*Vdelta(ik,istep)
-    Gk%less(istep+1,istep+1)= Gk%less(istep,istep)+xi*dt*Ikdiag
+    Gk%gtr(istep+1,istep)=(Gk%less(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
+    Gk%less(istep+1,istep+1)= Gk%less(istep,istep)-xi*dt*Ikdiag
     Gk%gtr(istep+1,istep+1) = Gk%less(istep+1,istep+1)-xi
 
-    forall(itau=0:Ltau)Gk%lmix(istep+1,itau)=Gk%lmix(istep,itau)*Udelta(ik,istep)-Iklmix(itau)*Vdelta(ik,istep)
+    forall(itau=0:Ltau)Gk%lmix(istep+1,itau)=Gk%lmix(istep,itau)*Udelta(ik,istep)+Iklmix(itau)*Vdelta(ik,istep)
     forall(itau=0:Ltau)Gk%gmix(itau,istep+1)=conjg(Gk%lmix(istep+1,Ltau-itau))
 
     !$OMP PARALLEL PRIVATE(i,j)

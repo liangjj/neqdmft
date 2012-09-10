@@ -229,11 +229,11 @@ contains
     call msg("Get Sigma(t,t')")
 
     forall(i=0:nstep,j=0:nstep)
-       Sigma%gtr (i,j) = -(U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)
-       Sigma%less(i,j) = -(U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)
+       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i) !reintroducing wrong sign here, check vs. KADANOFFBAYM.f90/GFstep
+       Sigma%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)
     end forall
 
-    forall(i=0:nstep,itau=0:Ltau)Sigma%lmix(i,itau) = -(U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i)
+    forall(i=0:nstep,itau=0:Ltau)Sigma%lmix(i,itau) = (U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i)
     forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))
 
     forall(i=0:Ltau,j=0:Ltau)Sigma%mats(i,j)=eq_Stau(j-i) 
