@@ -107,6 +107,7 @@ contains
        nk_ = square_lattice_momentum_distribution(Lk)
        call splot("Equilibrium/nkVSepsk.ipt",epsik,nk_)
 
+       call system("mv *.err Equilibrium/")
 
     endif
 
