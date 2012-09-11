@@ -54,8 +54,9 @@ contains
     iselect=0
 
     !Restart from a previous solution: check if Sigma^<,> file exists.
-    inquire(file=trim(irdSfile),exist=checkS)
-    if(.not.checkS)inquire(file=trim(irdSfile)//".gz",exist=checkS)
+    ! inquire(file=trim(irdSfile),exist=checkS)
+    ! if(.not.checkS)inquire(file=trim(irdSfile)//".gz",exist=checkS)
+    checkS=inquire_keldysh_contour_gf(trim(irdSfile))
 
     !Start from a non HF guess given the BATH: check if G0(w) file exists.
     inquire(file=trim(irdG0wfile),exist=checkG0)

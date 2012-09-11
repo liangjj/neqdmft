@@ -1,5 +1,5 @@
 !########################################################
-!     Program  : HMIPT
+!     program  : HMIPT
 !     TYPE     : Main program
 !     PURPOSE  : Solve the Hubbard model using DMFT-IPT
 !     AUTHORS  : Adriano Amaricci
@@ -117,11 +117,11 @@ contains
       integer,parameter  :: M=4096
       integer            :: Lk
       integer            :: ik,i
-      type(matsubara_gf) :: gm,sm
+      type(matsubara_gf) :: gm
       real(8)            :: nk(Lk)
       call allocate_gf(gm,L)
       do ik=1,Lk
-         gm%iw=one/(xi*wm_ - epsik(ik) - sm%iw)
+         gm%iw=one/(xi*wm_ - epsik(ik) - sm_%iw)
          call fftgf_iw2tau(gm%iw,gm%tau,beta)
          nk(ik)=-gm%tau(L)
       enddo

@@ -19,11 +19,13 @@ MODULE CONTOUR_GF
   public :: keldysh_contour_gf
   public :: allocate_keldysh_contour_gf
   public :: deallocate_keldysh_contour_gf
-  public :: write_keldysh_contour_gf,read_keldysh_contour_gf,plot_keldysh_contour_gf
+  public :: write_keldysh_contour_gf
+  public :: read_keldysh_contour_gf
+  public :: plot_keldysh_contour_gf
+  public :: inquire_keldysh_contour_gf
   public :: mpi_reduce_keldysh_contour_gf
   public :: mpi_bcast_keldysh_contour_gf
   public :: keldysh_contour_gf_sum
-
 
 
   type :: kbm_contour_gf
@@ -145,6 +147,18 @@ contains
     call sread(trim(file)//"_less.data",G%less(0:,0:))
     call sread(trim(file)//"_gtr.data",G%gtr(0:,0:))
   end subroutine read_keldysh_contour_gf
+
+  function inquire_keldysh_contour_gf(file) result(check)
+    logical          :: check,bool1,bool2
+    character(len=*) :: file
+    inquire(file=trim(file)//"_less.data",exist=bool1)
+    if(.not.bool1)inquire(file=trim(file)//"_less.data.gz",exist=bool1)
+    if(.not.bool1)call warning("Can not read "//trim(file)//"_less.data")
+    inquire(file=trim(file)//"_gtr.data",exist=bool2)
+    if(.not.bool2)inquire(file=trim(file)//"_gtr.data.gz",exist=bool2)
+    if(.not.bool2)call warning("Can not read "//trim(file)//"_gtr.data")
+    check=bool1.AND.bool2
+  end function inquire_keldysh_contour_gf
 
   !******************************************************************
   !******************************************************************

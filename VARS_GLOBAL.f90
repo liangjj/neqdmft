@@ -135,7 +135,7 @@ MODULE VARS_GLOBAL
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
        solve_eq,g0loc_guess,&
-       irdNkfile,irdG0wfile,irdSfile,&
+       irdNkfile,irdG0wfile,irdG0iwfile,irdSfile,&
        iquench,beta0,xmu0,U0
 
 
@@ -264,6 +264,7 @@ contains
     bath_type     = "constant"
     eps           = 0.05d0
     irdG0wfile    = "eqG0w.restart"
+    irdG0iwfile   = "eqG0iw.restart"
     irdnkfile     = "eqnk.restart"
     irdSfile      = "Sigma.restart"
     data_dir      = "DATAneq"
