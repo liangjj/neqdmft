@@ -31,7 +31,6 @@ contains
 
     call create_data_dir("InitialConditions")
 
-
     !Check if n(k) file exists.
     inquire(file=trim(irdnkfile),exist=checkNk)
     if(.not.checkNk)inquire(file=trim(irdNkfile)//".gz",exist=checkNk)
@@ -49,28 +48,15 @@ contains
     endif
     call splot("InitialConditions/ic_nkVSepsk.ipt",epsik,eq_nk)
 
-
-    !Initial selection: no file exist
-    iselect=0
-
     !Restart from a previous solution: check if Sigma^<,> file exists.
-    ! inquire(file=trim(irdSfile),exist=checkS)
-    ! if(.not.checkS)inquire(file=trim(irdSfile)//".gz",exist=checkS)
     checkS=inquire_keldysh_contour_gf(trim(irdSfile))
 
-    !Start from a non HF guess given the BATH: check if G0(w) file exists.
-    inquire(file=trim(irdG0wfile),exist=checkG0)
-    if(.not.checkG0)inquire(file=trim(irdG0wfile)//".gz",exist=checkG0)
+    if(checkS)then
+       call msg("Reading self-energy guess from input file.",lines=1,id=0)
+       call read_keldysh_contour_gf(Sigma,trim(irdSfile))
 
-    if(checkS)then              !S^<,>(t,t') file exists
-       iselect=1
-    elseif(checkG0)then         !G0(w) file exists
-       iselect=2
-    endif
+    else  !DEFAULT: no files read, start from non-interacting HF solution or G0_loc if required       
 
-    select case(iselect)
-       !
-    case default !DEFAULT: no files read, start from non-interacting HF solution or G0_loc if required
        if(.not.g0loc_guess)then
           call msg("Using Hartree-Fock for self-energy guess",id=0)
           call msg("G0less=G0gtr=zero",lines=1,id=0)
@@ -117,45 +103,50 @@ contains
 
        call neq_solve_ipt()
 
-
-    case(1)
-       call msg("Reading self-energy guess from input file.",lines=1,id=0)
-       call read_keldysh_contour_gf(Sigma,trim(irdSfile))
+    endif
 
 
-    case(2)
-       call msg("Reading G0(w) from input file.",id=0)
-       call msg("Using G0(w) to guess the self-energy.",lines=1,id=0)
-       !
-       Lw=file_length(trim(irdG0wfile))
-       allocate(eq_G0w(Lw),wr_(Lw))
-       call sread(trim(irdG0wfile),wr_,eq_G0w)
-       fmesh_=abs(wr_(2)-wr_(1))
-       !
-       G0=zero
-       do ik=1,Lw
-          en   = wr_(ik)
-          nless= fermi0(en,beta)
-          ngtr = fermi0(en,beta)-1.d0
-          A    = -aimag(eq_G0w(ik))/pi*fmesh_
-          do i=0,nstep
-             do j=0,nstep
-                peso=exp(-xi*en*(t(i)-t(j)))
-                G0%less(i,j)=G0%less(i,j) + xi*nless*A*peso
-                G0%gtr(i,j) =G0%gtr(i,j)  + xi*ngtr*A*peso
-             enddo
-          enddo
-       enddo
-       deallocate(wr_)
-
-       if(mpiID==0)then
-          call write_keldysh_contour_gf(G0,"InitialConditions/guessG0")
-          if(plot3D)call plot_keldysh_contour_gf(G0,t(0:),"PLOT/guessG0")
-       endif
-
-       call neq_solve_ipt()
-
-    end select
+    ! !Start from a non HF guess given the BATH: check if G0(w) file exists.
+    ! inquire(file=trim(irdG0wfile),exist=checkG0)
+    ! if(.not.checkG0)inquire(file=trim(irdG0wfile)//".gz",exist=checkG0)
+    ! if(checkS)then              !S^<,>(t,t') file exists
+    !    iselect=1
+    ! elseif(checkG0)then         !G0(w) file exists
+    !    iselect=2
+    ! endif
+    ! select case(iselect)
+    !    !
+    ! case default 
+    ! case(2)
+    !    call msg("Reading G0(w) from input file.",id=0)
+    !    call msg("Using G0(w) to guess the self-energy.",lines=1,id=0)
+    !    !
+    !    Lw=file_length(trim(irdG0wfile))
+    !    allocate(eq_G0w(Lw),wr_(Lw))
+    !    call sread(trim(irdG0wfile),wr_,eq_G0w)
+    !    fmesh_=abs(wr_(2)-wr_(1))
+    !    !
+    !    G0=zero
+    !    do ik=1,Lw
+    !       en   = wr_(ik)
+    !       nless= fermi0(en,beta)
+    !       ngtr = fermi0(en,beta)-1.d0
+    !       A    = -aimag(eq_G0w(ik))/pi*fmesh_
+    !       do i=0,nstep
+    !          do j=0,nstep
+    !             peso=exp(-xi*en*(t(i)-t(j)))
+    !             G0%less(i,j)=G0%less(i,j) + xi*nless*A*peso
+    !             G0%gtr(i,j) =G0%gtr(i,j)  + xi*ngtr*A*peso
+    !          enddo
+    !       enddo
+    !    enddo
+    !    deallocate(wr_)
+    !    if(mpiID==0)then
+    !       call write_keldysh_contour_gf(G0,"InitialConditions/guessG0")
+    !       if(plot3D)call plot_keldysh_contour_gf(G0,t(0:),"PLOT/guessG0")
+    !    endif
+    !    call neq_solve_ipt()
+    ! end select
 
 
   contains
