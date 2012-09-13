@@ -12,7 +12,7 @@
      call matrix_inverse(GammaRet(0:nstep,0:nstep))
      G0ret(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),locGret(0:nstep,0:nstep))*dt
      !### COMMENTING THIS LINE THE RESULTS ARE IDENTICAL WITH THE TWO METHODS OF UPDATE ###
-     forall(i=0:nstep)G0ret(i,i)=-xi !???
+     !forall(i=0:nstep)G0ret(i,i)=-xi !???
      !#####################################################################################
      G0adv=conjg(transpose(G0ret))
 
@@ -30,7 +30,7 @@
 
 
   !Matrix update, from testKELDYSHMATGF3
-  if(TT)then
+  if(FF)then
      !Build Gloc matrix
      allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
@@ -55,5 +55,32 @@
 
      deallocate(mat_locG,mat_Sigma,mat_G0,mat_Delta,mat_Gamma)
   endif
+
+
+  !Matrix update, from testKELDYSHMATGF4
+  if(TT)then
+     !Build Gloc matrix
+     allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
+     mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
+
+     !Build Sigma matrix
+     allocate(mat_Sigma(0:2*nstep+1,0:2*nstep+1))
+     mat_Sigma(0:,0:) = build_keldysh_matrix_gf(Sigma,nstep)
+
+     !Get G0 matrix:
+     allocate(mat_G0(0:2*nstep+1,0:2*nstep+1))
+     mat_locG(0:,0:) = mat_locG(0:,0:)*dt**2
+     call matrix_inverse(mat_locG(0:,0:))
+     mat_G0(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:) !why there a wrong sign here!?!
+     mat_G0(0:,0:) = mat_G0(0:,0:)*dt**2
+     call matrix_inverse(mat_G0(0:,0:))
+
+     G0%less(0:,0:) = -mat_G0(0:Nstep,Nstep+1:2*Nstep+1)
+     G0%gtr(0:,0:)  =  mat_G0(Nstep+1:2*Nstep+1,0:Nstep)
+
+     deallocate(mat_locG,mat_Sigma,mat_G0)
+  endif
+
+
 
 

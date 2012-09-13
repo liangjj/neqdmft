@@ -46,7 +46,7 @@ contains
           eq_nk(ik)=fermi0((epsik(ik)-xmu_),beta_)
        enddo
     endif
-    call splot("InitialConditions/ic_nkVSepsk.ipt",epsik,eq_nk)
+    if(mpiID==0)call splot("InitialConditions/ic_nkVSepsk.ipt",epsik,eq_nk)
 
     !Restart from a previous solution: check if Sigma^<,> file exists.
     checkS=inquire_keldysh_contour_gf(trim(irdSfile))

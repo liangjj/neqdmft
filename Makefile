@@ -34,7 +34,7 @@ compile: version $(OBJS)
 	@echo " ...................... done .............................. "
 	@echo ""
 	@echo ""
-	@echo "created" $(DIREXE)/$(EXE)
+	@echo "created" $(DIREXE)/$(EXE)_$(BRANCH)
 
 
 
