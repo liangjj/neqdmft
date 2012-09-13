@@ -76,10 +76,13 @@ contains
 
     !Tmp array for MPI storage, set to zero
     call allocate_keldysh_contour_gf(tmpG,Nstep)
-    call allocate_keldysh_contour_gf(tmpG1,Nstep)
-    call allocate_keldysh_contour_gf(tmpG2,Nstep)
-    tmpG=zero ; tmpG1=zero ; tmpG2=zero
-    
+    tmpG=zero
+    if(volterra)then
+       call allocate_keldysh_contour_gf(tmpG1,Nstep)
+       call allocate_keldysh_contour_gf(tmpG2,Nstep)
+       tmpG1=zero ; tmpG2=zero
+    endif
+
     !set to zero n(k,t)
     allocate(tmpnk(0:nstep,Lk))
     tmpnk=0.d0 ; nk=0.d0
@@ -103,19 +106,21 @@ contains
        !sum over k-point
        call keldysh_contour_gf_sum(tmpG,Gk,wt(ik))
 
-       !get G1=sum_k h(k,t)G(t,t')
-       do i=0,nstep
-          tmpG1%less(i,0:) = tmpG1%less(i,0:) + Hkt(ik,i)*Gk%less(i,0:)*wt(ik)
-          tmpG1%gtr(i,0:)  = tmpG1%gtr(i,0:)  + Hkt(ik,i)*Gk%gtr(i,0:)*wt(ik)
-       end do
+       if(volterra)then
+          !get G1=sum_k h(k,t)G(t,t')
+          do i=0,nstep
+             tmpG1%less(i,0:) = tmpG1%less(i,0:) + Hkt(ik,i)*Gk%less(i,0:)*wt(ik)
+             tmpG1%gtr(i,0:)  = tmpG1%gtr(i,0:)  + Hkt(ik,i)*Gk%gtr(i,0:)*wt(ik)
+          end do
 
-       !get G2=sum_k h(k,t)G(t,t')h(k,t')
-       do i=0,nstep
-          do j=0,nstep
-             tmpG2%less(i,j) = tmpG2%less(i,j) + Hkt(ik,i)*Gk%less(i,j)*Hkt(ik,j)*wt(ik)
-             tmpG2%gtr(i,j)  = tmpG2%gtr(i,j)  + Hkt(ik,i)*Gk%gtr(i,j)*Hkt(ik,j)*wt(ik)
+          !get G2=sum_k h(k,t)G(t,t')h(k,t')
+          do i=0,nstep
+             do j=0,nstep
+                tmpG2%less(i,j) = tmpG2%less(i,j) + Hkt(ik,i)*Gk%less(i,j)*Hkt(ik,j)*wt(ik)
+                tmpG2%gtr(i,j)  = tmpG2%gtr(i,j)  + Hkt(ik,i)*Gk%gtr(i,j)*Hkt(ik,j)*wt(ik)
+             enddo
           enddo
-       enddo
+       endif
 
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gk%less(istep,istep)
        call eta(ik,Lk,unit=6)
@@ -128,16 +133,20 @@ contains
 
     !Reduce Contour GF to master:
     call MPI_REDUCE_keldysh_contour_gf(tmpG,locG)
-    call MPI_REDUCE_keldysh_contour_gf(tmpG1,locG1)
-    call MPI_REDUCE_keldysh_contour_gf(tmpG2,locG2)
     call deallocate_keldysh_contour_gf(tmpG)
-    call deallocate_keldysh_contour_gf(tmpG1)
-    call deallocate_keldysh_contour_gf(tmpG2)
+    if(volterra)then
+       call MPI_REDUCE_keldysh_contour_gf(tmpG1,locG1)
+       call MPI_REDUCE_keldysh_contour_gf(tmpG2,locG2)
+       call deallocate_keldysh_contour_gf(tmpG1)
+       call deallocate_keldysh_contour_gf(tmpG2)
+    endif
 
     !Bcast the local contour GF to every node
     call MPI_BCAST_keldysh_contour_gf(locG)
-    call MPI_BCAST_keldysh_contour_gf(locG1)
-    call MPI_BCAST_keldysh_contour_gf(locG2)
+    if(volterra)then
+       call MPI_BCAST_keldysh_contour_gf(locG1)
+       call MPI_BCAST_keldysh_contour_gf(locG2)
+    endif
 
     call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
@@ -601,14 +610,18 @@ contains
     if(mpiID==0)then
 
        call write_keldysh_contour_gf(locG,reg_filename(data_dir)//"/locG")
-       call write_keldysh_contour_gf(locG1,reg_filename(data_dir)//"/locG1")
-       call write_keldysh_contour_gf(locG2,reg_filename(data_dir)//"/locG2")
+       if(volterra)then
+          call write_keldysh_contour_gf(locG1,reg_filename(data_dir)//"/locG1")
+          call write_keldysh_contour_gf(locG2,reg_filename(data_dir)//"/locG2")
+       endif
        call splot(reg_filename(data_dir)//"/nk.data",nk(0:,:))
 
        if(plot3D)then
           call plot_keldysh_contour_gf(locG,t(0:),"PLOT/locG")
-          call plot_keldysh_contour_gf(locG1,t(0:),"PLOT/locG1")
-          call plot_keldysh_contour_gf(locG2,t(0:),"PLOT/locG2")
+          if(volterra)then
+             call plot_keldysh_contour_gf(locG1,t(0:),"PLOT/locG1")
+             call plot_keldysh_contour_gf(locG2,t(0:),"PLOT/locG2")
+          endif
        end if
 
        forall(i=0:nstep,j=0:nstep)

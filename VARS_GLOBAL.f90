@@ -51,6 +51,7 @@ MODULE VARS_GLOBAL
   integer           :: size_cutoff
   logical           :: solve_eq      !Solve equilibrium Flag:
   logical           :: g0loc_guess   !use non-interacting local GF as guess.
+  logical           :: volterra
   !
 
   !FILES TO RESTART
@@ -134,7 +135,7 @@ MODULE VARS_GLOBAL
        Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
-       solve_eq,g0loc_guess,&
+       solve_eq,g0loc_guess,volterra,&
        irdNkfile,irdG0wfile,irdG0iwfile,irdSfile,&
        iquench,beta0,xmu0,U0
 
@@ -255,6 +256,7 @@ contains
     solve_eq      = .false.
     g0loc_guess   = .false.
     iquench       = .false.
+    volterra      = .false.
     !     Parameters:
     L             = 1024
     Ltau          = 32

@@ -1,5 +1,5 @@
   !=======Component by component inversion==========================
-  if(FF)then
+  if(TT)then
      forall(i=0:nstep,j=0:nstep)
         locGret(i,j)= heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
         Sret(i,j)   = heaviside(t(i)-t(j))*(Sigma%gtr(i,j) - Sigma%less(i,j))
@@ -12,7 +12,7 @@
      call matrix_inverse(GammaRet(0:nstep,0:nstep))
      G0ret(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),locGret(0:nstep,0:nstep))*dt
      !### COMMENTING THIS LINE THE RESULTS ARE IDENTICAL WITH THE TWO METHODS OF UPDATE ###
-     !forall(i=0:nstep)G0ret(i,i)=-xi !???
+     forall(i=0:nstep)G0ret(i,i)=-xi !???
      !#####################################################################################
      G0adv=conjg(transpose(G0ret))
 
@@ -58,7 +58,7 @@
 
 
   !Matrix update, from testKELDYSHMATGF4
-  if(TT)then
+  if(FF)then
      !Build Gloc matrix
      allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
