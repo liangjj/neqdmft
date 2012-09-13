@@ -9,7 +9,7 @@
      Uno=zero  ; forall(i=0:nstep)Uno(i,i)=One/dt
      GammaRet(0:nstep,0:nstep) = Uno+matmul(locGret(0:nstep,0:nstep),Sret(0:nstep,0:nstep))*dt
      GammaRet(0:nstep,0:nstep) = GammaRet(0:nstep,0:nstep)*dt**2
-     call mat_inversion(GammaRet(0:nstep,0:nstep))
+     call matrix_inverse(GammaRet(0:nstep,0:nstep))
      G0ret(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),locGret(0:nstep,0:nstep))*dt
      !### COMMENTING THIS LINE THE RESULTS ARE IDENTICAL WITH THE TWO METHODS OF UPDATE ###
      forall(i=0:nstep)G0ret(i,i)=-xi !???
@@ -33,25 +33,25 @@
   if(TT)then
      !Build Gloc matrix
      allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
-     mat_locG = build_keldysh_matrix_gf(locG,nstep)
+     mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
 
      !Build Sigma matrix
      allocate(mat_Sigma(0:2*nstep+1,0:2*nstep+1))
-     mat_Sigma = build_keldysh_matrix_gf(Sigma,nstep)
+     mat_Sigma(0:,0:) = build_keldysh_matrix_gf(Sigma,nstep)
 
      !Allocate space for other matrices:
      allocate(mat_Delta(0:2*nstep+1,0:2*nstep+1))
      allocate(mat_Gamma(0:2*nstep+1,0:2*nstep+1))
      allocate(mat_G0(0:2*nstep+1,0:2*nstep+1))
 
-     mat_Delta=zero ; forall(i=0:2*nstep+1)mat_Delta(i,i)=One/dt
-     mat_Gamma = mat_Delta + matmul(mat_Sigma,mat_locG)*dt
-     mat_Gamma = mat_Gamma*dt**2
-     call mat_inversion(mat_Gamma)
-     mat_G0  = matmul(mat_locG,mat_Gamma)*dt
+     mat_Delta(0:,0:)=zero ; forall(i=0:2*nstep+1)mat_Delta(i,i)=One/dt
+     mat_Gamma(0:,0:) = mat_Delta(0:,0:) + matmul(mat_Sigma(0:,0:),mat_locG(0:,0:))*dt
+     mat_Gamma(0:,0:) = mat_Gamma(0:,0:)*dt**2
+     call matrix_inverse(mat_Gamma(0:,0:))
+     mat_G0(0:,0:)  = matmul(mat_locG(0:,0:),mat_Gamma(0:,0:))*dt
 
-     G0%less = -mat_G0(0:Nstep,Nstep+1:2*Nstep+1)
-     G0%gtr  =  mat_G0(Nstep+1:2*Nstep+1,0:Nstep)
+     G0%less(0:,0:) = -mat_G0(0:Nstep,Nstep+1:2*Nstep+1)
+     G0%gtr(0:,0:)  =  mat_G0(Nstep+1:2*Nstep+1,0:Nstep)
 
      deallocate(mat_locG,mat_Sigma,mat_G0,mat_Delta,mat_Gamma)
   endif
