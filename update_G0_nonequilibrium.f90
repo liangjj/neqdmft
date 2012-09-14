@@ -11,7 +11,7 @@
      GammaRet(0:nstep,0:nstep) = GammaRet(0:nstep,0:nstep)*dt**2
      call matrix_inverse(GammaRet(0:nstep,0:nstep))
      G0ret(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),locGret(0:nstep,0:nstep))*dt
-     !### COMMENTING THIS LINE THE RESULTS ARE IDENTICAL WITH THE TWO METHODS OF UPDATE ###
+     !### COMMENTING THIS LINE THE RESULTS ARE IDENTICAL WITH THE THREE METHODS OF UPDATE ###
      !forall(i=0:nstep)G0ret(i,i)=-xi !???
      !#####################################################################################
      G0adv=conjg(transpose(G0ret))
