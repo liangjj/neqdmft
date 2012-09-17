@@ -45,14 +45,18 @@ MODULE VARS_GLOBAL
   real(8)           :: eps_error     !convergence error threshold
   integer           :: Nsuccess      !number of convergence success
   real(8)           :: weight        !mixing weight parameter
-  real(8)           :: wmin,wmax     !
-  real(8)           :: tmin,tmax
-  character(len=32) :: irdG0wfile,irdG0iwfile,irdnkfile !the bath GF file
+  real(8)           :: wmin,wmax     !min/max frequency
+  real(8)           :: tmin,tmax     !min/max time
   logical           :: plotVF,plot3D,fchi
   integer           :: size_cutoff
-  logical           :: solve_eq
-  logical           :: g0loc_guess
+  logical           :: solve_eq      !Solve equilibrium Flag:
+  logical           :: g0loc_guess   !use non-interacting local GF as guess.
   logical           :: volterra
+  !
+
+  !FILES TO RESTART
+  !=========================================================
+  character(len=32) :: irdG0wfile,irdG0iwfile,irdNkfile,irdSfile
 
 
   !FREQS & TIME ARRAYS:
@@ -79,6 +83,7 @@ MODULE VARS_GLOBAL
   real(8)         :: Ex,Ey         !Electric field vectors as input
   real(8)         :: t0,t1         !turn on/off time, t0 also center of the pulse
   real(8)         :: w0,tau0       !parameters for pulsed light
+  real(8)         :: omega0        !parameter for the Oscilatting field
 
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
@@ -130,7 +135,7 @@ MODULE VARS_GLOBAL
   !NAMELISTS:
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
-       Ex,Ey,t0,t1,tau0,w0,field_profile,Nx,Ny,&
+       Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
        solve_eq,g0loc_guess,volterra,&
@@ -208,8 +213,9 @@ contains
          ' wbath=[10.0]     -- ',&
          ' bath_type=[constant] -- ',&
          ' eps=[0.05d0]         -- ',&
-         ' irdnkfile =[eqnk.restart]-- ',&
          ' irdG0wfile=[eqG0w.restart]-- ',&
+         ' irdnkfile =[eqnk.restart]-- ',&
+         ' irdG0iwfile=[eqG0iw.restart]-- ',&
          ' Nx=[50]      -- ',&
          ' Ny=[50]      -- ',&    
          ' iquench=[F]  -- ',&
@@ -285,6 +291,7 @@ contains
        call dump_input_file("default.")
        call error("Can not find INPUT file, dumping a default version in default."//trim(inputFILE))
     endif
+
     include "nml_read_cml.f90"
 
     write(*,*)"CONTROL PARAMETERS"
@@ -370,20 +377,6 @@ contains
     end forall
   end function build_keldysh_matrix_gf
 
-  function mproduct_kbm_matrix_gf(A,B) result(C)
-    complex(8),dimension(0:2*Nstep+Ltau+2,0:2*Nstep+Ltau+2),intent(in)  :: A,B
-    complex(8),dimension(0:2*Nstep+Ltau+2,0:2*Nstep+Ltau+2)             :: C
-    integer :: i,j,k
-    C=zero
-    do i=0,2*Nstep+Ltau+2
-       do j=0,2*Nstep+Ltau+2
-          do k=0,2*Nstep+Ltau+2
-             C(i,j)=C(i,j) + conjg(A(i,k))*B(k,j)*dtloc(k)
-          enddo
-       enddo
-    enddo
-  end function mproduct_kbm_matrix_gf
-
   subroutine scatter_kbm_matrix_gf(matG,N,L,G)
     integer              :: i,N,L
     complex(8)           :: matG(0:2*N+L+2,0:2*N+L+2)
@@ -392,31 +385,36 @@ contains
     if(G%N/=N)call error("Error 2: N")
     if(G%L/=L)call error("Error 3: L")
     G%less(0:N,0:N) =  matG(0:N,N+1:2*N+1) !matG12
-    G%gtr(0:N,0:N)  = -matG(N+1:2*N+1,0:N) !matG21
-    G%lmix(0:N,0:L) = -matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
+    G%gtr(0:N,0:N)  =  matG(N+1:2*N+1,0:N) !matG21
+    G%lmix(0:N,0:L) =  matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
     forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,Ltau-i))
-    G%mats(0:L,0:L) = -aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))+zero
+    G%mats(0:L,0:L) = aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))
   end subroutine scatter_kbm_matrix_gf
 
   function build_kbm_matrix_gf(G,N,L) result(matG)
     type(kbm_contour_gf)  :: G
     integer               :: i,j,N,L
     complex(8),dimension(0:2*N+L+2,0:2*N+L+2) :: matG
+    matG=zero
     forall(i=0:N,j=0:N)
        matG(i,        j)   = step(t(i)-t(j))*G%gtr(i,j)  + step(t(j)-t(i))*G%less(i,j)
-       matG(i,    N+1+j)   =-G%less(i,j)
+       matG(i,    N+1+j)   = G%less(i,j)
        matG(N+1+i,    j)   = G%gtr(i,j)
-       matG(N+1+i,N+1+j)   =-(step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
+       matG(N+1+i,N+1+j)   = (step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
     end forall
+
     forall(i=0:N,j=0:L)
-       matG(i    ,2*N+2+j) = G%lmix(i,j)
-       matG(N+1+i,2*N+2+j) = G%lmix(i,j)
+       matG(i    ,2*N+2+j) =  G%lmix(i,j)
+       matG(N+1+i,2*N+2+j) =  G%lmix(i,j)
     end forall
+
     forall(i=0:L,j=0:N)
-       matG(2*N+2+i,    j) = conjg(G%lmix(j,L-i)) !=G%gmix
-       matG(2*N+2+i,N+1+j) = -conjg(G%lmix(j,L-i)) !=G%gmix
+       matG(2*N+2+i,    j) =  conjg(G%lmix(j,L-i))  !=G%gmix
+       matG(2*N+2+i,N+1+j) =  conjg(G%lmix(j,L-i))  !=G%gmix
     end forall
+
     forall(i=0:L,j=0:L)matG(2*N+2+i,2*N+2+j) = xi*G%mats(i,j)
+
   end function build_kbm_matrix_gf
 
   !******************************************************************

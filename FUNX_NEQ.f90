@@ -24,20 +24,13 @@ contains
     integer :: M,i,j,k,itau,jtau,NN
     real(8) :: R,deg
     real(8) :: w,A,An
-    complex(8),dimension(0:nstep,0:nstep) :: locGret,Sret
-    complex(8),dimension(0:nstep,0:nstep) :: locGadv,Sadv
-    complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet
-    complex(8),dimension(0:nstep,0:nstep) :: G0ret
-    complex(8),dimension(0:nstep,0:nstep) :: G0adv
     !
-    complex(8),dimension(:,:),allocatable :: mat_Delta
-    complex(8),dimension(:,:),allocatable :: mat_Gamma
     complex(8),dimension(:,:),allocatable :: mat_calG,mat_Sigma,mat_locG
     !
     type(kbm_contour_gf),save             :: G0_old
 
     if(G0_old%status.EQV..false.)call allocate_kbm_contour_gf(G0_old,Nstep,Ltau)
-    G0_old=G0
+    G0_old=G0    
 
     call msg("Update WF: Dyson")
     if(update_wfftw)then
@@ -46,16 +39,18 @@ contains
        include "update_G0_nonequilibrium.f90"
     endif
 
-    G0%less = weight*G0%less + (1.d0-weight)*G0_old%less
-    G0%gtr  = weight*G0%gtr  + (1.d0-weight)*G0_old%gtr
-    G0%lmix = weight*G0%lmix + (1.d0-weight)*G0_old%lmix
-    G0%gmix = weight*G0%gmix + (1.d0-weight)*G0_old%gmix
-    G0%mats = weight*G0%mats + (1.d0-weight)*G0_old%mats
+    G0%less(0:,0:) = weight*G0%less(0:,0:) + (1.d0-weight)*G0_old%less(0:,0:)
+    G0%gtr(0:,0:)  = weight*G0%gtr(0:,0:)  + (1.d0-weight)*G0_old%gtr(0:,0:)
+    G0%lmix(0:,0:) = weight*G0%lmix(0:,0:) + (1.d0-weight)*G0_old%lmix(0:,0:)
+    G0%gmix(0:,0:) = weight*G0%gmix(0:,0:) + (1.d0-weight)*G0_old%gmix(0:,0:)
+    G0%mats(0:,0:) = weight*G0%mats(0:,0:) + (1.d0-weight)*G0_old%mats(0:,0:)
 
     !Save data:
     if(mpiID==0)then
        call write_kbm_contour_gf(G0,reg_filename(data_dir)//"/G0")
        if(plot3D)call plot_kbm_contour_gf(G0,t(0:),tau(0:),"PLOT/G0")
+       call splot("PLOT/G0_less_t0.ipt",t(0:),G0%less(0:,0))
+       call splot("PLOT/G0_lmix_tau0.ipt",t(0:),G0%lmix(0:,0))
     end if
   end subroutine neq_update_weiss_field
 

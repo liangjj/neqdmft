@@ -57,7 +57,6 @@ contains
              zeta  = cmplx(wr_(i),eps) - sigma_(i)
              fg_(i) = sum_overk_zeta(zeta,epsik,wt)
           enddo
-          call  fftgf_iw2tau(fm_%iw,fm_%tau,beta)
           n      = sum(aimag(fg_)*fermi(wr_,beta))/sum(aimag(fg_))
           fg0_   = one/(one/fg_ + sigma_)
           sigma_= solve_ipt_sopt(fg0_,wr_)
@@ -67,6 +66,7 @@ contains
           call splot("Equilibrium/nVSiloop.ipt",loop,n,append=TT)
        enddo
        call close_file("Equilibrium/nVSiloop.ipt")
+
        call splot("Equilibrium/DOS.ipt",wr_,-aimag(fg_)/pi)
        call splot("Equilibrium/G_realw.ipt",wr_,fg_)
        call splot("Equilibrium/G0_realw.ipt",wr_,fg0_)
@@ -103,6 +103,12 @@ contains
        call splot(trim(irdG0iwfile),wm_,f0m_%iw)
     endif
   end subroutine solve_equilibrium_ipt
+
+
+
+
+
+
 
 
 

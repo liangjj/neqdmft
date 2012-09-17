@@ -20,9 +20,9 @@ contains
   ! time translation invariant.
   !+-------------------------------------------------------------------+
   subroutine get_thermostat_bath()
-    integer          :: iw,i,itau
+    integer          :: iw,i,j,itau
     real(8)          :: en,w,dw,wfin,wini
-    complex(8)       :: peso,ptau
+    complex(8)       :: peso
     real(8)          :: ngtr,nless,arg
 
     call msg("Get Bath. Type: "//bold_green(trim(adjustl(trim(bath_type))))//" dissipative bath",id=0)
@@ -50,7 +50,6 @@ contains
 
     end select
 
-    if(mpiID==0)call splot("Bath/DOSbath.lattice",wfreq,bath_dens)
 
     S0less=zero ; S0gtr=zero
     S0lmix=zero; S0gmix=zero

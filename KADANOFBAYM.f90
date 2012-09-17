@@ -25,9 +25,7 @@ module KADANOFBAYM
   real(8)                                 :: Ikdiag
   !Auxiliary operators:
   complex(8),allocatable,dimension(:,:)   :: Udelta,Vdelta
-  !
-  !G1,G2 for update with Volterra 2nd order eqs:
-  !
+
   public                                  :: neq_get_localgf
 
 contains
@@ -42,7 +40,7 @@ contains
        call kadanoff_baym_localgf()
     endif
     if(fchi)call get_chi
-    call print_out_Gloc()   
+    call print_out_Gloc()
   end subroutine neq_get_localgf
 
 
@@ -80,10 +78,13 @@ contains
 
     !Tmp array for MPI storage, set to zero
     call allocate_kbm_contour_gf(tmpG,Nstep,Ltau)
-    call allocate_kbm_contour_gf(tmpG1,Nstep,Ltau)
-    call allocate_kbm_contour_gf(tmpG2,Nstep,Ltau)
-    tmpG=zero ; tmpG1=zero ; tmpG2=zero
-    
+    tmpG=zero
+    if(volterra)then
+       call allocate_kbm_contour_gf(tmpG1,Nstep,Ltau)
+       call allocate_kbm_contour_gf(tmpG2,Nstep,Ltau)
+       tmpG1=zero ; tmpG2=zero
+    endif
+
     !set to zero n(k,t)
     allocate(tmpnk(0:nstep,Lk))
     tmpnk=0.d0 ; nk=0.d0
@@ -107,25 +108,27 @@ contains
        !sum over k-point
        call kbm_contour_gf_sum(tmpG,Gk,wt(ik))
 
-       !get G1=sum_k h(k,t)G(t,t')
-       do i=0,nstep
-          tmpG1%less(i,0:) = tmpG1%less(i,0:) + Hkt(ik,i)*Gk%less(i,0:)*wt(ik)
-          tmpG1%gtr(i,0:)  = tmpG1%gtr(i,0:)  + Hkt(ik,i)*Gk%gtr(i,0:)*wt(ik)
-          tmpG1%lmix(i,0:) = tmpG1%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*wt(ik)
-       end do
-       tmpG1%gmix(0:,0:) = tmpG1%gmix(0:,0:) + Hkt(ik,0)*Gk%gmix(0:,0:)*wt(ik)
-       tmpG1%mats(0:,0:) = tmpG1%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*wt(ik)
+       if(volterra)then
+          !get G1=sum_k h(k,t)G(t,t')
+          do i=0,nstep
+             tmpG1%less(i,0:) = tmpG1%less(i,0:) + Hkt(ik,i)*Gk%less(i,0:)*wt(ik)
+             tmpG1%gtr(i,0:)  = tmpG1%gtr(i,0:)  + Hkt(ik,i)*Gk%gtr(i,0:)*wt(ik)
+             tmpG1%lmix(i,0:) = tmpG1%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*wt(ik)
+          end do
+          tmpG1%gmix(0:,0:) = tmpG1%gmix(0:,0:) + Hkt(ik,0)*Gk%gmix(0:,0:)*wt(ik)
+          tmpG1%mats(0:,0:) = tmpG1%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*wt(ik)
 
-       !get G2=sum_k h(k,t)G(t,t')h(k,t')
-       do i=0,nstep
-          do j=0,nstep
-             tmpG2%less(i,j) = tmpG2%less(i,j) + Hkt(ik,i)*Gk%less(i,j)*Hkt(ik,j)*wt(ik)
-             tmpG2%gtr(i,j)  = tmpG2%gtr(i,j)  + Hkt(ik,i)*Gk%gtr(i,j)*Hkt(ik,j)*wt(ik)
+          !get G2=sum_k h(k,t)G(t,t')h(k,t')
+          do i=0,nstep
+             do j=0,nstep
+                tmpG2%less(i,j) = tmpG2%less(i,j) + Hkt(ik,i)*Gk%less(i,j)*Hkt(ik,j)*wt(ik)
+                tmpG2%gtr(i,j)  = tmpG2%gtr(i,j)  + Hkt(ik,i)*Gk%gtr(i,j)*Hkt(ik,j)*wt(ik)
+             enddo
+             tmpG2%lmix(i,0:) = tmpG2%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*Hkt(ik,0)*wt(ik)
+             tmpG2%gmix(0:,i) = tmpG2%gmix(0:,i) + Hkt(ik,0)*Gk%gmix(0:,i)*Hkt(ik,i)*wt(ik)
           enddo
-          tmpG2%lmix(i,0:) = tmpG2%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*Hkt(ik,0)*wt(ik)
-          tmpG2%gmix(0:,i) = tmpG2%gmix(0:,i) + Hkt(ik,0)*Gk%gmix(0:,i)*Hkt(ik,i)*wt(ik)
-       enddo
-       tmpG2%mats(0:,0:) = tmpG2%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*Hkt(ik,0)*wt(ik)
+          tmpG2%mats(0:,0:) = tmpG2%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*Hkt(ik,0)*wt(ik)
+       endif
 
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gk%less(istep,istep)
        call eta(ik,Lk,unit=6)
@@ -137,17 +140,19 @@ contains
 
 
     !Reduce Contour GF to master:
-    call MPI_REDUCE_kbm_contour_gf(tmpG,locG)
-    call MPI_REDUCE_kbm_contour_gf(tmpG1,locG1)
-    call MPI_REDUCE_kbm_contour_gf(tmpG2,locG2)
-    call deallocate_kbm_contour_gf(tmpG)
-    call deallocate_kbm_contour_gf(tmpG1)
-    call deallocate_kbm_contour_gf(tmpG2)
-
     !Bcast the local contour GF to every node
+    call MPI_REDUCE_kbm_contour_gf(tmpG,locG)
+    call deallocate_kbm_contour_gf(tmpG)
     call MPI_BCAST_kbm_contour_gf(locG)
-    call MPI_BCAST_kbm_contour_gf(locG1)
-    call MPI_BCAST_kbm_contour_gf(locG2)
+
+    if(volterra)then
+       call MPI_REDUCE_kbm_contour_gf(tmpG1,locG1)
+       call MPI_REDUCE_kbm_contour_gf(tmpG2,locG2)
+       call deallocate_kbm_contour_gf(tmpG1)
+       call deallocate_kbm_contour_gf(tmpG2)
+       call MPI_BCAST_kbm_contour_gf(locG1)
+       call MPI_BCAST_kbm_contour_gf(locG2)
+    endif
 
     call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
@@ -272,7 +277,7 @@ contains
   !+-------------------------------------------------------------------+
   subroutine get_Ikcollision(Nt)
     integer,intent(in)          :: Nt
-    integer                     :: i,itau,it,itp,count=0
+    integer                     :: i,itau,it,itp
     complex(8)                  :: I1,I2,Ib
     complex(8),dimension(0:Nt)  :: Vadv,Vret,Vless,Vgtr
     complex(8),dimension(0:Ltau):: Vlmix,Vgmix
@@ -366,12 +371,12 @@ contains
   pure function GkretF(i,j)      
     integer,intent(in) :: i,j
     complex(8)         :: GkretF
-    GkretF = heaviside(t(i-j))*(Gk%gtr(i,j)-Gk%less(i,j))
+    GkretF = heaviside(t(i)-t(j))*(Gk%gtr(i,j)-Gk%less(i,j))
   end function GkretF
   !-------------------------------------------------------!
 
   !-------------------------------------------------------!
-  pure function S0retF(i)      
+  pure function S0retF(i)
     integer,intent(in) :: i
     complex(8)         :: S0retF
     S0retF = heaviside(t(i))*(S0gtr(i)-S0less(i))
@@ -382,7 +387,7 @@ contains
   pure function SretF(i,j)      
     integer,intent(in) :: i,j
     complex(8)         :: SretF
-    SretF = heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
+    SretF = heaviside(t(i)-t(j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
   end function SretF
   !-------------------------------------------------------!
 
@@ -660,8 +665,10 @@ contains
 
        if(plot3D)then
           call plot_kbm_contour_gf(locG,t(0:),tau(0:),"PLOT/locG")
-          call plot_kbm_contour_gf(locG1,t(0:),tau(0:),"PLOT/locG1")
-          call plot_kbm_contour_gf(locG2,t(0:),tau(0:),"PLOT/locG2")
+          if(volterra)then
+             call plot_kbm_contour_gf(locG1,t(0:),tau(0:),"PLOT/locG1")
+             call plot_kbm_contour_gf(locG2,t(0:),tau(0:),"PLOT/locG2")
+          endif
        end if
        ! call splot("testGlesst0.ipt",t(0:),locGless(0:,0))
        ! call splot("testGlmixtau0.ipt",t(0:),locGlmix(0:,0))

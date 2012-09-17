@@ -23,8 +23,8 @@
 
   !Differential
   allocate(dtloc(t1min:t3max))
-  dtloc(t1min:t1max)= dt
-  dtloc(t2min:t2max)= dt
+  dtloc(t1min:t1max)=  dt
+  dtloc(t2min:t2max)= -dt
   dtloc(t3min:t3max)= -xi*dtau
 
   if(mpiID==0)then
