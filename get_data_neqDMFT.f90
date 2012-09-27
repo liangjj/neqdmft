@@ -211,12 +211,12 @@ contains
     enddo
 
 
-    !ENERGY potential && total    if(Efield/=0.d0 .AND. plotVF)call plot_VF("vf_JfieldVSkVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,Jkvec(0:nstep,:,:)%x,Jkvec(0:nstep,:,:)%y)
-    !Get Epot = <V>(it)= xi/2 \lim_{t'-->t} \sum_k [xi\partial_t - h_{0,k}(t)] G^<_k(t,t') 
-    ! by eq. of motion = xi/2 \lim_{t'-->t} \sum_k {\delta^<(t,t') + \int_0^t S^R(t,z)*G^<_k(z,t') + \int_0^t' S^<(t,z)*G^A_k(z,t')}
-    !                  = xi/2 \lim_{t'-->t} {\delta^<(t,t') + \int_0^t S^R(t,z)*G^<_loc(z,t') + \int_0^t' S^<(t,z)*G^A_loc(z,t')}
-    !                  = xi/2 {1 + \int_0^t [S^R(t,z)*G^<_loc(z,t) + S^<(t,z)*G^A_loc(z,t)]}
-    ! cnst disregarded = xi/2 \int_0^t {S^R(t,z)*G^<_loc(z,t) + S^<(t,z)*[G^R_loc(t,z)]^+}
+    !ENERGY potential && total 
+    !Get Epot = <V>(it)= xi/2\lim_{t'-->t}\sum_k[xi\partial_t - h_{0,k}(t)] G^<_k(t,t') 
+    ! by eq. of motion = xi/2\lim_{t'-->t}\sum_k{\delta^<(t,t')+\int_0^t S^R(t,z)*G^<_k(z,t')+\int_0^t' S^<(t,z)*G^A_k(z,t')}
+    !                  = xi/2\lim_{t'-->t}{\delta^<(t,t')+\int_0^t S^R(t,z)*G^<_loc(z,t')+\int_0^t' S^<(t,z)*G^A_loc(z,t')}
+    !                  = xi/2{1+\int_0^t [S^R(t,z)*G^<_loc(z,t) + S^<(t,z)*G^A_loc(z,t)]}
+    ! cnst disregarded = xi/2\int_0^t {S^R(t,z)*G^<_loc(z,t) + S^<(t,z)*[G^R_loc(t,z)]^+}
     do it=0,nstep
        I1=zero; Ib=zero
        do i=1,it
@@ -276,6 +276,7 @@ contains
     call splot(dir//"/EhybVStime.ipt",t(0:nstep),Eb(0:nstep))
     call splot(dir//"/EtotVStime.ipt",t(0:nstep),Etot(0:nstep),Etot(0:nstep)+Eb(0:nstep))
     call splot(dir//"/WtotVSefield.ipt",Efield,Wtot)
+    call msg("Print S(t)")
     call splot(dir//"/StotVStime.ipt",t(0:nstep),Stot(0:nstep))
 
     call msg("Print d(t)")
@@ -283,7 +284,7 @@ contains
 
 
     !DISTRIBUTION:
-    call msg("Print n(k,t):")
+    call msg("Print n(k,t)")
     call splot("nVStimeVSepsk3D.ipt",t(0:nstep),reduced_epsik,reduced_nk(0:nstep,:))
     call splot("nVStimeVSepi3D.ipt",t(0:nstep),reduced_epi,reduced_nk(0:nstep,:))
     do i=0,nstep

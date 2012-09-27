@@ -301,7 +301,7 @@ contains
     !$OMP PARALLEL SHARED(Ikless) PRIVATE(i,it,I1,I2,Fret,Fadv)
     !$OMP DO
     do it=0,Nt
-       forall(i=0:Nt)Fret(i) = GkretF(it,i)
+       forall(i=0:it)Fret(i) = GkretF(it,i)
        I1=sum(Fret(0:it)*Vless(0:it))*dt
        I2=sum(Gk%less(it,0:Nt)*Vadv(0:Nt))*dt
        Ikless(it)=I1 + I2
@@ -317,7 +317,7 @@ contains
     !$OMP PARALLEL SHARED(Ikgtr) PRIVATE(i,itp,I1,I2,Fadv)
     !$OMP DO
     do itp=0,Nt
-       forall(i=0:Nt)Fadv(i) = conjg(GkretF(itp,i))
+       forall(i=0:itp)Fadv(i) = conjg(GkretF(itp,i))
        I1=sum(Vret(0:Nt)*Gk%gtr(0:Nt,itp))*dt
        I2=sum(Vgtr(0:itp)*Fadv(0:itp))*dt
        Ikgtr(itp)=I1 + I2
