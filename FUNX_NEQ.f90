@@ -14,6 +14,7 @@ module FUNX_NEQ
   public                           :: neq_update_weiss_field
   public                           :: print_observables
   public                           :: convergence_check
+
 contains
 
 

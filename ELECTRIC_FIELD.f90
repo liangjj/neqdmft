@@ -63,7 +63,6 @@ contains
     case("ac")
        field=-sin(Omega0*(t-t0))/Omega0
 
-
     case("ac1")
        field=-(t+sin(Omega0*(t-t0))/Omega0)
 

@@ -1,0 +1,125 @@
+(* Content-type: application/mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Mathematica 7.0' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       145,          7]
+NotebookDataLength[      3447,        116]
+NotebookOptionsPosition[      2981,         95]
+NotebookOutlinePosition[      3319,        110]
+CellTagsIndexPosition[      3276,        107]
+WindowFrame->Generic*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[BoxData[{
+ RowBox[{"t", "=."}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{"Atp", "[", "t_", "]"}], ":=", 
+  RowBox[{
+   RowBox[{"-", "\[CapitalEpsilon]"}], " ", "t"}]}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{"At", "[", 
+   RowBox[{"t_", ",", "\[CapitalOmega]_"}], "]"}], ":=", 
+  RowBox[{
+   RowBox[{"-", "\[CapitalEpsilon]"}], " ", 
+   RowBox[{
+    RowBox[{"Sin", "[", 
+     RowBox[{"\[CapitalOmega]", " ", "t"}], "]"}], "/", 
+    "\[CapitalOmega]"}]}]}]}], "Input",
+ CellChangeTimes->{{3.557652614754182*^9, 3.5576526380417023`*^9}, {
+  3.557652673320394*^9, 3.557652682898044*^9}, {3.5576527181711807`*^9, 
+  3.55765271971629*^9}, {3.557652767995117*^9, 3.557652829361588*^9}}],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"Integrate", "[", 
+   RowBox[{
+    RowBox[{"At", "[", 
+     RowBox[{
+      RowBox[{"T", "+", "x"}], ",", "\[CapitalOmega]"}], "]"}], ",", " ", 
+    RowBox[{"{", 
+     RowBox[{"x", ",", 
+      RowBox[{
+       RowBox[{"-", "t"}], "/", "2"}], ",", 
+      RowBox[{"t", "/", "2"}]}], "}"}]}], "]"}], "/", "t"}]], "Input",
+ CellChangeTimes->{{3.55765268803399*^9, 3.557652759858205*^9}, {
+   3.557652889180187*^9, 3.5576528892572937`*^9}, 3.557653452129134*^9, {
+   3.5576534975287237`*^9, 3.557653501750298*^9}}],
+
+Cell[BoxData[
+ RowBox[{"-", 
+  FractionBox[
+   RowBox[{"2", " ", "\[CapitalEpsilon]", " ", 
+    RowBox[{"Sin", "[", 
+     FractionBox[
+      RowBox[{"t", " ", "\[CapitalOmega]"}], "2"], "]"}], " ", 
+    RowBox[{"Sin", "[", 
+     RowBox[{"T", " ", "\[CapitalOmega]"}], "]"}]}], 
+   RowBox[{"t", " ", 
+    SuperscriptBox["\[CapitalOmega]", "2"]}]]}]], "Output",
+ CellChangeTimes->{{3.557652714309965*^9, 3.5576527605258827`*^9}, {
+   3.557652795921432*^9, 3.557652831790511*^9}, 3.55765288984552*^9, 
+   3.557653453655278*^9, 3.5576535032414913`*^9}]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"Integrate", "[", 
+   RowBox[{
+    RowBox[{"Atp", "[", 
+     RowBox[{"T", "+", "x"}], "]"}], ",", 
+    RowBox[{"{", 
+     RowBox[{"x", ",", 
+      RowBox[{
+       RowBox[{"-", "t"}], "/", "2"}], ",", 
+      RowBox[{"t", "/", "2"}]}], "}"}]}], "]"}], "/", "t"}]], "Input",
+ CellChangeTimes->{{3.557652832994958*^9, 3.55765284736874*^9}, {
+  3.557652892027853*^9, 3.557652892105617*^9}}],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"-", "T"}], " ", "\[CapitalEpsilon]"}]], "Output",
+ CellChangeTimes->{3.557652847927475*^9, 3.5576528925256433`*^9}]
+}, Open  ]]
+},
+WindowSize->{640, 750},
+WindowMargins->{{172, Automatic}, {Automatic, 77}},
+FrontEndVersion->"7.0 for Linux x86 (64-bit) (November 11, 2008)",
+StyleDefinitions->"Default.nb"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[546, 20, 693, 17, 77, "Input"],
+Cell[CellGroupData[{
+Cell[1264, 41, 541, 14, 32, "Input"],
+Cell[1808, 57, 548, 13, 56, "Output"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[2393, 75, 419, 12, 32, "Input"],
+Cell[2815, 89, 150, 3, 31, "Output"]
+}, Open  ]]
+}
+]
+*)
+
+(* End of internal cache information *)
