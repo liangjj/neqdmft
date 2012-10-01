@@ -1,0 +1,87 @@
+(* Content-type: application/mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Mathematica 7.0' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       145,          7]
+NotebookDataLength[      2406,         78]
+NotebookOptionsPosition[      2050,         61]
+NotebookOutlinePosition[      2389,         76]
+CellTagsIndexPosition[      2346,         73]
+WindowFrame->Generic*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[BoxData[""], "Input",
+ CellChangeTimes->{{3.55781533657157*^9, 3.557815337579372*^9}}],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[
+ RowBox[{"N", "[", 
+  RowBox[{
+   RowBox[{"BesselJZero", "[", 
+    RowBox[{"0", ",", 
+     RowBox[{"{", 
+      RowBox[{
+      "0", ",", "1", ",", "2", ",", "3", ",", "4", ",", "5", ",", "6", ",", 
+       "7"}], "}"}]}], "]"}], ",", "50"}], "]"}]], "Input",
+ CellChangeTimes->{{3.5578154787164497`*^9, 3.557815549435314*^9}, {
+  3.5578155822961817`*^9, 3.557815584055372*^9}, {3.557823181945738*^9, 
+  3.557823185817132*^9}}],
+
+Cell[BoxData[
+ RowBox[{"{", 
+  RowBox[{
+   RowBox[{"BesselJZero", "[", 
+    RowBox[{"0", ",", "0"}], "]"}], ",", 
+   "2.404825557695772768621631879326454643124244909145967135077953400812026821\
+67141`50.", ",", 
+   "5.520078110286310649596604112813027425221865478782911030275123993676126093\
+33641`50.", ",", 
+   "8.653727912911012216954198712660946685565795231275365468953628044731886662\
+50017`50.", ",", 
+   "11.79153443901428161374304491192545892202292469969544670732558051154519572\
+636728`50.", ",", 
+   "14.93091770848778594776259399738868220791585011563302815878506698381949800\
+292545`50.", ",", 
+   "18.07106396791092254314788297561817656024898674700132608642340574108357282\
+187092`50.", ",", 
+   "21.21163662987925895907839335052630683618180897597639983273820438083326368\
+400389`50."}], "}"}]], "Output",
+ CellChangeTimes->{{3.557815510180036*^9, 3.557815550128215*^9}, 
+   3.557815584471941*^9, 3.557823186923381*^9}]
+}, Open  ]]
+},
+WindowSize->{640, 750},
+WindowMargins->{{Automatic, 315}, {Automatic, 140}},
+FrontEndVersion->"7.0 for Linux x86 (64-bit) (November 11, 2008)",
+StyleDefinitions->"Default.nb"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[546, 20, 91, 1, 32, "Input"],
+Cell[CellGroupData[{
+Cell[662, 25, 438, 11, 32, "Input"],
+Cell[1103, 38, 931, 20, 172, "Output"]
+}, Open  ]]
+}
+]
+*)
+
+(* End of internal cache information *)

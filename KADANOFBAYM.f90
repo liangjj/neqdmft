@@ -444,7 +444,7 @@ contains
   function Hbar(ik,istep)
     integer,intent(in) :: ik,istep  
     integer      :: i,j
-    complex(8)   :: Hbar
+    real(8)      :: Hbar
     real(8)      :: tbar
     type(vect2D) :: kt,Ak
     tbar=t(istep) + dt/2.d0
@@ -457,7 +457,7 @@ contains
   function Hkt(ik,istep)
     integer,intent(in) :: ik,istep  
     integer      :: i,j
-    complex(8)   :: Hkt
+    real(8)      :: Hkt
     type(vect2D) :: kt,Ak
     i=ik2ix(ik)
     j=ik2iy(ik)
@@ -477,7 +477,7 @@ contains
   function UdeltaF(ik,istep) 
     integer,intent(in)    :: ik,istep
     complex(8) :: UdeltaF
-    complex(8) :: arg
+    real(8) :: arg
     arg=Hbar(ik,istep)
     UdeltaF=exp(-xi*arg*dt)
   end function UdeltaF
@@ -493,7 +493,7 @@ contains
   function VdeltaF(ik,istep)
     integer,intent(in)    :: ik,istep
     complex(8) :: VdeltaF
-    complex(8) :: arg
+    real(8) :: arg
     arg=Hbar(ik,istep)
     VdeltaF=exp(-xi*arg*dt)
     if(abs(arg*dt) <= 1.d-5)then
@@ -629,7 +629,7 @@ contains
           gf%gtr%t(i-j)  = locG%gtr(i,j)
           gf%ret%t(i-j)  = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
        end forall
-       if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
+       !if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
        call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ;  gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)
        call splot("locGless_t.ipt",t,gf%less%t,append=TT)
        call splot("locGgtr_t.ipt",t,gf%gtr%t,append=TT)

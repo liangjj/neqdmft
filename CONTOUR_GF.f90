@@ -153,10 +153,10 @@ contains
     character(len=*) :: file
     inquire(file=trim(file)//"_less.data",exist=bool1)
     if(.not.bool1)inquire(file=trim(file)//"_less.data.gz",exist=bool1)
-    if(.not.bool1)call warning("Can not read "//trim(file)//"_less.data")
+    !if(.not.bool1)call warning("Can not read "//trim(file)//"_less.data")
     inquire(file=trim(file)//"_gtr.data",exist=bool2)
     if(.not.bool2)inquire(file=trim(file)//"_gtr.data.gz",exist=bool2)
-    if(.not.bool2)call warning("Can not read "//trim(file)//"_gtr.data")
+    !if(.not.bool2)call warning("Can not read "//trim(file)//"_gtr.data")
     check=bool1.AND.bool2
   end function inquire_keldysh_contour_gf
 

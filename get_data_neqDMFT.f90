@@ -3,7 +3,7 @@ program getDATA
   USE ELECTRIC_FIELD
   USE BATH
   USE FUNX_NEQ
-  USE DLPLOT
+  !USE DLPLOT
   implicit none
   !Add here the extra variables 
   integer                                :: i,j,ik,loop,narg,iarg,k,ia,ir,irel,iave
@@ -293,13 +293,15 @@ contains
 
     !Fermi Surface plot:
     if(Efield/=0.d0 .or. Vpd/=0.0)then
-       call dplot_3d_intensity_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
+       !call dplot_3d_intensity_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
+       call splot("3dFSVSpiVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
     else
-       call dplot_3d_intensity("FSVSpi3D","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
+       !call dplot_3d_intensity("FSVSpi3D","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
+       call splot("3dFSVSpi",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
     endif
 
     !Current Vector Field:
-    if(Efield/=0.d0 .AND. plotVF)call dplot_vector_field("vf_JfieldVSkVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,Jkvec(0:nstep,:,:)%x,Jkvec(0:nstep,:,:)%y)
+    !if(Efield/=0.d0 .AND. plotVF)call dplot_vector_field("vf_JfieldVSkVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,Jkvec(0:nstep,:,:)%x,Jkvec(0:nstep,:,:)%y)
 
     if(fchi)then
        call splot("sigma_cond.ipt",t(0:nstep),t(0:nstep),scond(1,1,0:nstep,0:nstep))
@@ -309,8 +311,8 @@ contains
     !Local functions:
     !===========================================================================
     if(.not.plot3D)then         !functions have not be plotted during run, plot them now
-       if(Efield/=0.d0 .or. Vpd/=0.0)call dplot_3d_surface_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",&
-            kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
+       !if(Efield/=0.d0 .or. Vpd/=0.0)call dplot_3d_surface_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",&
+       !kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
        call create_data_dir("PLOT")
        call plot_keldysh_contour_gf(guessG0,t(0:),"PLOT/guessG0")
        call plot_keldysh_contour_gf(G0,t(0:),"PLOT/G0")
@@ -321,7 +323,6 @@ contains
     call system("rm -rf "//dir//"/*3D 2>/dev/null")
     call system("rm -rf "//dir//"/gif_* 2>/dev/null")
     call system("mv -vf  gif_* vf_* 3d* *3D* nVSepi.ipt *cond* "//dir//"/ 2>/dev/null")
-
     return
   end subroutine evaluate_print_observables
   !+-------------------------------------------------------------------+
@@ -353,9 +354,6 @@ contains
        gf0%less%t(i-j)= G0%less(i,j)
        gf0%gtr%t(i-j) = G0%gtr(i,j)
        gf0%ret%t(i-j) = G0ret(i,j)
-       ! gf%less%t(i-j) = impGless(i,j)
-       ! gf%gtr%t(i-j)  = impGgtr(i,j)
-       ! gf%ret%t(i-j)  = impGret(i,j)
        sf%less%t(i-j) = Sigma%less(i,j)
        sf%gtr%t(i-j)  = Sigma%gtr(i,j)
        sf%ret%t(i-j)  = Sret(i,j)
@@ -372,9 +370,6 @@ contains
        call splot(dir//"/G0gtr_t.ipt",t(-nstep:nstep),gf0%gtr%t)
        call splot(dir//"/G0ret_t.ipt",t(-nstep:nstep),gf0%ret%t)
     endif
-    ! call splot(dir//"/impGless_t.ipt",t(-nstep:nstep),gf%less%t)
-    ! call splot(dir//"/impGgtr_t.ipt",t(-nstep:nstep),gf%gtr%t)
-    ! call splot(dir//"/impGret_t.ipt",t(-nstep:nstep),gf%ret%t)
     call splot(dir//"/Sless_t.ipt",t(-nstep:nstep),sf%less%t)
     call splot(dir//"/Sgtr_t.ipt",t(-nstep:nstep),sf%gtr%t)
     call splot(dir//"/Sret_t.ipt",t(-nstep:nstep),sf%ret%t)
@@ -390,15 +385,15 @@ contains
     else
        call splot(dir//"/G0ret_realw.ipt",wr,gf0%ret%t)
     endif
-    ! call splot(dir//"/impGret_realw.ipt",wr,gf%ret%t)
     call splot(dir//"/Sret_realw.ipt",wr,sf%ret%t)
     call splot(dir//"/DOS.ipt",wr,-aimag(gf%ret%t)/pi)
 
-    forall(i=0:nstep,j=0:nstep)gtkel(i-j) = locG%less(i,j)
+    forall(i=0:nstep,j=0:nstep)gtkel(i-j) = locG%less(i,j)+locG%gtr(i,j)
     call fftgf_rt2rw(gtkel,gfkel,nstep) ; gfkel=gfkel*dt ; call swap_fftrt2rw(gfkel)
-    phi(1:(2*nstep-1)) = xi*gfkel(1:(2*nstep-1))/aimag(gf%ret%t(1:(2*nstep-1)))/2.d0
+    call splot(dir//"/locGkel_realw.ipt",wr,gfkel)
+    phi = xi*gfkel/aimag(gf%ret%w)/2.d0
     do i=1,2*nstep
-       if(wr(i)>5.d0)exit
+       if(wr(i)>-1.d0)exit
     enddo
     call splot(dir//"/phi_realw.ipt",wr(i:(2*nstep-i)),phi(i:(2*nstep-i)))
     return

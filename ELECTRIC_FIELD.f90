@@ -17,25 +17,27 @@ MODULE ELECTRIC_FIELD
 contains
 
   !+------------------------------------------------------------+
-  !PURPOSE: set the electric field vector using given direction
+  !PURPOSE: set the normalized electric field versors using given direction
   !+------------------------------------------------------------+
   function set_efield_vector(Ex,Ey) result(E)
     type(vect2D)  :: E
     real(8)       :: Ex,Ey
     real(8)       :: modulo
     integer       :: i
-
+    !Normalize the Electric Field components
+    !Keep unaltered the Electric Field Strenght Efield=E0
     modulo=sqrt(Ex**2+Ey**2)
-    if(modulo/=1)then
-       Ex=Ex/modulo
-       Ey=Ey/modulo
-    endif
+    ! Ex=Ex/modulo
+    ! Ey=Ey/modulo
     E%x=Ex;E%y=Ey
+    Efield=Efield/modulo
+    call msg("Ex="//trim(txtfy(E%x)))
+    call msg("Ey="//trim(txtfy(E%y)))
+    call msg("Efield="//trim(txtfy(Efield)),id=0)
     if(alat==0)then
        print*, "a_lat=0! EXIT"
        stop
     endif
-    E=Efield*E                  !Normalized Electric field vector    
   end function set_efield_vector
 
 
@@ -45,38 +47,42 @@ contains
   pure function Afield(t,E)
     type(vect2D),intent(in) :: E
     real(8),intent(in)      :: t
-    real(8)                 :: field,tau1
+    real(8)                 :: ftime,tau1
     type(vect2D)            :: Afield
     complex(8)              :: zp,zm
 
     select case(field_profile)
-    case default                !!CONSTANT ELECTRIC FIELD:
-       field=-(step(t-t0)*(t-t0 + (t1-t)*step(t-t1) - (t1-t0)*step(t0-t1)))
+    case default                !!DC ELECTRIC FIELD:
+       ftime=-(step(t-t0)*(t-t0 + (t1-t)*step(t-t1) - (t1-t0)*step(t0-t1)))
+
+    case("ac")                  !AC ELECTRIC FIELD
+       ftime=-sin(Omega0*(t-t0))/Omega0
+
+    case("ac1")                 !MODIFIED AC ELECTRIC FIELD (super-bloch)
+       !ftime=-(t+sin(Omega0*(t-t0))/Omega0)
+       ftime =-(Omega0/Efield + sin(Omega0*(t-t0))/Omega0)
 
     case("pulse")               !!LIGHT PULSE (for Pump&Probe)
        tau1=tau0/pi2
        zp=cmplx(t-t0,tau1**2*w0,8)/(sqrt(2.d0)*tau1)
        zm=cmplx(t-t0,-tau1**2*w0,8)/(sqrt(2.d0)*tau1)
-       field =-real(sqrt(pi/2.d0)/2.d0*tau1*exp(-(tau1*w0)**2/2.d0)*(zerf(zm)+zerf(zp)),8)
+       ftime =-real(sqrt(pi/2.d0)/2.d0*tau1*exp(-(tau1*w0)**2/2.d0)*(zerf(zm)+zerf(zp)),8)
 
-
-    case("ac")
-       field=-sin(Omega0*(t-t0))/Omega0
-
-    case("ac1")
-       field=-(t+sin(Omega0*(t-t0))/Omega0)
-
-    case("ramp")                !!RAMP CONSTANT FIELD:
-       field=-(24.d0*pi*(t+(t-t0)*step(t-t0)+2.d0*(t1-t)*step(t-t0)*step(t-t1)-&
+    case("ramp")                !!RAMP TO CONSTANT DC-FIELD:
+       ftime=-(24.d0*pi*(t+(t-t0)*step(t-t0)+2.d0*(t1-t)*step(t-t0)*step(t-t1)-&
             2.d0*(t0-t1)*step(t-t0)*step(t0-t1))+                              &
             27.d0*t0*(step(t-t0)-1.d0)*Sin(pi*t/t0) - t0*(step(t-t0)-1.d0)*Sin(3.d0*pi*t/t0))/48.d0/pi
 
        !!add more here:
     end select
-
     !-----------------------------
-    Afield=E*field
+
+    Afield=E*Efield*ftime       !A(t) = E0*F(t)*(e_x + e_y)
+
   end function Afield
+
+
+
   !***************************************************************
   !***************************************************************
   !***************************************************************
@@ -88,11 +94,24 @@ contains
   subroutine print_Afield_form(t)
     real(8),dimension(:) :: t
     integer              :: i
+    type(vect2D)         :: A
+    real(8),dimension(size(t)) :: Ax,Ay,Ex,Ey
+    do i=1,size(t)
+       A=Afield(t(i),Ek)
+       Ax(i)=A%x
+       Ay(i)=A%y
+    enddo
+    Ex = deriv(Ax,dt)
+    Ey = deriv(Ay,dt)
     open(10,file="Avector_shape.ipt")
+    open(11,file="Efield_shape.ipt")
     do i=1,size(t)
        write(10,*)t(i),Afield(t(i),Ek)
+       write(11,*)t(i),Ex(i),Ey(i)
     enddo
     close(10)
+    close(11)
+    if(field_profile=="ac")call msg("Root condition: "//trim(txtfy(bessel_j0(Efield/Omega0))))
   end subroutine print_Afield_form
 
 

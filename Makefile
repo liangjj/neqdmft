@@ -30,7 +30,7 @@ debug:	compile
 
 compile: version $(OBJS)
 	@echo " ..................... compile ........................... "
-	$(FC)  $(FLAG) $(OBJS) $(EXE).f90 -o $(DIREXE)/$(EXE)_$(BRANCH) $(ARGS)
+	$(FC) $(FLAG) $(OBJS) $(EXE).f90 -o $(DIREXE)/$(EXE)_$(BRANCH) $(ARGS)
 	@echo " ...................... done .............................. "
 	@echo ""
 	@echo ""
@@ -39,9 +39,12 @@ compile: version $(OBJS)
 
 
 #==============DATA EXTRACTION======================================
+data:	FLAG=$(STD)
+	ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS) #$(DSL_MODS) $(DSL_LIBS)
+	BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
 data: 	version $(OBJS)
 	@echo " ........... compile: getdata ........... "
-	${FC} ${STD} $(OBJS) get_data_$(EXE).f90 -o ${DIREXE}/get_data_$(EXE)_$(BRANCH) $(LIBDMFT) ${DSL_MODS} ${SFMODS} ${SFLIBS} ${DSL_LIBS}
+	${FC} ${FLAG} $(OBJS) get_data_$(EXE).f90 -o ${DIREXE}/get_data_$(EXE)_$(BRANCH) $(ARGS) 
 	@echo ""
 	@echo " ...................... done .............................. "
 

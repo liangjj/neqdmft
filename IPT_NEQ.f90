@@ -28,6 +28,8 @@ contains
     real(8)                          :: nless,ngtr,xmu_,beta_
     complex(8)                       :: peso
     logical                          :: checkS,checkG0,checkNk
+    real(8) :: xgrid(2*Nstep)
+    complex(8) :: G0ret_t(-nstep:nstep),G0ret_w(2*nstep),G0mat(0:Nstep,0:Nstep),G0tmp(0:nstep,0:nstep)
 
     call create_data_dir("InitialConditions")
 
