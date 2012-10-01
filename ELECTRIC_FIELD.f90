@@ -27,13 +27,12 @@ contains
     !Normalize the Electric Field components
     !Keep unaltered the Electric Field Strenght Efield=E0
     modulo=sqrt(Ex**2+Ey**2)
-    ! Ex=Ex/modulo
-    ! Ey=Ey/modulo
+    Ex=Ex/modulo
+    Ey=Ey/modulo
     E%x=Ex;E%y=Ey
-    Efield=Efield/modulo
     call msg("Ex="//trim(txtfy(E%x)))
     call msg("Ey="//trim(txtfy(E%y)))
-    call msg("Efield="//trim(txtfy(Efield)),id=0)
+    call msg("|E|=E0="//trim(txtfy(Efield/modulo)),id=0)
     if(alat==0)then
        print*, "a_lat=0! EXIT"
        stop
