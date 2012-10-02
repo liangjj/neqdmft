@@ -42,9 +42,10 @@ contains
 
     call massive_allocation()
 
-    call get_thermostat_bath()
+    !call get_thermostat_bath()
 
     !Read the functions:
+    call read_keldysh_contour_gf(S0,"Bath/S0")
     call read_keldysh_contour_gf(G0,reg_filename(data_dir)//"/G0")
     call read_keldysh_contour_gf(locG,reg_filename(data_dir)//"/locG")
     call read_keldysh_contour_gf(locG1,reg_filename(data_dir)//"/locG1")
@@ -142,10 +143,10 @@ contains
     real(8),dimension(:,:),allocatable        :: reduced_nk,reduced_npi,reduced_epi
     real(8),dimension(2,2,0:nstep,0:nstep)    :: scond,sscond
 
-    call msg("Print Out Results (may take a while):")
+    call msg("Print Out Results (may take a while)")
 
     !SORTING:
-    call msg("Sorting:")
+    call msg("Sorting")
     allocate(sorted_epsik(Lk),sorted_ik(Lk))
 
     sorted_epsik=epsik ; call sort_array(sorted_epsik,sorted_ik)
@@ -154,13 +155,13 @@ contains
 
 
     !COVARIANT transformation: \ka --> \pi = \ka + \Ek*t
-    call msg("Covariant transf.:")
+    call msg("Covariant transformation")
     call shift_kpoint(nk(0:nstep,1:Lk), npi(0:nstep,1:Lk))
     call shift_kpoint(sorted_nk(0:nstep,1:Lk), sorted_npi(0:nstep,1:Lk))
 
 
     !REDUCTION of the k-grid:
-    call msg("Reducing BZ:")
+    call msg("Reducing BZ")
     step=Lk/Lkreduced; if(step==0)step=1
     call square_lattice_reduxGrid_dimension(Lk,step,Lkreduced)
     allocate(reduced_ik(Lkreduced),&
@@ -173,7 +174,7 @@ contains
     forall(ik=1:Lkreduced)reduced_npi(0:nstep,ik) = sorted_npi(0:nstep,reduced_ik(ik))
 
     !Get the CURRENT Jloc(t)=\sum_\ka J_\ka(t) = -e n_\ka(t)*v_\ka(t)
-    call msg("Current Field:")
+    call msg("Current Field")
     Jloc=Vzero ; Jheat=Vzero   ;Stot=0.d0
     do ik=1,Lk
        ix=ik2ix(ik);iy=ik2iy(ik)
@@ -259,11 +260,11 @@ contains
 
     !====================================================================================
     !PRINT:
-    call msg("Print n(t):")
+    call msg("Print n(t)")
     call splot(dir//"/nVStime.ipt",t(0:nstep),2.d0*nt(0:nstep))
 
 
-    call msg("Print J(t):")
+    call msg("Print J(t)")
     if(Efield/=0.d0)then
        call splot(dir//"/JlocVStime.ipt",t(0:nstep),Jloc(0:nstep)%x,Jloc(0:nstep)%y)
        call splot(dir//"/absJlocVStime.ipt",t(0:nstep),Jint(0:nstep))
@@ -286,17 +287,14 @@ contains
     !DISTRIBUTION:
     call msg("Print n(k,t)")
     call splot("nVStimeVSepsk3D.ipt",t(0:nstep),reduced_epsik,reduced_nk(0:nstep,:))
-    call splot("nVStimeVSepi3D.ipt",t(0:nstep),reduced_epi,reduced_nk(0:nstep,:))
     do i=0,nstep
        call splot("nVSepi.ipt",reduced_epsik(:),reduced_npi(i,:),append=TT)
     enddo
 
     !Fermi Surface plot:
     if(Efield/=0.d0 .or. Vpd/=0.0)then
-       !call dplot_3d_intensity_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
-       call splot("3dFSVSpiVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
+       call splot("3dFSVSpiVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:Nstep))
     else
-       !call dplot_3d_intensity("FSVSpi3D","$k_x$","$k_y$","$FS(k_x,k_y)$",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
        call splot("3dFSVSpi",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
     endif
 
@@ -411,7 +409,7 @@ contains
     call init_tave(t,tave,nstep)
 
     !Perform the Wigner Rotation:
-    print*,"Perform Wigner Rotation:"
+    call msg("Perform Wigner Rotation")
     wgnGless= wigner_transform(locG%less,nstep)
     wgnGret = wigner_transform(locGret,nstep)
     wgnSless= wigner_transform(Sigma%less,nstep)
