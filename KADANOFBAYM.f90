@@ -13,6 +13,7 @@ module KADANOFBAYM
   USE FUNX_NEQ
   implicit none
   private
+
   !Initial conditions arrays:
   complex(8),allocatable,dimension(:)     :: icGkless
   !k-dependent GF:

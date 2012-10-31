@@ -78,13 +78,13 @@ MODULE VARS_GLOBAL
 
   !ELECTRIC FIELD VARIABLES (& NML):
   !=========================================================  
-  type(vect2D)    :: Ek            !Electric field vector
-  real(8)         :: Efield        !Electric field strength
-  real(8)         :: Ex,Ey         !Electric field vectors as input
-  real(8)         :: t0,t1         !turn on/off time, t0 also center of the pulse
-  real(8)         :: w0,tau0       !parameters for pulsed light
-  real(8)         :: omega0        !parameter for the Oscilatting field
-
+  type(vect2D)    :: Ek         !Electric field vector
+  real(8)         :: Efield     !Electric field strength
+  real(8)         :: Ex,Ey      !Electric field vectors as input
+  real(8)         :: t0,t1      !turn on/off time, t0 also center of the pulse
+  real(8)         :: w0,tau0    !parameters for pulsed light
+  real(8)         :: omega0     !parameter for the Oscilatting field
+  real(8)         :: E1         !Electric field strenght for the AC+DC case (tune to resonate)
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
@@ -132,7 +132,7 @@ MODULE VARS_GLOBAL
   !NAMELISTS:
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
-       Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,Nx,Ny,&
+       Ex,Ey,t0,t1,tau0,w0,omega0,E1,field_profile,Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
        method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
        solve_eq,g0loc_guess,volterra,&
@@ -193,7 +193,8 @@ contains
          ' t1=[10^6]                -- Switching off time parameter for the Electric field',&
          ' tau0=[1]                 -- Width of gaussian packect envelope for the impulsive Electric field',&
          ' w0=[20]                  -- Frequency of the of the impulsive Electric field',&
-         ' omega0=[pi]              -- Frequency of the of the Oscillating Electric field',&        
+         ' omega0=[pi/4]            -- Frequency of the of the Oscillating Electric field',&        
+         ' E1=[1]                   -- Strenght of the electric field for the AC+DC case, to be tuned to resonate',&        
          ' field_profile=[constant] -- Type of electric field profile (constant,gaussian,ramp)',&
          ' irdeq=[F]        -- ',&
          ' method=[ipt]     -- ',&
@@ -242,7 +243,8 @@ contains
     t1            = 1000000.d0              !infinite time SHIT!!
     tau0          = 1.d0
     w0            = 20.d0
-    omega0        =pi
+    omega0        = pi/4.d0
+    E1            = 1.d0
     field_profile ='constant'
     !     Flags:
     method        = 'ipt'

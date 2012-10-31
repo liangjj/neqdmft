@@ -30,13 +30,23 @@ contains
     Ex=Ex/modulo
     Ey=Ey/modulo
     E%x=Ex;E%y=Ey
-    call msg("Ex="//trim(txtfy(E%x)))
-    call msg("Ey="//trim(txtfy(E%y)))
     call msg("|E|=E0="//trim(txtfy(Efield/modulo)),id=0)
-    if(alat==0)then
-       print*, "a_lat=0! EXIT"
-       stop
-    endif
+    if(alat==0)call error("a_lat=0! EXIT")
+    select case(field_profile)
+    case default
+       stop "ELECTRIC_FIELD/Afield: wrong field_profile. set:dc,ac,acdc,pulse,ramp"
+    case ("dc")                !DC ELECTRIC FIELD:
+       return
+    case("ac")                  !AC ELECTRIC FIELD
+       return
+    case("acdc")                !AC+DC ELECTRIC FIELD (super-bloch)
+       return
+    case("pulse")               !LIGHT PULSE (for Pump&Probe)
+       return
+    case("ramp")                !RAMP TO CONSTANT DC-FIELD:
+       return
+       !!add more here:
+    end select
   end function set_efield_vector
 
 
@@ -51,32 +61,38 @@ contains
     complex(8)              :: zp,zm
 
     select case(field_profile)
-    case default                !!DC ELECTRIC FIELD:
+    case ("dc")                !DC ELECTRIC FIELD:
        ftime=-(step(t-t0)*(t-t0 + (t1-t)*step(t-t1) - (t1-t0)*step(t0-t1)))
+       Afield=E*Efield*ftime       !A(t) = E0*F(t)*(e_x + e_y)
 
     case("ac")                  !AC ELECTRIC FIELD
        ftime=-sin(Omega0*(t-t0))/Omega0
+       Afield=E*Efield*ftime       !A(t) = E0*F(t)*(e_x + e_y)
 
-    case("ac1")                 !MODIFIED AC ELECTRIC FIELD (super-bloch)
+    case("acdc")                !AC+DC ELECTRIC FIELD (super-bloch)
        !ftime=-(t+sin(Omega0*(t-t0))/Omega0)
-       ftime =-(Omega0/Efield + sin(Omega0*(t-t0))/Omega0)
+       ftime =-sin(Omega0*(t-t0))/Omega0
+       Afield=E*(Efield*ftime - E1*t)       !A(t) = E0*F(t)*(e_x + e_y)
 
-    case("pulse")               !!LIGHT PULSE (for Pump&Probe)
+    case("pulse")               !LIGHT PULSE (for Pump&Probe)
        tau1=tau0/pi2
        zp=cmplx(t-t0,tau1**2*w0,8)/(sqrt(2.d0)*tau1)
        zm=cmplx(t-t0,-tau1**2*w0,8)/(sqrt(2.d0)*tau1)
        ftime =-real(sqrt(pi/2.d0)/2.d0*tau1*exp(-(tau1*w0)**2/2.d0)*(zerf(zm)+zerf(zp)),8)
+       Afield=E*Efield*ftime       !A(t) = E0*F(t)*(e_x + e_y)
 
-    case("ramp")                !!RAMP TO CONSTANT DC-FIELD:
+    case("ramp")                !RAMP TO CONSTANT DC-FIELD:
        ftime=-(24.d0*pi*(t+(t-t0)*step(t-t0)+2.d0*(t1-t)*step(t-t0)*step(t-t1)-&
             2.d0*(t0-t1)*step(t-t0)*step(t0-t1))+                              &
-            27.d0*t0*(step(t-t0)-1.d0)*Sin(pi*t/t0) - t0*(step(t-t0)-1.d0)*Sin(3.d0*pi*t/t0))/48.d0/pi
+            27.d0*t0*(step(t-t0)-1.d0)*Sin(pi*t/t0) - &
+            t0*(step(t-t0)-1.d0)*Sin(3.d0*pi*t/t0))/48.d0/pi
+       Afield=E*Efield*ftime       !A(t) = E0*F(t)*(e_x + e_y)
 
        !!add more here:
     end select
     !-----------------------------
 
-    Afield=E*Efield*ftime       !A(t) = E0*F(t)*(e_x + e_y)
+
 
   end function Afield
 

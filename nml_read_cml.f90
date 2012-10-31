@@ -21,6 +21,7 @@
      case("TAU0")	;read(nml_var%value,*)tau0
      case("W0")		;read(nml_var%value,*)w0
      case("OMEGA0")	;read(nml_var%value,*)omega0
+     case("E1")	        ;read(nml_var%value,*)E1
      case("FIELD_PROFILE");read(nml_var%value,*)field_profile
         !flags:
      case("IRDEQ")	        ;read(nml_var%value,*)irdeq
@@ -31,7 +32,6 @@
      case("PLOT3D")		;read(nml_var%value,*)plot3D
      case("FCHI")		;read(nml_var%value,*)fchi
      case("EQUENCH")		;read(nml_var%value,*)equench
-
         !parameters:
      case("L")		;read(nml_var%value,*)L
      case("LTAU")	;read(nml_var%value,*)Ltau
@@ -54,6 +54,6 @@
      case("SOLVE_EQ")   ;read(nml_var%value,*)solve_eq
      case("G0LOC_GUESS");read(nml_var%value,*)g0loc_guess
      case default
-        print*,"No corresponging variable in NML"
+        print*,"No corresponding variable in NML"
      end select
   enddo

@@ -127,8 +127,9 @@ contains
     integer                                   :: i,ik,ix,iy,it,is,step
     complex(8)                                :: I1,Ib
     real(8)                                   :: Wtot
+    real(8),dimension(Nstep) :: intJ
     type(vect2D)                              :: Ak,kt,Jk
-    type(vect2D),dimension(0:nstep)           :: Jloc,Jheat !local Current 
+    type(vect2D),dimension(0:nstep)           :: Jloc,Jheat,Xpos !local Current 
     type(vect2D),dimension(0:nstep,0:Nx,0:Ny) :: Jkvec,Tloc                  !current vector field
     real(8),dimension(0:nstep,Lk)             :: npi                    !covariant occupation n(\pi=\ka+\Ekt) 
     real(8),dimension(0:nstep)                :: nt,Jint,Stot   !occupation(time)
@@ -233,6 +234,22 @@ contains
     Jint=modulo(Jloc)!Jloc%x + Jloc%y
     Wtot=sum(Jint(0:))*Efield*dt
 
+
+    do i=0,nstep
+       Xpos(i)=0.d0
+       do ik=1,Lk
+          ix=ik2ix(ik);iy=ik2iy(ik)          
+          do k=0,i
+             Jk=Jkvec(k,ix,iy)
+             Xpos(i)=Xpos(i)+Jk*wt(ik)*dt
+          enddo
+       enddo
+    enddo
+
+    do i=1,Nstep
+       intJ(i)=sum(Jint(0:i))*dt/t(i)
+    enddo
+
     !Double OCCUPATION:
     doble= 0.5d0*(2.d0*nt) - 0.25d0 ; if(U/=0)doble = Epot/U + 0.5d0*(2.d0*nt)- 0.25d0
 
@@ -265,11 +282,10 @@ contains
 
 
     call msg("Print J(t)")
-    if(Efield/=0.d0)then
-       call splot(dir//"/JlocVStime.ipt",t(0:nstep),Jloc(0:nstep)%x,Jloc(0:nstep)%y)
-       call splot(dir//"/absJlocVStime.ipt",t(0:nstep),Jint(0:nstep))
-       call splot(dir//"/JheatVStime.ipt",t(0:nstep),Jheat(0:nstep)%x+Jheat(0:nstep)%y)
-    endif
+    call splot(dir//"/JlocVStime.ipt",t(0:nstep),Jloc(0:nstep)%x,Jloc(0:nstep)%y,Jint(0:nstep))
+    call splot(dir//"/intJVStime.ipt",t(1:nstep),intJ(1:nstep))
+    call splot(dir//"/JheatVStime.ipt",t(0:nstep),Jheat(0:nstep)%x,Jheat(0:nstep)%y)
+    call splot(dir//"/RposVStime.ipt",t(0:nstep),Xpos(0:nstep)%x,Xpos(0:nstep)%y,modulo(Xpos))
 
     call msg("Print Ex(t)")
     call splot(dir//"/EkinVStime.ipt",t(0:nstep),Ekin(0:nstep))
@@ -277,6 +293,7 @@ contains
     call splot(dir//"/EhybVStime.ipt",t(0:nstep),Eb(0:nstep))
     call splot(dir//"/EtotVStime.ipt",t(0:nstep),Etot(0:nstep),Etot(0:nstep)+Eb(0:nstep))
     call splot(dir//"/WtotVSefield.ipt",Efield,Wtot)
+
     call msg("Print S(t)")
     call splot(dir//"/StotVStime.ipt",t(0:nstep),Stot(0:nstep))
 
@@ -292,11 +309,8 @@ contains
     enddo
 
     !Fermi Surface plot:
-    if(Efield/=0.d0 .or. Vpd/=0.0)then
-       call splot("3dFSVSpiVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:Nstep))
-    else
-       call splot("3dFSVSpi",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,nstep))
-    endif
+    call msg("Print FS(k,t)")
+    call splot("3dFSVSpiVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:Nstep))
 
     !Current Vector Field:
     !if(Efield/=0.d0 .AND. plotVF)call dplot_vector_field("vf_JfieldVSkVSt",kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,Jkvec(0:nstep,:,:)%x,Jkvec(0:nstep,:,:)%y)

@@ -88,10 +88,7 @@ contains
        enddo
        call splot("nVStime.ipt",t(0:nstep),2.d0*nt(0:nstep),append=TT)
        modJloc(0:nstep)=modulo(Jloc(0:nstep))
-       if(Efield/=0.d0)then
-          call splot("JlocVStime.ipt",t(0:nstep),Jloc(0:nstep)%x,Jloc(0:nstep)%y,append=TT)
-          call splot("modJlocVStime.ipt",t(0:nstep),modJloc(0:nstep),append=TT)
-       endif
+       call splot("JlocVStime.ipt",t(0:nstep),Jloc(0:nstep)%x,Jloc(0:nstep)%y,append=TT)
     endif
   end subroutine print_observables
 
