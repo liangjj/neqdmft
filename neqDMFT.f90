@@ -10,7 +10,7 @@ program neqDMFT
   USE BATH                        !contains bath inizialization
   USE EQUILIBRIUM                 !solves the equilibrium problem w/ IPT
   USE IPT_NEQ                     !performs the non-eq. IPT. Write Sigma
-  USE FUNX_NEQ                    !contains routines for WF update and printing.
+  USE UPDATE_WF                   !contains routines for WF update and printing.
   USE KADANOFBAYM                 !solves KB equations numerically to get k-sum
   implicit none
 
@@ -22,33 +22,49 @@ program neqDMFT
   write(*,"(A,I4,A,I4,A)")'Processor ',mpiID,' of ',mpiSIZE,' is alive'
   call MPI_BARRIER(MPI_COMM_WORLD,mpiERR)
 
+  !READ THE INPUT FILE (in vars_global):
   call read_input_init("inputFILE.in")
+
+  !BUILD THE TIME,FREQUENCY GRIDS:
   include "grid_setup.f90"
-  include "build_square_lattice.f90"
 
-  !SET THE ELECTRIC FIELD:use constant field by default
-  Ek = set_efield_vector(Ex,Ey)
-  if(mpiID==0)call print_Afield_form(t(0:nstep))
+  !BUILD THE 2D-SQUARE LATTICE STRUCTURE (in lib/square_lattice):
+  Lk   = square_lattice_dimension(Nx,Ny)
+  allocate(epsik(Lk),wt(Lk))
+  wt   = square_lattice_structure(Lk,Nx,Ny)
+  epsik= square_lattice_dispersion_array(Lk,ts=ts)
+  if(mpiID==0)call get_free_dos(epsik,wt)
 
-  !STARTS THE REAL WORK:
-  call global_memory_allocation !allocate functions in the memory
-  call get_thermostat_bath()    !get the dissipative bath functions
+  !SET THE ELECTRIC FIELD (in electric_field):
+  call set_efield_vector()
 
-  !initialize the run using different guess.
-  !bridge between the eq. and the non-eq solution
-  call solve_equilibrium_ipt()
-  call neq_init_run            
+  !ALLOCATE FUNCTIONS IN THE MEMORY (in vars_global):
+  call global_memory_allocation
+
+  !BUILD THE  DISSIPATIVE BATH FUNCTIONS (in bath):
+  call get_thermostat_bath()
+
+  !SOLVE THE EQUILIBRIUM PROBLEM WITH IPT (in equilibrium):
+  if(solveEQ)call solve_equilibrium_ipt()
+
+
+
+  !START DMFT LOOP SEQUENCE:
+  !==============================================================
+
+  !initialize the run by guessing/reading the self-energy functions (in IPT_NEQ.f90):
+  call neq_init_run
 
   iloop=0;converged=.false.
   do while (.not.converged);iloop=iloop+1
      call start_loop(iloop,nloop,"DMFT-loop",unit=6)
      !
-     call neq_get_localgf        !-|
-     call neq_update_weiss_field !-|SELF-CONSISTENCY
+     call neq_get_localgf        !-|(in kadanoff-baym)
+     call neq_update_weiss_field !-|SELF-CONSISTENCY (in funx_neq)
      !
-     call neq_solve_ipt          !-|IMPURITY SOLVER
+     call neq_solve_ipt          !-|IMPURITY SOLVER (in ipt_neq)
      !
-     call print_observables
+     call print_observables      !(in funx_neq)
      converged = convergence_check()
      call MPI_BCAST(converged,1,MPI_LOGICAL,0,MPI_COMM_WORLD,mpiERR)
      !

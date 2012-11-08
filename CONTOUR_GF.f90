@@ -6,6 +6,10 @@ MODULE CONTOUR_GF
   implicit none
   private
 
+
+  !##################################################################
+  ! KELDYSH CONTOUR GREEN'S FUNCTIONS
+  !##################################################################
   type :: keldysh_contour_gf
      complex(8),dimension(:,:),pointer  :: less,gtr
      logical                            :: status
@@ -22,7 +26,9 @@ MODULE CONTOUR_GF
   public :: mpi_reduce_keldysh_contour_gf
   public :: mpi_bcast_keldysh_contour_gf
 
-
+  !##################################################################
+  ! KELDYSH-BAYM-MATSUBARS CONTOUR GREEN'S FUNCTIONS:
+  !##################################################################
   type :: kbm_contour_gf
      complex(8),dimension(:,:),pointer  :: less,gtr
      complex(8),dimension(:,:),pointer  :: lmix,gmix
@@ -31,6 +37,18 @@ MODULE CONTOUR_GF
      integer                            :: N=0,L=0
   end type kbm_contour_gf
 
+
+  public :: kbm_contour_gf
+  public :: allocate_kbm_contour_gf
+  public :: deallocate_kbm_contour_gf
+  public :: write_kbm_contour_gf
+  public :: inquire_kbm_contour_gf
+  public :: read_kbm_contour_gf
+  public :: plot_kbm_contour_gf
+  public :: mpi_reduce_kbm_contour_gf
+  public :: mpi_bcast_kbm_contour_gf
+
+
   interface operator(*)
      module procedure &
           keldysh_contour_gf_scalarL_d,keldysh_contour_gf_scalarL_c,&
@@ -38,23 +56,15 @@ MODULE CONTOUR_GF
           kbm_contour_gf_scalarL_d,kbm_contour_gf_scalarL_c,&
           kbm_contour_gf_scalarR_d,kbm_contour_gf_scalarR_c
   end interface operator(*)
-
   interface assignment(=)
      module procedure &
           keldysh_contour_gf_equality,&
           keldysh_contour_gf_equality_,&
           kbm_contour_gf_equality_
   end interface assignment(=)
-
-
-  public :: kbm_contour_gf
-  public :: allocate_kbm_contour_gf
-  public :: deallocate_kbm_contour_gf
-  public :: write_kbm_contour_gf,read_kbm_contour_gf,plot_kbm_contour_gf
-  public :: mpi_reduce_kbm_contour_gf
-  public :: mpi_bcast_kbm_contour_gf
   public :: assignment(=)
   public :: operator(*)
+
 
 contains
 
@@ -79,11 +89,9 @@ contains
     G1%gtr = C
   end subroutine keldysh_contour_gf_equality_
 
-
   !******************************************************************
   !******************************************************************
   !******************************************************************
-
 
   subroutine allocate_keldysh_contour_gf(G,N)
     type(keldysh_contour_gf) :: G
@@ -96,11 +104,9 @@ contains
     G%status=.true.
   end subroutine allocate_keldysh_contour_gf
 
-
   !******************************************************************
   !******************************************************************
   !******************************************************************
-
 
   subroutine deallocate_keldysh_contour_gf(G)
     type(keldysh_contour_gf) :: G
@@ -139,6 +145,10 @@ contains
     call sread(trim(file)//"_gtr.data",G%gtr(0:,0:))
   end subroutine read_keldysh_contour_gf
 
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
   function inquire_keldysh_contour_gf(file) result(check)
     logical          :: check,bool1,bool2
     character(len=*) :: file
@@ -163,8 +173,8 @@ contains
     N=G%N+1
     if( (size(G%less)/=N**2) .OR. (size(G%gtr)/=N**2) )&
          call error("ERROR contour_gf/plot_keldysh_contour_gf: wrong dimensions")
-    call splot(reg_filename(file)//"_less_t_t",t(0:),t(0:),G%less(0:,0:))
-    call splot(reg_filename(file)//"_gtr_t_t",t(0:),t(0:),G%gtr(0:,0:))
+    call splot(trim(file)//"_less_t_t",t(0:),t(0:),G%less(0:,0:))
+    call splot(trim(file)//"_gtr_t_t",t(0:),t(0:),G%gtr(0:,0:))
   end subroutine plot_keldysh_contour_gf
 
   !******************************************************************
@@ -332,6 +342,26 @@ contains
   !******************************************************************
   !******************************************************************
 
+  function inquire_kbm_contour_gf(file) result(check)
+    integer          :: i
+    logical          :: check,bool(5)
+    character(len=*) :: file
+    character(len=16),dimension(5)  :: ctype=(['less','gtr','lmix','gmix','mats'])
+    check=.true.
+    do i=1,5
+       inquire(file=trim(file)//"_"//trim(ctype(i))//".data",exist=bool(i))
+       if(.not.bool(i))inquire(file=trim(file)//"_"//trim(ctype(i))//".data.gz",exist=bool(i))
+       !if(.not.bool(i))call warning("Can not read "//trim(file)//"_"//trim(ctype(i))//".data")
+       check=check.AND.bool(i)
+    enddo
+  end function inquire_kbm_contour_gf
+
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
   subroutine read_kbm_contour_gf(G,file)
     type(kbm_contour_gf) :: G
     character(len=*)     :: file
@@ -366,11 +396,11 @@ contains
          call error("ERROR contour_gf/plot_kbm_contour_gf: wrong dimensions 2")
     if( size(G%mats)/=L*L)&
          call error("ERROR contour_gf/plot_kbm_contour_gf: wrong dimensions 3")
-    call splot(reg_filename(file)//"_less_t_t",t(0:),t(0:),G%less(0:,0:))
-    call splot(reg_filename(file)//"_gtr_t_t",t(0:),t(0:),G%gtr(0:,0:))
-    call splot(reg_filename(file)//"_lmix_t_tau",t(0:),tau(0:),G%lmix(0:,0:))
-    call splot(reg_filename(file)//"_gmix_tau_t",tau(0:),t(0:),G%gmix(0:,0:))
-    call splot(reg_filename(file)//"_mats_tau_tau",tau(0:),tau(0:),G%mats(0:,0:))
+    call splot(trim(file)//"_less_t_t",t(0:),t(0:),G%less(0:,0:))
+    call splot(trim(file)//"_gtr_t_t",t(0:),t(0:),G%gtr(0:,0:))
+    call splot(trim(file)//"_lmix_t_tau",t(0:),tau(0:),G%lmix(0:,0:))
+    call splot(trim(file)//"_gmix_tau_t",tau(0:),t(0:),G%gmix(0:,0:))
+    call splot(trim(file)//"_mats_tau_tau",tau(0:),tau(0:),G%mats(0:,0:))
   end subroutine plot_kbm_contour_gf
 
   !******************************************************************

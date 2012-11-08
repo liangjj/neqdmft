@@ -35,7 +35,6 @@ MODULE VARS_GLOBAL
   integer           :: eqnloop       !Number of dmft loop for the equilibrium solution
   real(8)           :: beta0,xmu0,U0 !quench variables
   logical           :: iquench       !initial quench
-  logical           :: irdeq         !irdeq=TT read inputs from equilbrium solution
   logical           :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
   logical           :: solve_wfftw   !solve_wfftw=TT solve Kadanof-Baym equations using FFTw (iff Efield=0)
   character(len=6)  :: method        !choose the perturbation theory method: IPT,SPT
@@ -49,13 +48,14 @@ MODULE VARS_GLOBAL
   real(8)           :: wmin,wmax     !min/max frequency
   real(8)           :: tmin,tmax     !min/max time
   logical           :: plot3D,fchi
+  logical           :: solveEQ
   integer           :: size_cutoff
   logical           :: g0loc_guess   !use non-interacting local GF as guess.
   !
 
-  !FILES TO RESTART
+  !FILES and VARS TO RESTART
   !=========================================================
-  character(len=32),dimension(3) :: irdFILE
+  character(len=32)              :: irdFILE
 
 
   !FREQS & TIME ARRAYS:
@@ -77,17 +77,16 @@ MODULE VARS_GLOBAL
 
   !ELECTRIC FIELD VARIABLES (& NML):
   !=========================================================  
-  type(vect2D)    :: Ek            !Electric field vector
+  type(vect2D)    :: Ak,Ek         !Electric field vector potential and vector
   real(8)         :: Efield        !Electric field strength
   real(8)         :: Ex,Ey         !Electric field vectors as input
   real(8)         :: t0,t1         !turn on/off time, t0 also center of the pulse
   real(8)         :: w0,tau0       !parameters for pulsed light
   real(8)         :: omega0        !parameter for the Oscilatting field
-
+  real(8)         :: E1            !Electric field strenght for the AC+DC case (tune to resonate)
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
-
   !Frequency domain:
   type(keldysh_equilibrium_gf)        :: gf0
   type(keldysh_equilibrium_gf)        :: gf
@@ -95,16 +94,18 @@ MODULE VARS_GLOBAL
   real(8),dimension(:),allocatable    :: exa
 
 
-
-  !INITIAL CONDITIONS: BATH DOS, N(\e(k)), Matsubara Self-energy
+  !MATSUBARA GREEN'S FUNCTION and n(k)
   !=========================================================
-  real(8),allocatable,dimension(:)     :: eq_nk
-  complex(8),allocatable,dimension(:)  :: eq_G0w
-  !
-  ! complex(8),allocatable,dimension(:)  :: eq_G0iw
+  complex(8),allocatable,dimension(:)  :: eq_G0iw
   real(8),allocatable,dimension(:)     :: eq_G0tau
   complex(8),allocatable,dimension(:)  :: eq_Siw
   real(8),allocatable,dimension(:)     :: eq_Stau
+  complex(8),allocatable,dimension(:)  :: eq_Giw
+  real(8),allocatable,dimension(:)     :: eq_Gtau
+  !
+  ! real(8),allocatable,dimension(:)     :: eq_nk
+  !
+
 
   !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
@@ -113,14 +114,14 @@ MODULE VARS_GLOBAL
   !SELF-ENERGY
   type(kbm_contour_gf) :: Sigma
   !LOCAL GF
-  type(kbm_contour_gf) :: locG!,locG1,locG2
-
+  type(kbm_contour_gf) :: locG
   !Bath SELF-ENERGY
   complex(8),allocatable,dimension(:)   :: S0gtr,S0less
   complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
-
   !MOMENTUM-DISTRIBUTION
   real(8),allocatable,dimension(:,:)    :: nk
+
+
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
   !=========================================================  
@@ -129,18 +130,22 @@ MODULE VARS_GLOBAL
   real(8),allocatable,dimension(:,:,:)   :: chi_dia
 
 
-  character(len=32) :: data_dir
+  !DATA DIRECTORY:
+  !=========================================================
+  character(len=32) :: data_dir,plot_dir
+
+
 
   !NAMELISTS:
   !=========================================================
   namelist/variables/dt,beta,U,Efield,Vbath,ts,nstep,nloop,eqnloop,& !global parameters
        eps_error,nsuccess,&                                          !convergence
        weight,&                                                      !mix
-       Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,&                    !field
+       Ex,Ey,t0,t1,tau0,w0,omega0,E1,field_profile,&                 !field
        Nx,Ny,&                                                       !k-points 
-       method,irdeq,update_wfftw,solve_wfftw,plot3D,g0loc_guess,& !flags
-       L,Ltau,Lkreduced,Wbath,bath_type,eps,&                    !parameters
-       data_dir,fchi,&       
+       method,update_wfftw,solve_wfftw,plot3D,g0loc_guess,solveEQ,&  !flags
+       L,Ltau,Lkreduced,Wbath,bath_type,eps,&                        !other parameters
+       data_dir,plot_dir,fchi,&       
        irdFILE,&
        iquench,beta0,xmu0,U0
 
@@ -200,6 +205,7 @@ contains
          ' field_profile=[dc]       -- Type of electric field profile (dc,ac,ac+dc,etc..)',&
          ' bath_type=[constant]     -- Fermionic thermostat type (constant,gaussian,bethe,etc..)',&         
          ' data_dir=[DATAneq]       -- Name of the directory containing data files',&
+         ' plot_dir=[PLOT]          -- Name of the directory containing plot files',&
          ' fchi=[F]                 -- Flag for the calculation of the optical response',&
          ' L=[1024]                 -- A large number for whatever reason',&
          ' Ltau=[32]                -- Number of imaginary time slices',&
@@ -227,6 +233,7 @@ contains
     !FIELD:
     Ex=1.d0 
     Ey=0.d0
+    E1=0.d0
     t0=0.d0 
     t1=1.d9
     tau0=0.d0
@@ -237,7 +244,7 @@ contains
     Ny=25
     !FLAGS:
     method='ipt'
-    irdeq=.false. 
+    solveEQ=.false. 
     update_wfftw= .false.
     solve_wfftw= .false.
     plot3D= .false.
@@ -251,8 +258,9 @@ contains
     bath_type='constant'
     eps=0.01d0
     !FILES&DIR:
-    irdFILE=(['eqG0w.restart','eqStau.restart','eqG0tau.restart'])
+    irdFILE='restartSigma'
     data_dir='DATAneq'
+    plot_dir='PLOT'
     !QUENCH:
     iquench=.false.
     beta0=50.d0
@@ -299,7 +307,7 @@ contains
     call parse_cmd_variable(Ny ,"NY")
     !FLAGS:
     call parse_cmd_variable(method ,"METHOD")
-    call parse_cmd_variable(irdeq ,"IRDEQ")
+    call parse_cmd_variable(solveEQ ,"SOLVEEQ")
     call parse_cmd_variable(update_wfftw ,"UPDATE_WFFTW")
     call parse_cmd_variable(solve_wfftw ,"SOLVE_WFFTW")
     call parse_cmd_variable(plot3D ,"PLOT3D")
@@ -314,6 +322,7 @@ contains
     call parse_cmd_variable(eps ,"EPS")
     !FILES&DIR:
     call parse_cmd_variable(data_dir,"DATA_DIR")
+    call parse_cmd_variable(plot_dir,"PLOT_DIR")
     !QUENCH:
     call parse_cmd_variable(iquench ,"IQUENCH")
     call parse_cmd_variable(beta0 ,"BETA0")
@@ -331,9 +340,8 @@ contains
        call dump_input_file("used.")
     endif
 
-    call create_data_dir(reg_filename(data_dir))
-
-    if(plot3D)call create_data_dir("PLOT")
+    call create_data_dir(trim(data_dir))
+    if(plot3D)call create_data_dir(trim(plot_dir))
 
   contains
 
@@ -362,29 +370,25 @@ contains
     real(8)          :: ex
     call msg("Allocating the memory")
     !Weiss-fields:
-    !Interaction self-energies:
-    !Local Green's functions:
     call allocate_kbm_contour_gf(G0,Nstep,Ltau)
+    !Interaction self-energies:
     call allocate_kbm_contour_gf(Sigma,Nstep,Ltau)
+    !Local Green's functions:
     call allocate_kbm_contour_gf(locG,Nstep,Ltau)
-    !call allocate_kbm_contour_gf(locG1,Nstep,Ltau)
-    !call allocate_kbm_contour_gf(locG2,Nstep,Ltau)
-
     !Bath self-energies:
     allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
     allocate(S0gmix(0:Ltau,0:nstep),S0lmix(0:nstep,0:Ltau))
-
     !Momentum-distribution:
     allocate(nk(0:nstep,Lk))
-
     !Equilibrium/Wigner rotated Green's function
     call allocate_gf(gf0,nstep)
     call allocate_gf(gf,nstep)
     call allocate_gf(sf,nstep)
-
+    !Matsubara Green's functions:
+    allocate(eq_Stau(-Ltau:Ltau),eq_G0tau(-Ltau:Ltau),eq_Gtau(-Ltau:Ltau))
+    allocate(eq_Siw(L),eq_G0iw(L),eq_Giw(L))
     !Susceptibility/Optical response
     if(fchi)allocate(chi(2,2,0:nstep,0:nstep))
-
     !Other:
     allocate(exa(-nstep:nstep))
     ex=-1.d0       
@@ -393,63 +397,6 @@ contains
        exa(i)=ex
     enddo
   end subroutine global_memory_allocation
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-  function build_keldysh_matrix_gf(G,N) result(matG)
-    type(keldysh_contour_gf)              :: G
-    complex(8),dimension(0:2*N+1,0:2*N+1) :: matG
-    integer                               :: i,j,N
-    forall(i=0:N,j=0:N)
-       matG(i,j)         = step(t(i)-t(j))*G%gtr(i,j) + step(t(j)-t(i))*G%less(i,j)
-       matG(i,N+1+j)     =-G%less(i,j)
-       matG(N+1+i,j)     = G%gtr(i,j)
-       matG(N+1+i,N+1+j) =-(step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
-    end forall
-  end function build_keldysh_matrix_gf
-
-  subroutine scatter_kbm_matrix_gf(matG,N,L,G)
-    integer              :: i,N,L
-    complex(8)           :: matG(0:2*N+L+2,0:2*N+L+2)
-    type(kbm_contour_gf) :: G
-    if(.not.G%status)call error("Error 1")
-    if(G%N/=N)call error("Error 2: N")
-    if(G%L/=L)call error("Error 3: L")
-    G%less(0:N,0:N) =  matG(0:N,N+1:2*N+1) !matG12
-    G%gtr(0:N,0:N)  =  matG(N+1:2*N+1,0:N) !matG21
-    G%lmix(0:N,0:L) =  matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
-    forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,Ltau-i))
-    G%mats(0:L,0:L) = aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))
-  end subroutine scatter_kbm_matrix_gf
-
-  function build_kbm_matrix_gf(G,N,L) result(matG)
-    type(kbm_contour_gf)  :: G
-    integer               :: i,j,N,L
-    complex(8),dimension(0:2*N+L+2,0:2*N+L+2) :: matG
-    matG=zero
-    forall(i=0:N,j=0:N)
-       matG(i,        j)   = step(t(i)-t(j))*G%gtr(i,j)  + step(t(j)-t(i))*G%less(i,j)
-       matG(i,    N+1+j)   = G%less(i,j)
-       matG(N+1+i,    j)   = G%gtr(i,j)
-       matG(N+1+i,N+1+j)   = (step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
-    end forall
-
-    forall(i=0:N,j=0:L)
-       matG(i    ,2*N+2+j) =  G%lmix(i,j)
-       matG(N+1+i,2*N+2+j) =  G%lmix(i,j)
-    end forall
-
-    forall(i=0:L,j=0:N)
-       matG(2*N+2+i,    j) =  conjg(G%lmix(j,L-i))  !=G%gmix
-       matG(2*N+2+i,N+1+j) =  conjg(G%lmix(j,L-i))  !=G%gmix
-    end forall
-
-    forall(i=0:L,j=0:L)matG(2*N+2+i,2*N+2+j) = xi*G%mats(i,j)
-
-  end function build_kbm_matrix_gf
 
   !******************************************************************
   !******************************************************************

@@ -10,21 +10,18 @@ module KADANOFBAYM
   USE VARS_GLOBAL
   USE ELECTRIC_FIELD
   USE EQUILIBRIUM
-  USE FUNX_NEQ
   implicit none
   private
-  !Initial conditions arrays:
-  complex(8),allocatable,dimension(:)     :: icGkless 
-  real(8),allocatable,dimension(:,:)      :: icGktau
   !k-dependent GF:
-  type(kbm_contour_gf)                    :: Gk
+  type(kbm_contour_gf)                  :: Gk
+  complex(8),dimension(:),allocatable   :: Gkiw
   !Vector for KB propagation solution
-  complex(8),allocatable,dimension(:)     :: Ikless,Ikgtr
-  complex(8),allocatable,dimension(:)     :: Ikless0,Ikgtr0
-  complex(8),allocatable,dimension(:)     :: Iklmix,Iklmix0
-  real(8)                                 :: Ikdiag
+  complex(8),allocatable,dimension(:)   :: Ikless,Ikgtr
+  complex(8),allocatable,dimension(:)   :: Ikless0,Ikgtr0
+  complex(8),allocatable,dimension(:)   :: Iklmix,Iklmix0
+  real(8)                               :: Ikdiag
   !Auxiliary operators:
-  complex(8),allocatable,dimension(:,:)   :: Udelta,Vdelta
+  complex(8),allocatable,dimension(:,:) :: Udelta,Vdelta
 
   public                                  :: neq_get_localgf
 
@@ -37,7 +34,7 @@ contains
     if(solve_wfftw)then
        call get_equilibrium_localgf
     else
-       call kadanoff_baym_localgf()
+       call kadanoff_baym_to_localgf()
     endif
     if(fchi)call get_chi
     call print_out_Gloc()
@@ -57,46 +54,41 @@ contains
   !"A Fortran code for solving the Kadanoff-Baym equations for a homogeneous 
   !fermion system" Computer Physics Communications,123(1999),123-142
   !+-------------------------------------------------------------------+
-  subroutine kadanoff_baym_localgf()
-    integer              :: istep,i,j,ik
-    logical,save         :: init=.true.
-    real(8),allocatable  :: tmpnk(:,:)
-    type(kbm_contour_gf) :: tmpG
+  subroutine kadanoff_baym_to_localgf()
+    integer                :: istep,i,j,ik
+    complex(8),allocatable :: tmpGkiw(:)
+    real(8),allocatable    :: tmpnk(:,:)
+    type(kbm_contour_gf)   :: tmpG
 
-    !First loop ever, build the Initial Condition
-    if(init)then
-       call allocate_funx
-       call build_ic
-       init=.false.
-    endif
+    call allocate_funx
 
     call buildUV
 
     call msg("Entering Kadanoff-Baym")
 
     !Set to Zero loc GF:
-    locG= zero
-    nk  = 0.d0
+    eq_Giw = zero
+    locG   = zero
+    nk     = 0.d0
 
-    !Tmp array for MPI storage, set to zero
+    !Allocate k-dependent GF:
+    call allocate_kbm_contour_gf(Gk,Nstep,Ltau)
+    allocate(Gkiw(L))
+
+    !Allocate tmp array for MPI storage
     call allocate_kbm_contour_gf(tmpG,Nstep,Ltau)
-    allocate(tmpnk(0:nstep,Lk))
-    tmpG=zero
-    tmpnk=0.d0
+    allocate(tmpnk(0:nstep,Lk),tmpGkiw(L))
+    tmpG=zero ; tmpGkiw=zero ; tmpnk=0.d0
 
 
     !=============START K-POINTS LOOP======================
     call start_timer
-    call allocate_kbm_contour_gf(Gk,Nstep,Ltau)
     do ik=1+mpiID,Lk,mpiSIZE
        Gk=zero
 
-       !Recover Initial Conditions
-       call read_ic(ik)
-
-       !======T-STEP LOOP=====================
+       !t-step loop
        do istep=0,nstep-1
-          call GFstep(ik,istep) !two-steps procedure
+          call step_kbm_contour_gf(ik,istep)
        enddo
 
        !sum over k-point
@@ -105,18 +97,19 @@ contains
        tmpG%lmix(0:,0:) = tmpG%lmix(0:,0:) + Gk%lmix(0:,0:)*wt(ik)
        tmpG%gmix(0:,0:) = tmpG%gmix(0:,0:) + Gk%gmix(0:,0:)*wt(ik)
        tmpG%mats(0:,0:) = tmpG%mats(0:,0:) + Gk%mats(0:,0:)*wt(ik)
+       tmpGkiw          = tmpGkiw          + Gkiw*wt(ik)
 
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gk%less(istep,istep)
        call eta(ik,Lk)
     enddo
     call stop_timer
     call deallocate_kbm_contour_gf(Gk)
+    deallocate(Gkiw)
     call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
     !=============END K-POINTS LOOP======================
 
 
-    !Reduce Contour GF to master:
-    !Bcast the local contour GF to every node
+    !Reduce Contour GF:
     call MPI_ALLREDUCE(tmpG%less(0:,0:),locG%less(0:,0:),(Nstep+1)**2,&
          MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     call MPI_ALLREDUCE(tmpG%gtr(0:,0:),locG%gtr(0:,0:),(Nstep+1)**2,&
@@ -127,12 +120,16 @@ contains
          MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     call MPI_ALLREDUCE(tmpG%mats(0:,0:),locG%mats(0:,0:),(Ltau+1)*(Ltau+1),&
          MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_ALLREDUCE(tmpGkiw,eq_Giw,L,&
+         MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     call MPI_ALLREDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
+
+    !deallocating memory:
     call deallocate_kbm_contour_gf(tmpG)
     deallocate(tmpnk)
-
-  end subroutine kadanoff_baym_localgf
+    call deallocate_funx
+  end subroutine kadanoff_baym_to_localgf
 
 
 
@@ -147,52 +144,70 @@ contains
   !+----------------------------------------------------------------+
   subroutine allocate_funx()
     call msg("Allocating KB memory:")
-    !Initial conditions for the KBE solution:
-    allocate(icGkless(Lk),icGktau(Lk,-Ltau:Ltau))        
-
     !Predictor-corrector solver arrays: store the time-step
     allocate(Ikless(0:nstep),Ikgtr(0:nstep))
     allocate(Ikless0(0:nstep),Ikgtr0(0:nstep))
     allocate(Iklmix(0:Ltau),Iklmix0(0:Ltau))
-
     !Aux. operators
     allocate(Udelta(Lk,0:nstep),Vdelta(Lk,0:nstep))
-
     !Chi
     if(fchi)allocate(chi_dia(2,2,0:nstep),chi_pm(2,2,0:nstep,0:nstep))
   end subroutine allocate_funx
 
+  subroutine deallocate_funx()
+    call msg("Deallocating KB memory:")
+    !Predictor-corrector solver arrays: store the time-step
+    deallocate(Ikless,Ikgtr)
+    deallocate(Ikless0,Ikgtr0)
+    deallocate(Iklmix,Iklmix0)
+    !Aux. operators
+    deallocate(Udelta,Vdelta)
+    !Chi
+    if(fchi)deallocate(chi_dia,chi_pm)
+  end subroutine deallocate_funx
 
 
   !******************************************************************
   !******************************************************************
   !******************************************************************
-
-
 
 
   !+-------------------------------------------------------------------+
   !PURPOSE  : Execute the 2pass procedure to solve KB equations:
   !+-------------------------------------------------------------------+
-  subroutine GFstep(ik,istep)
-    integer :: ips,istep,ik
-    integer :: i,j,itau
-    integer :: it
+  subroutine step_kbm_contour_gf(ik,istep)
+    integer    :: ips,istep,ik
+    integer    :: i,j,itau
+    integer    :: it
+    real(8)    :: Gktau(-Ltau:Ltau)
+
+    !istep==0: only the imaginary time axis exist and must be solved first
+    !to provide initial conditions to the real-time part of the contour:
+    if(istep==0)then
+       Gkiw = one/(xi*wm -epsik(ik) -eq_Siw)    !get G_k(iw)
+       call fftgf_iw2tau(Gkiw,Gktau(0:),beta)   !get G_k(tau>0)
+       forall(i=1:Ltau)Gktau(-i)=-Gktau(Ltau-i) !get G_k(tau<0) ??should I fix the tau=0 in favor of the tau<0??
+       Gk%less(0,0) = -xi*Gktau(Ltau)           !get G^<_k(0,0)=xi*G_k(0-)=-G_k(beta) !ex:!icGkless(ik)
+       Gk%gtr(0,0)  =  Gk%less(0,0)-xi          !get G^>_k(0,0)=xi*G_k(0+)=xi*(G_k(0-)-1.0)
+       forall(i=0:Ltau)
+          Gk%lmix(0,i)=-xi*Gktau(Ltau-i)        !get G^\lmix_k(0,tau) = xi*G_k(tau<0) = -xi*G_k(beta-tau>0)
+          Gk%gmix(i,0)= xi*Gktau(i)             !get G^\gmix_k(tau,0) = xi*G_k(tau>0)
+       end forall
+       forall(i=0:Ltau,j=0:Ltau)&
+            Gk%mats(i,j)=Gktau(i-j)             !get G^M_k(tau,tau`) = G_k(tau-tau`)
+       call splot("icnkVSepsik.ipt",epsik(ik),-Gktau(Ltau),append=.true.)
+       call splot("icGktau.ipt",taureal,Gktau,append=.true.)
+    endif
 
     do ips=1,2
        select case(ips)
        case(1)
           !First Pass: get collision integrals up to t=T=istep
-          Ikless0 = zero
-          Ikgtr0  = zero
-          Iklmix0 = zero
+          Ikless0 = zero ; Ikgtr0 = zero ; Iklmix0 = zero
           Ikdiag  = 0.d0
           call get_Ikcollision(istep)
-          Ikless0  = Ikless
-          Ikgtr0   = Ikgtr
-          Iklmix0  = iklmix
-          Ikdiag   = real(Ikgtr(istep))-real(Ikless(istep))
-
+          Ikless0 = Ikless ; Ikgtr0 = Ikgtr ; Iklmix0 = iklmix
+          Ikdiag  = real(Ikgtr(istep))-real(Ikless(istep))
        case(2)
           !Second Pass: get collision integrals up to t=T+\Delta=istep+1
           call get_Ikcollision(istep+1)
@@ -200,15 +215,14 @@ contains
           Ikgtr    = (Ikgtr   + Ikgtr0)/2.d0
           Iklmix   = (Iklmix  + Iklmix0)/2.d0
           Ikdiag   = (real(Ikgtr(istep+1))-real(Ikless(istep+1)) + Ikdiag)/2.d0
-
        end select
 
        !Evolve the solution of KB equations for all the k-points:
        forall(it=0:istep)
-          Gk%less(it,istep+1) = Gk%less(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
-          Gk%gtr(istep+1,it)  = Gk%gtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
+          Gk%less(it,istep+1)  = Gk%less(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
+          Gk%gtr(istep+1,it)   = Gk%gtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
        end forall
-       Gk%gtr(istep+1,istep)=(Gk%less(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
+       Gk%gtr(istep+1,istep)   =(Gk%less(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
        Gk%less(istep+1,istep+1)= Gk%less(istep,istep)-xi*dt*Ikdiag
        Gk%gtr(istep+1,istep+1) = Gk%less(istep+1,istep+1)-xi
 
@@ -226,8 +240,7 @@ contains
        !$OMP END DO
        !$OMP END PARALLEL
     enddo
-
-  end subroutine GFstep
+  end subroutine Step_kbm_contour_gf
 
 
 
@@ -328,113 +341,12 @@ contains
     enddo
     !$OMP END DO
     !$OMP END PARALLEL
-
   end subroutine get_Ikcollision
 
 
-
   !******************************************************************
   !******************************************************************
   !******************************************************************
-
-
-  !-------------------------------------------------------!
-  pure function GkretF(i,j)      
-    integer,intent(in) :: i,j
-    complex(8)         :: GkretF
-    GkretF = heaviside(t(i)-t(j))*(Gk%gtr(i,j)-Gk%less(i,j))
-  end function GkretF
-  !-------------------------------------------------------!
-
-  !-------------------------------------------------------!
-  pure function S0retF(i)
-    integer,intent(in) :: i
-    complex(8)         :: S0retF
-    S0retF = heaviside(t(i))*(S0gtr(i)-S0less(i))
-  end function S0retF
-  !-------------------------------------------------------!
-
-  !-------------------------------------------------------!
-  pure function SretF(i,j)      
-    integer,intent(in) :: i,j
-    complex(8)         :: SretF
-    SretF = heaviside(t(i)-t(j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
-  end function SretF
-  !-------------------------------------------------------!
-
-
-
-
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-
-
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : Build the initial condition for the solution of KB equations
-  ! G_k^<(0,0)        = xi*G_k^M(tau=0-)
-  ! G_k^>(0,0)        = xi*(G_k^<(0,0) - 1.0)
-  ! G_k^\lceil(0,tau) = xi*G_k^M(tau<0) = -xi*G_k^M(beta-tau>0)
-  ! G_k^\rceil(0,tau) = xi*G_k^M(tau>0)  
-  !+-------------------------------------------------------------------+
-  subroutine build_ic
-    integer    :: ik,i,j
-    complex(8) :: funcM(L)
-    real(8)    :: n,funcT(0:Ltau)
-    call msg("Building initial conditions:")
-    call create_data_dir("InitialConditions")
-    icGkless = xi*eq_Nk ; icGktau  = 0.d0
-    do ik=1,Lk
-       funcM=one/(xi*wm - epsik(ik) - eq_Siw)
-       call fftgf_iw2tau(funcM,icGktau(ik,0:),beta)
-       !icGktau(ik,0:Ltau)=funcT(0:Ltau)
-       forall(i=1:Ltau)icGktau(ik,-i)=-icGktau(ik,Ltau-i)
-    enddo
-    call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),dimag(icGkless(1:Lk)))
-    do ik=1,Lk
-       call splot("InitialConditions/icGktau.ipt",taureal,icGktau(ik,:),append=.true.)
-    enddo
-  end subroutine build_ic
-
-
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-
-
-
-  subroutine read_ic(ik)
-    integer :: ik,i,j
-    Gk%less(0,0) = icGkless(ik)
-    Gk%gtr(0,0)  = icGkless(ik)-xi
-    forall(i=0:Ltau)
-       Gk%lmix(0,i)=-xi*icGktau(ik,Ltau-i)
-       Gk%gmix(i,0)= xi*icGktau(ik,i)
-    end forall
-    !Gktau(-Ltau:Ltau)=icGktau(ik,-Ltau:Ltau)
-    forall(i=0:Ltau,j=0:Ltau)Gk%mats(i,j)=icGktau(ik,i-j)
-    ! do i=-Ltau,Ltau
-    !    write(90,*)dble(i)*beta/dble(Ltau),Gktau(i)
-    ! enddo
-    ! write(90,*)""
-    return
-  end subroutine read_ic
-
-
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-
-
 
   subroutine buildUV
     integer :: ik,i
@@ -446,12 +358,56 @@ contains
     enddo
   end subroutine buildUV
 
+  function UdeltaF(ik,istep) 
+    integer,intent(in)    :: ik,istep
+    complex(8) :: UdeltaF
+    complex(8) :: arg
+    arg=Hbar(ik,istep)
+    UdeltaF=exp(-xi*arg*dt)
+  end function UdeltaF
+
+  function VdeltaF(ik,istep)
+    integer,intent(in)    :: ik,istep
+    complex(8) :: VdeltaF
+    complex(8) :: arg
+    arg=Hbar(ik,istep)
+    VdeltaF=exp(-xi*arg*dt)
+    if(abs(arg*dt) <= 1.d-5)then
+       VdeltaF=-xi*dt
+    else
+       VdeltaF=(VdeltaF-1.d0)/arg
+    endif
+  end function VdeltaF
+
 
 
   !******************************************************************
   !******************************************************************
   !******************************************************************
 
+
+  pure function GkretF(i,j)      
+    integer,intent(in) :: i,j
+    complex(8)         :: GkretF
+    GkretF = heaviside(t(i)-t(j))*(Gk%gtr(i,j)-Gk%less(i,j))
+  end function GkretF
+
+  pure function S0retF(i)
+    integer,intent(in) :: i
+    complex(8)         :: S0retF
+    S0retF = heaviside(t(i))*(S0gtr(i)-S0less(i))
+  end function S0retF
+
+  pure function SretF(i,j)      
+    integer,intent(in) :: i,j
+    complex(8)         :: SretF
+    SretF = heaviside(t(i)-t(j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
+  end function SretF
+
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
 
 
   !+-------------------------------------------------------------------+
@@ -473,54 +429,7 @@ contains
     kt=kgrid(i,j) - Ak
     Hbar=square_lattice_dispersion(kt)
   end function Hbar
-  function Hkt(ik,istep)
-    integer,intent(in) :: ik,istep  
-    integer      :: i,j
-    complex(8)   :: Hkt
-    type(vect2D) :: kt,Ak
-    i=ik2ix(ik)
-    j=ik2iy(ik)
-    Ak=Afield(t(istep),Ek)
-    kt=kgrid(i,j) - Ak
-    Hkt=square_lattice_dispersion(kt)
-  end function Hkt
 
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-
-
-  function UdeltaF(ik,istep) 
-    integer,intent(in)    :: ik,istep
-    complex(8) :: UdeltaF
-    complex(8) :: arg
-    arg=Hbar(ik,istep)
-    UdeltaF=exp(-xi*arg*dt)
-  end function UdeltaF
-
-
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-
-  function VdeltaF(ik,istep)
-    integer,intent(in)    :: ik,istep
-    complex(8) :: VdeltaF
-    complex(8) :: arg
-    arg=Hbar(ik,istep)
-    VdeltaF=exp(-xi*arg*dt)
-    if(abs(arg*dt) <= 1.d-5)then
-       VdeltaF=-xi*dt
-    else
-       VdeltaF=(VdeltaF-1.d0)/arg
-    endif
-  end function VdeltaF
 
 
 
@@ -628,14 +537,18 @@ contains
     integer :: i,j
     if(mpiID==0)then
 
-       call write_kbm_contour_gf(locG,reg_filename(data_dir)//"/locG")
-       call splot(reg_filename(data_dir)//"/nk.data",nk(0:,:))
+       call write_kbm_contour_gf(locG,trim(data_dir)//"/locG")
+       call splot(trim(data_dir)//"/nk.data",nk(0:,:))
 
        if(plot3D)then
-          call plot_kbm_contour_gf(locG,t(0:),tau(0:),"PLOT/locG")
+          call plot_kbm_contour_gf(locG,t(0:),tau(0:),trim(plot_dir)//"/locG")
        end if
        call splot("testGlesst0.ipt",t(0:),locG%less(0:,0))
        call splot("testGlmixtau0.ipt",t(0:),locG%lmix(0:,0))
+       call splot("eq_G_iw.ipt",wm,eq_Giw,append=.true.)
+       call fftgf_iw2tau(eq_Giw,eq_Gtau(0:),beta)
+       forall(i=1:Ltau)eq_Gtau(-i)=-eq_Gtau(Ltau-i)
+       call splot("eq_G_tau.ipt",taureal,eq_Gtau,append=.true.)
 
        forall(i=0:nstep,j=0:nstep)
           gf%less%t(i-j) = locG%less(i,j)
@@ -651,15 +564,15 @@ contains
        call splot("locDOS.ipt",wr,-aimag(gf%ret%w)/pi,append=TT)
 
        if(fchi)then
-          call splot(reg_filename(data_dir)//"/locChi_11.data",chi(1,1,0:,0:))
-          call splot(reg_filename(data_dir)//"/locChi_12.data",chi(1,2,0:,0:))
-          call splot(reg_filename(data_dir)//"/locChi_21.data",chi(2,1,0:,0:))
-          call splot(reg_filename(data_dir)//"/locChi_22.data",chi(2,2,0:,0:))
+          call splot(trim(data_dir)//"/locChi_11.data",chi(1,1,0:,0:))
+          call splot(trim(data_dir)//"/locChi_12.data",chi(1,2,0:,0:))
+          call splot(trim(data_dir)//"/locChi_21.data",chi(2,1,0:,0:))
+          call splot(trim(data_dir)//"/locChi_22.data",chi(2,2,0:,0:))
           if(plot3D)then
-             call splot("PLOT/locChi_11",t(0:),t(0:),chi(1,1,0:,0:))
-             call splot("PLOT/locChi_12",t(0:),t(0:),chi(1,2,0:,0:))
-             call splot("PLOT/locChi_21",t(0:),t(0:),chi(2,1,0:,0:))
-             call splot("PLOT/locChi_22",t(0:),t(0:),chi(2,2,0:,0:))
+             call splot(trim(plot_dir)//"/locChi_11",t(0:),t(0:),chi(1,1,0:,0:))
+             call splot(trim(plot_dir)//"/locChi_12",t(0:),t(0:),chi(1,2,0:,0:))
+             call splot(trim(plot_dir)//"/locChi_21",t(0:),t(0:),chi(2,1,0:,0:))
+             call splot(trim(plot_dir)//"/locChi_22",t(0:),t(0:),chi(2,2,0:,0:))
           endif
        endif
 

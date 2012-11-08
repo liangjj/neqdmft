@@ -2,8 +2,6 @@ program getDATA
   USE VARS_GLOBAL
   USE ELECTRIC_FIELD
   USE BATH
-  USE FUNX_NEQ
-  !USE DLPLOT
   implicit none
   !Add here the extra variables 
   integer                                :: i,j,ik,loop,narg,iarg,k,ia,ir,irel,iave
@@ -24,7 +22,8 @@ program getDATA
   allocate(epsik(Lk),wt(Lk))
   wt   = square_lattice_structure(Lk,Nx,Ny)
   epsik= square_lattice_dispersion_array(Lk,ts=ts)
-  Ek = set_efield_vector(Ex,Ey)
+
+  call set_efield_vector()
 
   DIR="RESULTS"
   if(Lkreduced<200)Lkreduced=200
@@ -58,6 +57,7 @@ contains
        call sread("locChi_21.data",chi(2,1,0:nstep,0:nstep))
        call sread("locChi_22.data",chi(2,2,0:nstep,0:nstep))
     endif
+
 
     forall(i=0:nstep,j=0:nstep)
        locGret(i,j)   = heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
@@ -322,11 +322,11 @@ contains
     if(.not.plot3D)then         !functions have not be plotted during run, plot them now
        !if(Efield/=0.d0 .or. Vpd/=0.0)call dplot_3d_surface_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",&
        !kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
-       call create_data_dir("PLOT")
-       call plot_kbm_contour_gf(guessG0,t(0:),tau(0:),"PLOT/guessG0")
-       call plot_kbm_contour_gf(G0,t(0:),tau(0:),"PLOT/G0")
-       call plot_kbm_contour_gf(locG,t(0:),tau(0:),"PLOT/locG")
-       call plot_kbm_contour_gf(Sigma,t(0:),tau(0:),"PLOT/Sigma")
+       call create_data_dir(trim(plot_dir))
+       call plot_kbm_contour_gf(guessG0,t(0:),tau(0:),trim(plot_dir)//"/guessG0")
+       call plot_kbm_contour_gf(G0,t(0:),tau(0:),trim(plot_dir)//"/G0")
+       call plot_kbm_contour_gf(locG,t(0:),tau(0:),trim(plot_dir)//"/locG")
+       call plot_kbm_contour_gf(Sigma,t(0:),tau(0:),trim(plot_dir)//"/Sigma")
     endif
     call system("rm -rf "//dir//"/3d* 2>/dev/null")
     call system("rm -rf "//dir//"/*3D 2>/dev/null")
