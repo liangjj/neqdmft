@@ -7,6 +7,7 @@
 MODULE VARS_GLOBAL
   !Local:
   USE CONTOUR_GF
+  USE PARSE_CMD
   !SciFor library
   USE COMMON_VARS
   USE GREENFUNX
@@ -25,38 +26,36 @@ MODULE VARS_GLOBAL
 
   !Gloabl  variables
   !=========================================================
-  integer,protected :: Lmu           !# of bath energies
-  integer,protected :: Ltau          !Imaginary time slices
   integer           :: L             !a big number
+  integer           :: Ltau          !Imaginary time slices
+  integer           :: Nstep         !Number of Time steps
   integer           :: Lk            !total lattice  dimension
   integer           :: Lkreduced     !reduced lattice dimension
   integer           :: Nx,Ny         !lattice grid dimensions
-  integer           :: nstep         !Number of Time steps
+  integer           :: eqnloop       !Number of dmft loop for the equilibrium solution
   real(8)           :: beta0,xmu0,U0 !quench variables
-  logical           :: iquench       !quench flag
-  logical           :: Equench       !initial condition with (T) or without (F) electric field
+  logical           :: iquench       !initial quench
   logical           :: irdeq         !irdeq=TT read inputs from equilbrium solution
   logical           :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
   logical           :: solve_wfftw   !solve_wfftw=TT solve Kadanof-Baym equations using FFTw (iff Efield=0)
   character(len=6)  :: method        !choose the perturbation theory method: IPT,SPT
   character(len=16) :: bath_type     !choose the shape of the BATH
   character(len=16) :: field_profile !choose the profile of the electric field
+  real(8)           :: Vbath
   real(8)           :: Wbath         !Width of the BATH DOS
   real(8)           :: eps_error     !convergence error threshold
   integer           :: Nsuccess      !number of convergence success
   real(8)           :: weight        !mixing weight parameter
   real(8)           :: wmin,wmax     !min/max frequency
   real(8)           :: tmin,tmax     !min/max time
-  logical           :: plotVF,plot3D,fchi
+  logical           :: plot3D,fchi
   integer           :: size_cutoff
-  logical           :: solve_eq      !Solve equilibrium Flag:
   logical           :: g0loc_guess   !use non-interacting local GF as guess.
-  logical           :: volterra
   !
 
   !FILES TO RESTART
   !=========================================================
-  character(len=32) :: irdG0wfile,irdG0iwfile,irdNkfile,irdSfile
+  character(len=32),dimension(3) :: irdFILE
 
 
   !FREQS & TIME ARRAYS:
@@ -102,7 +101,7 @@ MODULE VARS_GLOBAL
   real(8),allocatable,dimension(:)     :: eq_nk
   complex(8),allocatable,dimension(:)  :: eq_G0w
   !
-  complex(8),allocatable,dimension(:)  :: eq_G0iw
+  ! complex(8),allocatable,dimension(:)  :: eq_G0iw
   real(8),allocatable,dimension(:)     :: eq_G0tau
   complex(8),allocatable,dimension(:)  :: eq_Siw
   real(8),allocatable,dimension(:)     :: eq_Stau
@@ -114,7 +113,7 @@ MODULE VARS_GLOBAL
   !SELF-ENERGY
   type(kbm_contour_gf) :: Sigma
   !LOCAL GF
-  type(kbm_contour_gf) :: locG,locG1,locG2
+  type(kbm_contour_gf) :: locG!,locG1,locG2
 
   !Bath SELF-ENERGY
   complex(8),allocatable,dimension(:)   :: S0gtr,S0less
@@ -134,12 +133,15 @@ MODULE VARS_GLOBAL
 
   !NAMELISTS:
   !=========================================================
-  namelist/variables/dt,beta,U,Efield,Vpd,ts,nstep,nloop,eps_error,nsuccess,weight,&
-       Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,Nx,Ny,&
-       L,Ltau,Lmu,Lkreduced,Wbath,bath_type,eps,&
-       method,irdeq,update_wfftw,solve_wfftw,plotVF,plot3D,data_dir,fchi,equench,&
-       solve_eq,g0loc_guess,volterra,&
-       irdNkfile,irdG0wfile,irdG0iwfile,&
+  namelist/variables/dt,beta,U,Efield,Vbath,ts,nstep,nloop,eqnloop,& !global parameters
+       eps_error,nsuccess,&                                          !convergence
+       weight,&                                                      !mix
+       Ex,Ey,t0,t1,tau0,w0,omega0,field_profile,&                    !field
+       Nx,Ny,&                                                       !k-points 
+       method,irdeq,update_wfftw,solve_wfftw,plot3D,g0loc_guess,& !flags
+       L,Ltau,Lkreduced,Wbath,bath_type,eps,&                    !parameters
+       data_dir,fchi,&       
+       irdFILE,&
        iquench,beta0,xmu0,U0
 
 
@@ -150,14 +152,12 @@ contains
   !TYPE     : subroutine
   !PURPOSE  : Read input file
   !+----------------------------------------------------------------+
-  subroutine read_input_init(inputFILE,printf)
-    character(len=*) :: inputFILE
-    integer          :: i
-    logical,optional :: printf
-    logical          :: lprint
-    logical          :: control
+  subroutine read_input_init(inputFILE)
+    character(len=*)               :: inputFILE
+    character(len=256),allocatable :: help_buffer(:)
+    integer                        :: i
+    logical                        :: control
 
-    lprint=.false. ; if(present(printf))lprint=printf
     call version(revision)
 
     allocate(help_buffer(60))
@@ -178,12 +178,13 @@ contains
          ' ',&
          '  In this version the impurity solver is: IPT',&
          ' ',&
-         'OPTIONS',&
+         'OPTIONS (important)',&
          ' dt=[0.157080]            -- Time step for solution of KB equations',&
          ' beta=[100.0]             -- Inverse temperature ',&
          ' U=[6]                    -- Hubbard local interaction value',&
          ' Efield=[0]               -- Strenght of the electric field',&
-         ' Vpd=[0]                  -- Strenght of the coupling to bath (Lambda=Vpd^2/Wbath)',&
+         ' Vbath=[0]                -- Strenght of the coupling to bath (Lambda=Vbath^2/Wbath)',&
+         ' Wbath=[10.0]             -- Bandwidth of the fermionic thermostat',&
          ' ts=[1]                   -- Hopping parameter',&
          ' nstep=[50]               -- Number of time steps: T_max = dt*nstep',&
          ' nloop=[30]               -- Maximum number of DMFT loops allowed (then exit)',&
@@ -196,89 +197,67 @@ contains
          ' t1=[10^6]                -- Switching off time parameter for the Electric field',&
          ' tau0=[1]                 -- Width of gaussian packect envelope for the impulsive Electric field',&
          ' w0=[20]                  -- Frequency of the of the impulsive Electric field',&
-         ' field_profile=[constant] -- Type of electric field profile (constant,gaussian,ramp)',&
-         ' irdeq=[F]        -- ',&
-         ' method=[ipt]     -- ',&
-         ' update_wfftw=[F] -- ',&
-         ' solve_wfftw =[F] -- ',&
-         ' plotVF=[F]       -- ',&
-         ' plot3D=[F]       -- ',&
-         ' data_dir=[DATAneq]       -- ',&
-         ' fchi=[F]         -- ',&
-         ' equench=[F]      -- ',&
-         ' L=[1024]         -- ',&
-         ' Ltau=[32]        -- ',&
-         ' Lmu=[2048]       -- ',&
-         ' Lkreduced=[200]  -- ',&
-         ' wbath=[10.0]     -- ',&
-         ' bath_type=[constant] -- ',&
-         ' eps=[0.05d0]         -- ',&
-         ' irdG0wfile=[eqG0w.restart]-- ',&
-         ' irdnkfile =[eqnk.restart]-- ',&
-         ' irdG0iwfile=[eqG0iw.restart]-- ',&
-         ' Nx=[50]      -- ',&
-         ' Ny=[50]      -- ',&    
-         ' iquench=[F]  -- ',&
-         ' beta0=[100]  -- ',&
-         ' U0=[6]       -- ',&
-         ' xmu0=[0]     -- ',& 
+         ' field_profile=[dc]       -- Type of electric field profile (dc,ac,ac+dc,etc..)',&
+         ' bath_type=[constant]     -- Fermionic thermostat type (constant,gaussian,bethe,etc..)',&         
+         ' data_dir=[DATAneq]       -- Name of the directory containing data files',&
+         ' fchi=[F]                 -- Flag for the calculation of the optical response',&
+         ' L=[1024]                 -- A large number for whatever reason',&
+         ' Ltau=[32]                -- Number of imaginary time slices',&
+         ' eps=[0.05d0]             -- Broadening on the real-axis',&
+         ' Nx=[50]                  -- Number of k-points along x-axis ',&
+         ' Ny=[50]                  -- Number of k-points along y-axis ',&    
          '  '])
     call parse_cmd_help(help_buffer)
 
-    !DEFAULT NML VARIABLES VALUES:
-    dt      = 0.157080
-    beta    = 100.0
-    U       = 6.0
-    Efield  = 0.0
-    Vpd     = 0.0
-    ts      = 1.0
-    nstep   = 50
-    nloop   = 30
-    eps_error= 1.d-4
-    Nsuccess = 2
-    weight  = 0.9d0
 
-    Ex  = 1.d0
-    Ey  = 1.d0
-    t0  = 0.d0
-    t1  = 1000000.d0              !infinite time SHIT!!
-    tau0= 1.d0
-    w0  = 20.d0
-    field_profile='constant'
-
-    method        = 'ipt'
-    irdeq         = .false.
-    update_wfftw  = .false.
-    solve_wfftw   = .false.
-    plotVF        = .false.
-    plot3D        = .false.
-    fchi          = .false.
-    equench       = .false.
-    solve_eq      = .true.
-    g0loc_guess   = .false.
-    volterra      = .false.
-    iquench       = .false.
-    data_dir      = "DATAneq"
-
-    L          = 1024
-    Ltau       = 32
-    Lmu        = 2048
-    Lkreduced  = 200
-    wbath      = 20.0
-    bath_type  = "constant"
-    eps        = 0.04d0
-    irdnkfile  = "eqnk.restart"
-    irdG0wfile = "eqG0w.restart"
-    irdG0iwfile = "eqG0iw.restart"
-
-    Nx = 25
-    Ny = 25    
-
-    beta0   = 100.0
-    U0      = 6.0
-    xmu0    = 0.0    
-
-    omp_num_threads =1
+    dt=0.1d0
+    beta= 100.d0
+    U=4.d0
+    Efield=0.d0
+    Vbath=0.d0
+    ts=1.d0
+    nstep=100
+    nloop=30
+    eqnloop=30
+    !CONVERGENCE:
+    eps_error=1.d-4
+    Nsuccess=2
+    !MIX:
+    weight=1.d0
+    !FIELD:
+    Ex=1.d0 
+    Ey=0.d0
+    t0=0.d0 
+    t1=1.d9
+    tau0=0.d0
+    w0=0.d0 
+    field_profile='dc'
+    !GRID k-POINTS:
+    Nx=25 
+    Ny=25
+    !FLAGS:
+    method='ipt'
+    irdeq=.false. 
+    update_wfftw= .false.
+    solve_wfftw= .false.
+    plot3D= .false.
+    fchi= .false.
+    g0loc_guess= .false.
+    !PARAMETERS:
+    L=1024
+    Ltau=50
+    Lkreduced=200
+    wbath=20.d0 
+    bath_type='constant'
+    eps=0.01d0
+    !FILES&DIR:
+    irdFILE=(['eqG0w.restart','eqStau.restart','eqG0tau.restart'])
+    data_dir='DATAneq'
+    !QUENCH:
+    iquench=.false.
+    beta0=50.d0
+    U0=6.d0
+    xmu0=0.d0 
 
     inquire(file=adjustl(trim(inputFILE)),exist=control)
     if(control)then
@@ -292,24 +271,79 @@ contains
        call error("Can not find INPUT file, dumping a default version in default."//trim(inputFILE))
     endif
 
-    include "nml_read_cml.f90"
+    ! !GLOBAL
+    call parse_cmd_variable(dt ,"DT")
+    call parse_cmd_variable(beta ,"BETA")
+    call parse_cmd_variable(U ,"U")
+    call parse_cmd_variable(Efield ,"EFIELD")
+    call parse_cmd_variable(Vbath ,"VBATH")
+    call parse_cmd_variable(ts ,"TS")
+    call parse_cmd_variable(nstep ,"NSTEP")
+    call parse_cmd_variable(nloop ,"NLOOP")
+    call parse_cmd_variable(eqnloop ,"EQNLOOP")
+    !CONVERGENCE:
+    call parse_cmd_variable(eps_error ,"EPS_ERROR")
+    call parse_cmd_variable(Nsuccess ,"NSUCCESS")
+    !MIX:
+    call parse_cmd_variable(weight ,"WEIGHT")
+    !FIELD:
+    call parse_cmd_variable(Ex ,"EX")
+    call parse_cmd_variable(Ey ,"EY")
+    call parse_cmd_variable(t0 ,"T0")
+    call parse_cmd_variable(t1 ,"T1")
+    call parse_cmd_variable(tau0 ,"TAU0")
+    call parse_cmd_variable(w0 ,"W0")
+    call parse_cmd_variable(field_profile ,"FIELD_PROFILE")
+    !GRID k-POINTS:
+    call parse_cmd_variable(Nx ,"NX")
+    call parse_cmd_variable(Ny ,"NY")
+    !FLAGS:
+    call parse_cmd_variable(method ,"METHOD")
+    call parse_cmd_variable(irdeq ,"IRDEQ")
+    call parse_cmd_variable(update_wfftw ,"UPDATE_WFFTW")
+    call parse_cmd_variable(solve_wfftw ,"SOLVE_WFFTW")
+    call parse_cmd_variable(plot3D ,"PLOT3D")
+    call parse_cmd_variable(fchi ,"FCHI")
+    call parse_cmd_variable(g0loc_guess ,"G0LOC_GUESS")
+    !PARAMETERS:
+    call parse_cmd_variable(L ,"L")
+    call parse_cmd_variable(Ltau ,"LTAU")
+    call parse_cmd_variable(Lkreduced ,"LKREDUCED")
+    call parse_cmd_variable(wbath ,"WBATH")
+    call parse_cmd_variable(bath_type ,"BATH_TYPE")
+    call parse_cmd_variable(eps ,"EPS")
+    !FILES&DIR:
+    call parse_cmd_variable(data_dir,"DATA_DIR")
+    !QUENCH:
+    call parse_cmd_variable(iquench ,"IQUENCH")
+    call parse_cmd_variable(beta0 ,"BETA0")
+    call parse_cmd_variable(U0 ,"U0")
+    call parse_cmd_variable(xmu0 ,"XMU0") 
 
-    write(*,*)"CONTROL PARAMETERS"
-    write(*,nml=variables)
-    write(*,*)"--------------------------------------------"
-    write(*,*)""
-    if(lprint)call dump_input_file("used.")
+
+
+
+    if(mpiID==0)then
+       write(*,*)"CONTROL PARAMETERS"
+       write(*,nml=variables)
+       write(*,*)"--------------------------------------------"
+       write(*,*)""
+       call dump_input_file("used.")
+    endif
 
     call create_data_dir(reg_filename(data_dir))
+
     if(plot3D)call create_data_dir("PLOT")
 
-    return
   contains
+
     subroutine dump_input_file(prefix)
       character(len=*) :: prefix
-      open(10,file=trim(adjustl(trim(prefix)))//adjustl(trim(inputFILE)))
-      write(10,nml=variables)
-      close(10)
+      if(mpiID==0)then
+         open(10,file=trim(adjustl(trim(prefix)))//adjustl(trim(inputFILE)))
+         write(10,nml=variables)
+         close(10)
+      endif
     end subroutine dump_input_file
   end subroutine read_input_init
   !******************************************************************
@@ -333,8 +367,8 @@ contains
     call allocate_kbm_contour_gf(G0,Nstep,Ltau)
     call allocate_kbm_contour_gf(Sigma,Nstep,Ltau)
     call allocate_kbm_contour_gf(locG,Nstep,Ltau)
-    call allocate_kbm_contour_gf(locG1,Nstep,Ltau)
-    call allocate_kbm_contour_gf(locG2,Nstep,Ltau)
+    !call allocate_kbm_contour_gf(locG1,Nstep,Ltau)
+    !call allocate_kbm_contour_gf(locG2,Nstep,Ltau)
 
     !Bath self-energies:
     allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))

@@ -12,10 +12,6 @@ MODULE CONTOUR_GF
      integer                            :: N
   end type keldysh_contour_gf
 
-  interface keldysh_contour_gf_sum
-     module procedure keldysh_contour_gf_sum_d,keldysh_contour_gf_sum_z
-  end interface keldysh_contour_gf_sum
-
   public :: keldysh_contour_gf
   public :: allocate_keldysh_contour_gf
   public :: deallocate_keldysh_contour_gf
@@ -25,7 +21,6 @@ MODULE CONTOUR_GF
   public :: inquire_keldysh_contour_gf
   public :: mpi_reduce_keldysh_contour_gf
   public :: mpi_bcast_keldysh_contour_gf
-  public :: keldysh_contour_gf_sum
 
 
   type :: kbm_contour_gf
@@ -51,9 +46,6 @@ MODULE CONTOUR_GF
           kbm_contour_gf_equality_
   end interface assignment(=)
 
-  interface kbm_contour_gf_sum
-     module procedure kbm_contour_gf_sum_d,kbm_contour_gf_sum_z
-  end interface kbm_contour_gf_sum
 
   public :: kbm_contour_gf
   public :: allocate_kbm_contour_gf
@@ -63,7 +55,6 @@ MODULE CONTOUR_GF
   public :: mpi_bcast_kbm_contour_gf
   public :: assignment(=)
   public :: operator(*)
-  public :: kbm_contour_gf_sum
 
 contains
 
@@ -181,25 +172,25 @@ contains
   !******************************************************************
 
 
-  subroutine keldysh_contour_gf_sum_d(Ga,Gb,C)
-    type(keldysh_contour_gf)  :: Ga
-    type(keldysh_contour_gf)  :: Gb
-    real(8)               :: C
-    Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-    Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-  end subroutine keldysh_contour_gf_sum_d
+  ! subroutine keldysh_contour_gf_sum_d(Ga,Gb,C)
+  !   type(keldysh_contour_gf)  :: Ga
+  !   type(keldysh_contour_gf)  :: Gb
+  !   real(8)               :: C
+  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
+  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
+  ! end subroutine keldysh_contour_gf_sum_d
 
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
+  ! !******************************************************************
+  ! !******************************************************************
+  ! !******************************************************************
 
-  subroutine keldysh_contour_gf_sum_z(Ga,Gb,C)
-    type(keldysh_contour_gf)  :: Ga
-    type(keldysh_contour_gf)  :: Gb
-    complex(8)            ::C
-    Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-    Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-  end subroutine keldysh_contour_gf_sum_z
+  ! subroutine keldysh_contour_gf_sum_z(Ga,Gb,C)
+  !   type(keldysh_contour_gf)  :: Ga
+  !   type(keldysh_contour_gf)  :: Gb
+  !   complex(8)            ::C
+  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
+  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
+  ! end subroutine keldysh_contour_gf_sum_z
 
   !******************************************************************
   !******************************************************************
@@ -400,31 +391,31 @@ contains
   !******************************************************************
   !******************************************************************
 
-  subroutine kbm_contour_gf_sum_d(Ga,Gb,C)
-    type(kbm_contour_gf)  :: Ga
-    type(kbm_contour_gf)  :: Gb
-    real(8)               :: C
-    Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-    Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-    Ga%lmix(0:,0:) = Ga%lmix(0:,0:) + Gb%lmix(0:,0:)*C
-    Ga%gmix(0:,0:) = Ga%gmix(0:,0:) + Gb%gmix(0:,0:)*C
-    Ga%mats(0:,0:) = Ga%mats(0:,0:) + Gb%mats(0:,0:)*C
-  end subroutine kbm_contour_gf_sum_d
+  ! subroutine kbm_contour_gf_sum_d(Ga,Gb,C)
+  !   type(kbm_contour_gf)  :: Ga
+  !   type(kbm_contour_gf)  :: Gb
+  !   real(8)               :: C
+  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
+  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
+  !   Ga%lmix(0:,0:) = Ga%lmix(0:,0:) + Gb%lmix(0:,0:)*C
+  !   Ga%gmix(0:,0:) = Ga%gmix(0:,0:) + Gb%gmix(0:,0:)*C
+  !   Ga%mats(0:,0:) = Ga%mats(0:,0:) + Gb%mats(0:,0:)*C
+  ! end subroutine kbm_contour_gf_sum_d
 
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
+  ! !******************************************************************
+  ! !******************************************************************
+  ! !******************************************************************
 
-  subroutine kbm_contour_gf_sum_z(Ga,Gb,C)
-    type(kbm_contour_gf)  :: Ga
-    type(kbm_contour_gf)  :: Gb
-    complex(8)            ::C
-    Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-    Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-    Ga%lmix(0:,0:) = Ga%lmix(0:,0:) + Gb%lmix(0:,0:)*C
-    Ga%gmix(0:,0:) = Ga%gmix(0:,0:) + Gb%gmix(0:,0:)*C
-    Ga%mats(0:,0:) = Ga%mats(0:,0:) + Gb%mats(0:,0:)*C
-  end subroutine kbm_contour_gf_sum_z
+  ! subroutine kbm_contour_gf_sum_z(Ga,Gb,C)
+  !   type(kbm_contour_gf)  :: Ga
+  !   type(kbm_contour_gf)  :: Gb
+  !   complex(8)            ::C
+  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
+  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
+  !   Ga%lmix(0:,0:) = Ga%lmix(0:,0:) + Gb%lmix(0:,0:)*C
+  !   Ga%gmix(0:,0:) = Ga%gmix(0:,0:) + Gb%gmix(0:,0:)*C
+  !   Ga%mats(0:,0:) = Ga%mats(0:,0:) + Gb%mats(0:,0:)*C
+  ! end subroutine kbm_contour_gf_sum_z
 
   !******************************************************************
   !******************************************************************

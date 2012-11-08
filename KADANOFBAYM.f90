@@ -59,35 +59,30 @@ contains
   !+-------------------------------------------------------------------+
   subroutine kadanoff_baym_localgf()
     integer              :: istep,i,j,ik
-    integer,save         :: loop=1
+    logical,save         :: init=.true.
     real(8),allocatable  :: tmpnk(:,:)
-    type(kbm_contour_gf) :: tmpG,tmpG1,tmpG2
+    type(kbm_contour_gf) :: tmpG
 
     !First loop ever, build the Initial Condition
-    if(loop==1)then
+    if(init)then
        call allocate_funx
        call build_ic
-       call buildUV
-    end if
-    loop=loop+1
+       init=.false.
+    endif
+
+    call buildUV
 
     call msg("Entering Kadanoff-Baym")
 
     !Set to Zero loc GF:
-    locG=zero ; locG1=zero ; locG2=zero
+    locG= zero
+    nk  = 0.d0
 
     !Tmp array for MPI storage, set to zero
     call allocate_kbm_contour_gf(tmpG,Nstep,Ltau)
-    tmpG=zero
-    if(volterra)then
-       call allocate_kbm_contour_gf(tmpG1,Nstep,Ltau)
-       call allocate_kbm_contour_gf(tmpG2,Nstep,Ltau)
-       tmpG1=zero ; tmpG2=zero
-    endif
-
-    !set to zero n(k,t)
     allocate(tmpnk(0:nstep,Lk))
-    tmpnk=0.d0 ; nk=0.d0
+    tmpG=zero
+    tmpnk=0.d0
 
 
     !=============START K-POINTS LOOP======================
@@ -101,37 +96,18 @@ contains
 
        !======T-STEP LOOP=====================
        do istep=0,nstep-1
-          call GFstep(1,ik,istep) !1st-pass
-          call GFstep(2,ik,istep) !2nd-pass
+          call GFstep(ik,istep) !two-steps procedure
        enddo
 
        !sum over k-point
-       call kbm_contour_gf_sum(tmpG,Gk,wt(ik))
-
-       if(volterra)then
-          !get G1=sum_k h(k,t)G(t,t')
-          do i=0,nstep
-             tmpG1%less(i,0:) = tmpG1%less(i,0:) + Hkt(ik,i)*Gk%less(i,0:)*wt(ik)
-             tmpG1%gtr(i,0:)  = tmpG1%gtr(i,0:)  + Hkt(ik,i)*Gk%gtr(i,0:)*wt(ik)
-             tmpG1%lmix(i,0:) = tmpG1%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*wt(ik)
-          end do
-          tmpG1%gmix(0:,0:) = tmpG1%gmix(0:,0:) + Hkt(ik,0)*Gk%gmix(0:,0:)*wt(ik)
-          tmpG1%mats(0:,0:) = tmpG1%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*wt(ik)
-
-          !get G2=sum_k h(k,t)G(t,t')h(k,t')
-          do i=0,nstep
-             do j=0,nstep
-                tmpG2%less(i,j) = tmpG2%less(i,j) + Hkt(ik,i)*Gk%less(i,j)*Hkt(ik,j)*wt(ik)
-                tmpG2%gtr(i,j)  = tmpG2%gtr(i,j)  + Hkt(ik,i)*Gk%gtr(i,j)*Hkt(ik,j)*wt(ik)
-             enddo
-             tmpG2%lmix(i,0:) = tmpG2%lmix(i,0:) + Hkt(ik,i)*Gk%lmix(i,0:)*Hkt(ik,0)*wt(ik)
-             tmpG2%gmix(0:,i) = tmpG2%gmix(0:,i) + Hkt(ik,0)*Gk%gmix(0:,i)*Hkt(ik,i)*wt(ik)
-          enddo
-          tmpG2%mats(0:,0:) = tmpG2%mats(0:,0:) + Hkt(ik,0)*Gk%mats(0:,0:)*Hkt(ik,0)*wt(ik)
-       endif
+       tmpG%less(0:,0:) = tmpG%less(0:,0:) + Gk%less(0:,0:)*wt(ik)
+       tmpG%gtr(0:,0:)  = tmpG%gtr(0:,0:)  + Gk%gtr(0:,0:)*wt(ik)
+       tmpG%lmix(0:,0:) = tmpG%lmix(0:,0:) + Gk%lmix(0:,0:)*wt(ik)
+       tmpG%gmix(0:,0:) = tmpG%gmix(0:,0:) + Gk%gmix(0:,0:)*wt(ik)
+       tmpG%mats(0:,0:) = tmpG%mats(0:,0:) + Gk%mats(0:,0:)*wt(ik)
 
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gk%less(istep,istep)
-       call eta(ik,Lk,unit=6)
+       call eta(ik,Lk)
     enddo
     call stop_timer
     call deallocate_kbm_contour_gf(Gk)
@@ -141,24 +117,21 @@ contains
 
     !Reduce Contour GF to master:
     !Bcast the local contour GF to every node
-    call MPI_REDUCE_kbm_contour_gf(tmpG,locG)
+    call MPI_ALLREDUCE(tmpG%less(0:,0:),locG%less(0:,0:),(Nstep+1)**2,&
+         MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_ALLREDUCE(tmpG%gtr(0:,0:),locG%gtr(0:,0:),(Nstep+1)**2,&
+         MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_ALLREDUCE(tmpG%lmix(0:,0:),locG%lmix(0:,0:),(Nstep+1)*(Ltau+1),&
+         MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_ALLREDUCE(tmpG%gmix(0:,0:),locG%gmix(0:,0:),(Nstep+1)*(Ltau+1),&
+         MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_ALLREDUCE(tmpG%mats(0:,0:),locG%mats(0:,0:),(Ltau+1)*(Ltau+1),&
+         MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_ALLREDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
     call deallocate_kbm_contour_gf(tmpG)
-    call MPI_BCAST_kbm_contour_gf(locG)
-
-    if(volterra)then
-       call MPI_REDUCE_kbm_contour_gf(tmpG1,locG1)
-       call MPI_REDUCE_kbm_contour_gf(tmpG2,locG2)
-       call deallocate_kbm_contour_gf(tmpG1)
-       call deallocate_kbm_contour_gf(tmpG2)
-       call MPI_BCAST_kbm_contour_gf(locG1)
-       call MPI_BCAST_kbm_contour_gf(locG2)
-    endif
-
-    call MPI_REDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
     deallocate(tmpnk)
 
-    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
   end subroutine kadanoff_baym_localgf
 
 
@@ -201,56 +174,58 @@ contains
   !+-------------------------------------------------------------------+
   !PURPOSE  : Execute the 2pass procedure to solve KB equations:
   !+-------------------------------------------------------------------+
-  subroutine GFstep(ips,ik,istep)
+  subroutine GFstep(ik,istep)
     integer :: ips,istep,ik
     integer :: i,j,itau
     integer :: it
 
-    select case(ips)
-    case(1)
-       !First Pass: get collision integrals up to t=T=istep
-       Ikless0 = zero
-       Ikgtr0  = zero
-       Iklmix0 = zero
-       Ikdiag  = 0.d0
-       call get_Ikcollision(istep)
-       Ikless0  = Ikless
-       Ikgtr0   = Ikgtr
-       Iklmix0  = iklmix
-       Ikdiag   = real(Ikgtr(istep))-real(Ikless(istep))
+    do ips=1,2
+       select case(ips)
+       case(1)
+          !First Pass: get collision integrals up to t=T=istep
+          Ikless0 = zero
+          Ikgtr0  = zero
+          Iklmix0 = zero
+          Ikdiag  = 0.d0
+          call get_Ikcollision(istep)
+          Ikless0  = Ikless
+          Ikgtr0   = Ikgtr
+          Iklmix0  = iklmix
+          Ikdiag   = real(Ikgtr(istep))-real(Ikless(istep))
 
-    case(2)
-       !Second Pass: get collision integrals up to t=T+\Delta=istep+1
-       call get_Ikcollision(istep+1)
-       Ikless   = (Ikless  + Ikless0)/2.d0
-       Ikgtr    = (Ikgtr   + Ikgtr0)/2.d0
-       Iklmix   = (Iklmix  + Iklmix0)/2.d0
-       Ikdiag   = (real(Ikgtr(istep+1))-real(Ikless(istep+1)) + Ikdiag)/2.d0
+       case(2)
+          !Second Pass: get collision integrals up to t=T+\Delta=istep+1
+          call get_Ikcollision(istep+1)
+          Ikless   = (Ikless  + Ikless0)/2.d0
+          Ikgtr    = (Ikgtr   + Ikgtr0)/2.d0
+          Iklmix   = (Iklmix  + Iklmix0)/2.d0
+          Ikdiag   = (real(Ikgtr(istep+1))-real(Ikless(istep+1)) + Ikdiag)/2.d0
 
-    end select
+       end select
 
-    !Evolve the solution of KB equations for all the k-points:
-    forall(it=0:istep)
-       Gk%less(it,istep+1) = Gk%less(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
-       Gk%gtr(istep+1,it)  = Gk%gtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
-    end forall
-    Gk%gtr(istep+1,istep)=(Gk%less(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
-    Gk%less(istep+1,istep+1)= Gk%less(istep,istep)-xi*dt*Ikdiag
-    Gk%gtr(istep+1,istep+1) = Gk%less(istep+1,istep+1)-xi
+       !Evolve the solution of KB equations for all the k-points:
+       forall(it=0:istep)
+          Gk%less(it,istep+1) = Gk%less(it,istep)*conjg(Udelta(ik,istep))+Ikless(it)*conjg(Vdelta(ik,istep))
+          Gk%gtr(istep+1,it)  = Gk%gtr(istep,it)*Udelta(ik,istep)+Ikgtr(it)*Vdelta(ik,istep)
+       end forall
+       Gk%gtr(istep+1,istep)=(Gk%less(istep,istep)-xi)*Udelta(ik,istep)+Ikgtr(istep)*Vdelta(ik,istep)
+       Gk%less(istep+1,istep+1)= Gk%less(istep,istep)-xi*dt*Ikdiag
+       Gk%gtr(istep+1,istep+1) = Gk%less(istep+1,istep+1)-xi
 
-    forall(itau=0:Ltau)Gk%lmix(istep+1,itau)=Gk%lmix(istep,itau)*Udelta(ik,istep)+Iklmix(itau)*Vdelta(ik,istep)
-    forall(itau=0:Ltau)Gk%gmix(itau,istep+1)=conjg(Gk%lmix(istep+1,Ltau-itau))
+       forall(itau=0:Ltau)Gk%lmix(istep+1,itau)=Gk%lmix(istep,itau)*Udelta(ik,istep)+Iklmix(itau)*Vdelta(ik,istep)
+       forall(itau=0:Ltau)Gk%gmix(itau,istep+1)=conjg(Gk%lmix(istep+1,Ltau-itau))
 
-    !$OMP PARALLEL PRIVATE(i,j)
-    !$OMP DO
-    do i=0,istep+1
-       do j=0,istep+1
-          if(i>j)Gk%less(i,j)=-conjg(Gk%less(j,i))
-          if(i<j)Gk%gtr(i,j)=-conjg(Gk%gtr(j,i)) 
+       !$OMP PARALLEL PRIVATE(i,j)
+       !$OMP DO
+       do i=0,istep+1
+          do j=0,istep+1
+             if(i>j)Gk%less(i,j)=-conjg(Gk%less(j,i))
+             if(i<j)Gk%gtr(i,j)=-conjg(Gk%gtr(j,i)) 
+          enddo
        enddo
+       !$OMP END DO
+       !$OMP END PARALLEL
     enddo
-    !$OMP END DO
-    !$OMP END PARALLEL
 
   end subroutine GFstep
 
@@ -259,9 +234,6 @@ contains
   !******************************************************************
   !******************************************************************
   !******************************************************************
-
-
-
 
 
 
@@ -351,7 +323,6 @@ contains
        Ib=zero
        do i=0,Ltau
           Ib = Ib+Vlmix(i)*Gk%mats(i,itau)*dtau
-          ! Ib = Ib+Vlmix(i)*Gktau(i-itau)*dtau
        enddo
        Iklmix(itau)=I1+Ib
     enddo
@@ -414,19 +385,17 @@ contains
     complex(8) :: funcM(L)
     real(8)    :: n,funcT(0:Ltau)
     call msg("Building initial conditions:")
-    call system("if [ ! -d InitialConditions ]; then mkdir InitialConditions; fi")
+    call create_data_dir("InitialConditions")
     icGkless = xi*eq_Nk ; icGktau  = 0.d0
     do ik=1,Lk
        funcM=one/(xi*wm - epsik(ik) - eq_Siw)
-       call fftgf_iw2tau(funcM,funcT,beta)
-       n=-funcT(Ltau)
-       icGktau(ik,0:Ltau)=funcT(0:Ltau)
-       forall(i=1:Ltau)icGktau(ik,-i)=-funcT(Ltau-i)
+       call fftgf_iw2tau(funcM,icGktau(ik,0:),beta)
+       !icGktau(ik,0:Ltau)=funcT(0:Ltau)
+       forall(i=1:Ltau)icGktau(ik,-i)=-icGktau(ik,Ltau-i)
     enddo
-    !Print:
     call splot("InitialConditions/icGklessVSepsik.ipt",epsik(1:Lk),dimag(icGkless(1:Lk)))
     do ik=1,Lk
-       call splot("InitialConditions/icGktau.ipt",tau(0:),icGktau(ik,0:),append=TT)
+       call splot("InitialConditions/icGktau.ipt",taureal,icGktau(ik,:),append=.true.)
     enddo
   end subroutine build_ic
 
@@ -435,6 +404,7 @@ contains
   !******************************************************************
   !******************************************************************
   !******************************************************************
+
 
 
 
@@ -633,8 +603,8 @@ contains
        do i=0,nstep
           Ak = Afield(t(i),Ek)
           kt = kgrid(ix,iy)-Ak
-          eab(1)=2*ts*cos(kt%x)
-          eab(2)=2*ts*cos(kt%y)
+          eab(1)=2.d0*ts*cos(kt%x)
+          eab(2)=2.d0*ts*cos(kt%y)
           chi_dia(1,1,i)=chi_dia(1,1,i)+2.d0*wt(ik)*eab(1)*xi*Gk%less(i,i)
           chi_dia(2,2,i)=chi_dia(2,2,i)+2.d0*wt(ik)*eab(2)*xi*Gk%less(i,i)
        enddo
@@ -659,21 +629,13 @@ contains
     if(mpiID==0)then
 
        call write_kbm_contour_gf(locG,reg_filename(data_dir)//"/locG")
-       call write_kbm_contour_gf(locG1,reg_filename(data_dir)//"/locG1")
-       call write_kbm_contour_gf(locG2,reg_filename(data_dir)//"/locG2")
        call splot(reg_filename(data_dir)//"/nk.data",nk(0:,:))
 
        if(plot3D)then
           call plot_kbm_contour_gf(locG,t(0:),tau(0:),"PLOT/locG")
-          if(volterra)then
-             call plot_kbm_contour_gf(locG1,t(0:),tau(0:),"PLOT/locG1")
-             call plot_kbm_contour_gf(locG2,t(0:),tau(0:),"PLOT/locG2")
-          endif
        end if
-       ! call splot("testGlesst0.ipt",t(0:),locGless(0:,0))
-       ! call splot("testGlmixtau0.ipt",t(0:),locGlmix(0:,0))
-       ! stop
-
+       call splot("testGlesst0.ipt",t(0:),locG%less(0:,0))
+       call splot("testGlmixtau0.ipt",t(0:),locG%lmix(0:,0))
 
        forall(i=0:nstep,j=0:nstep)
           gf%less%t(i-j) = locG%less(i,j)

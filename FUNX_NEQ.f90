@@ -49,8 +49,8 @@ contains
     if(mpiID==0)then
        call write_kbm_contour_gf(G0,reg_filename(data_dir)//"/G0")
        if(plot3D)call plot_kbm_contour_gf(G0,t(0:),tau(0:),"PLOT/G0")
-       call splot("PLOT/G0_less_t0.ipt",t(0:),G0%less(0:,0))
-       call splot("PLOT/G0_lmix_tau0.ipt",t(0:),G0%lmix(0:,0))
+       call splot("G0_less_t0.ipt",t(0:),G0%less(0:,0))
+       call splot("G0_lmix_tau0.ipt",t(0:),G0%lmix(0:,0))
     end if
   end subroutine neq_update_weiss_field
 

@@ -12,42 +12,125 @@ module EQUILIBRIUM
   private
 
   !Equilibrium Function
-  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_,sold
-  type(matsubara_gf)                 :: sm_,fm_,f0m_
-  real(8),allocatable,dimension(:)    :: wr_,nk_,wm_
+  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_
+  complex(8),allocatable,dimension(:) :: fiw_,siw_,f0iw_
+  real(8),allocatable,dimension(:)    :: ftau_,stau_,f0tau_
+  real(8),allocatable,dimension(:)    :: wr_,wm_
 
-
-  public :: solve_equilibrium_ipt
-  public :: update_equilibrium_weiss_field
-  public :: get_equilibrium_localgf
+  public  :: solve_equilibrium_ipt
+  public  :: update_equilibrium_weiss_field
+  public  :: get_equilibrium_localgf
   !public :: get_equilibrium_impuritygf
 
 contains
 
-  subroutine solve_equilibrium_ipt()
+  subroutine solve_equilibrium_ipt
+    integer    :: ik,i
+    real(8)    :: n
+    complex(8) :: zeta
+    logical    :: init,check(2)
+    init=.true.
+    do i=1,3
+       inquire(file=trim(irdFILE(i)),exist=check(i))
+       if(.not.check(i))inquire(file=trim(irdFILE(i))//".gz",exist=check(i))
+       init=init.AND.check(i)
+    enddo
+    if(init)then                !equilibrium solution exists:
+       call msg("Equilibrium solution exist:")
+    else
+       call create_data_dir("Equilibrium")
+       call solve_equilibrium_ipt_matsubara
+       call solve_equilibrium_ipt_realaxis
+
+       !Write the Weiss-fields G0(w):
+       call splot(trim(irdFILE(1)),wr_,fg0_)
+
+       !Write the Sigma(iw)
+       call splot(trim(irdFILE(2)),stau_(0:))
+
+       !Write the Weiss-fields G0(iw):
+       call splot(trim(irdFILE(3)),f0tau_(0:))
+
+       deallocate(sigma_,fg_,fg0_)
+       deallocate(siw_,fiw_,f0iw_)
+       deallocate(stau_,ftau_,f0tau_)
+       deallocate(wr_,wm_)
+    endif
+  end subroutine solve_equilibrium_ipt
+
+
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
+
+  subroutine solve_equilibrium_ipt_matsubara()
     integer    :: i,j,loop
     logical    :: converged
     complex(8) :: zeta
     real(8)    :: n,z,wmax_
+    complex(8),allocatable,dimension(:) :: sold
     if(mpiID==0)then
-       call msg("Solving Equilibrium problem:")
-       call create_data_dir("Equilibrium")
-       !
+       call msg("Solving  Equilibrium problem in Matsubara:")
+       call create_data_dir("Equilibrium/Matsubara")
+       allocate(fiw_(L),siw_(L),f0iw_(L))
+       allocate(ftau_(0:Ltau),stau_(0:Ltau),f0tau_(0:Ltau))
+       allocate(sold(L))
+       allocate(wm_(L))
+       wm_ = pi/beta*real(2*arange(1,L)-1,8)
+       siw_=zero ; sold=siw_
+       loop=0 ; converged=.false.
+       do while (.not.converged)
+          loop=loop+1
+          write(*,"(A,i5)",advance="no")"DMFT-loop",loop
+          do i=1,L
+             zeta    = xi*wm_(i) - siw_(i)
+             fiw_(i) = sum_overk_zeta(zeta,epsik,wt)
+          enddo
+          call  fftgf_iw2tau(fiw_,ftau_(0:),beta)
+          n     =-real(ftau_(Ltau))
+          f0iw_= one/(one/fiw_ + siw_)
+          siw_ = solve_ipt_matsubara(f0iw_)
+          siw_ = weight*siw_ + (1.d0-weight)*sold ; sold=siw_
+          converged=check_convergence(siw_,eps_error,Nsuccess,eqNloop)
+          z=1.d0 - dimag(siw_(1))/wm_(1);z=1.d0/z
+          call splot("Equilibrium/Matsubara/observables_all.ipt",dble(loop),beta,u,n,z,append=TT)
+       enddo
+       call close_file("Equilibrium/Matsubara/observables_all.ipt")
+       call splot("Equilibrium/Matsubara/G_iw.ipt",wm_,fiw_)
+       call splot("Equilibrium/Matsubara/G0_iw.ipt",wm_,f0iw_)
+       call splot("Equilibrium/Matsubara/Sigma_iw.ipt",wm_,siw_)
+
+       !Use IPT to get S(tau).
+       call fftgf_iw2tau(f0iw_,f0tau_(0:),beta)
+       forall(i=0:Ltau)stau_(i)=U**2*(f0tau_(i))**2*f0tau_(Ltau-i)       
+    endif
+  end subroutine solve_equilibrium_ipt_matsubara
+
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
+  subroutine solve_equilibrium_ipt_realaxis()
+    integer    :: i,j,loop
+    logical    :: converged
+    complex(8) :: zeta
+    real(8)    :: n,z,wmax_
+    complex(8),allocatable,dimension(:) :: sold
+    if(mpiID==0)then
+       call msg("Solving  Equilibrium problem on Real-axis:")
+       call create_data_dir("Equilibrium/Real")
        allocate(fg_(L))
        allocate(sigma_(L))
        allocate(fg0_(L))
        allocate(sold(L))
-       !
-       call allocate_gf(fm_,L)
-       call allocate_gf(f0m_,L)
-       call allocate_gf(sm_,L)
-       !
-       allocate(wr_(L),nk_(Lk),wm_(L))
-       !
+       allocate(wr_(L))
        wmax_= min(20.d0,wmax)
        wr_ = linspace(-wmax_,wmax_,L)
-       wm_ = pi/beta*real(2*arange(1,L)-1,8)
-       !
        sigma_=zero ; sold=sigma_
        loop=0 ; converged=.false.             
        do while (.not.converged)
@@ -62,63 +145,22 @@ contains
           sigma_= solve_ipt_sopt(fg0_,wr_)
           sigma_= weight*sigma_ + (1.d0-weight)*sold
           sold  = sigma_
-          converged=check_convergence(sigma_,eps_error,nsuccess,nloop)
-          call splot("Equilibrium/nVSiloop.ipt",loop,n,append=TT)
+          converged=check_convergence(sigma_,eps_error,nsuccess,eqNloop)
+          call splot("Equilibrium/Real/nVSiloop.ipt",loop,n,append=TT)
        enddo
-       call close_file("Equilibrium/nVSiloop.ipt")
-
-       call splot("Equilibrium/DOS.ipt",wr_,-aimag(fg_)/pi)
-       call splot("Equilibrium/G_realw.ipt",wr_,fg_)
-       call splot("Equilibrium/G0_realw.ipt",wr_,fg0_)
-       call splot("Equilibrium/Sigma_realw.ipt",wr_,sigma_)
-
-
-       sm_%iw=zero ; sold=sm_%iw
-       loop=0 ; converged=.false.
-       do while (.not.converged)
-          loop=loop+1
-          write(*,"(A,i5)",advance="no")"DMFT-loop",loop
-          do i=1,L
-             zeta    = xi*wm_(i) - sm_%iw(i)
-             fm_%iw(i) = sum_overk_zeta(zeta,epsik,wt)
-          enddo
-          call  fftgf_iw2tau(fm_%iw,fm_%tau,beta)
-          n     =-real(fm_%tau(L))
-          f0m_%iw= one/(one/fm_%iw + sm_%iw)
-          sm_%iw = solve_ipt_matsubara(f0m_%iw)
-          sm_%iw = weight*sm_%iw + (1.d0-weight)*sold ; sold=sm_%iw
-          converged=check_convergence(sm_%iw,eps_error,Nsuccess,Nloop)
-          z=1.d0 - dimag(sm_%iw(1))/wm_(1);z=1.d0/z
-          call splot("Equilibrium/zetaVSiloop.ipt",iloop,z,append=TT)
-          call splot("Equilibrium/nmVSiloop.ipt",loop,n,append=TT)
-       enddo
-       call close_file("Equilibrium/nmVSiloop.ipt")
-       call close_file("Equilibrium/zetaVSiloop.ipt")
-       call splot("Equilibrium/G_iw.ipt",wm_,fm_%iw)
-       call splot("Equilibrium/G0_iw.ipt",wm_,f0m_%iw)
-       call splot("Equilibrium/Sigma_iw.ipt",wm_,sm_%iw)
-
-       !Save G0(w):
-       call splot(trim(irdG0wfile),wr_,fg0_)   !interacting bath DOS     
-       call splot(trim(irdG0iwfile),wm_,f0m_%iw)
+       call close_file("Equilibrium/Real/nVSiloop.ipt")
+       call splot("Equilibrium/Real/DOS.ipt",wr_,-aimag(fg_)/pi)
+       call splot("Equilibrium/Real/G_realw.ipt",wr_,fg_)
+       call splot("Equilibrium/Real/G0_realw.ipt",wr_,fg0_)
+       call splot("Equilibrium/Real/Sigma_realw.ipt",wr_,sigma_)
     endif
-  end subroutine solve_equilibrium_ipt
-
-
-
-
-
-
+  end subroutine solve_equilibrium_ipt_realaxis
 
 
 
   !********************************************************************
   !********************************************************************
   !********************************************************************
-
-
-
-
 
 
 

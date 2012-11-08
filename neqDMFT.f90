@@ -22,10 +22,10 @@ program neqDMFT
   write(*,"(A,I4,A,I4,A)")'Processor ',mpiID,' of ',mpiSIZE,' is alive'
   call MPI_BARRIER(MPI_COMM_WORLD,mpiERR)
 
-  call read_input_init("inputFILE.in",printf=.true.)
+  call read_input_init("inputFILE.in")
   include "grid_setup.f90"
   include "build_square_lattice.f90"
-  
+
   !SET THE ELECTRIC FIELD:use constant field by default
   Ek = set_efield_vector(Ex,Ey)
   if(mpiID==0)call print_Afield_form(t(0:nstep))
@@ -34,10 +34,10 @@ program neqDMFT
   call global_memory_allocation !allocate functions in the memory
   call get_thermostat_bath()    !get the dissipative bath functions
 
-  if(solve_eq)call solve_equilibrium_ipt()
-  call neq_init_run            
   !initialize the run using different guess.
   !bridge between the eq. and the non-eq solution
+  call solve_equilibrium_ipt()
+  call neq_init_run            
 
   iloop=0;converged=.false.
   do while (.not.converged);iloop=iloop+1

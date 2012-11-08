@@ -1,10 +1,10 @@
-FC=mpif90
-EXE   = neqDMFT
-DIREXE= $(HOME)/.bin
-
 #=========================================================================
 include lib.mk
 #=========================================================================
+FC=$(SFMPI)/mpif90
+EXE   = neqDMFT
+DIREXE= $(HOME)/.bin
+
 
 .SUFFIXES: .f90 
 OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o FUNX_NEQ.o KADANOFBAYM.o

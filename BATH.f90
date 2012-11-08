@@ -59,13 +59,14 @@ contains
        ngtr = fermi0(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
        do i=-nstep,nstep
           peso=exp(-xi*t(i)*en)
-          S0less(i)=S0less(i)+ xi*Vpd**2*nless*peso*bath_dens(iw)*dw
-          S0gtr(i) =S0gtr(i) + xi*Vpd**2*ngtr*peso*bath_dens(iw)*dw
+          S0less(i)=S0less(i)+ xi*Vbath**2*nless*peso*bath_dens(iw)*dw
+          S0gtr(i) =S0gtr(i) + xi*Vbath**2*ngtr*peso*bath_dens(iw)*dw
        enddo
        do itau=0,Ltau
           do i=0,nstep
              peso=exp(-en*tau(itau))*exp(-xi*en*t(i))
-             S0lmix(i,itau) = S0lmix(i,itau) + xi*Vpd**2*nless*peso*bath_dens(iw)*dw
+             if(beta*en>35.d0)peso=exp(-xi*en*t(i))*exp(-(tau(itau)+beta)*en)
+             S0lmix(i,itau) = S0lmix(i,itau) + xi*Vbath**2*nless*peso*bath_dens(iw)*dw
           enddo
        enddo
     enddo
@@ -161,68 +162,6 @@ contains
   !********************************************************************
   !********************************************************************
   !********************************************************************
-
-
-
-
-
-
-
-
-
-  ! !+-------------------------------------------------------------------+
-  ! !PURPOSE  : Build the Bath part of the system using frequency domain
-  ! !formalism. 
-  ! !COMMENT  : Construct the Bath-Sigma functions from freq. domain
-  ! !(that is 'cause you know the analytic expression, same
-  ! !procedure as in IPTkeldysh @equilibrium)
-  ! !This turns out to be the same provided one takes 
-  ! !the limit \eta\goto 0.d0
-  ! !+-------------------------------------------------------------------+
-  ! subroutine get_Bath_w
-  !   integer :: i,im
-  !   real(8) :: A,An,w
-  !   complex(8) :: iw,fg
-  !   complex(8),dimension(-nstep:nstep) :: gb0fless,gb0fgtr
-  !   complex(8),dimension(-nstep:nstep) :: gb0tgtr,gb0tless
-  !   print '(A)',"Get Bath:"
-
-  !   do i=-nstep,nstep
-  !      w = wr(i) ;iw= cmplx(w,eps,8)
-  !      fg=zero
-  !      do im=0,Lmu
-  !         fg=fg + de*bath_dens(im)/(iw-bath_epsik(im))!/dble(Lmu)
-  !      enddo
-  !      A = -aimag(fg)/pi
-  !      An= A*fermi0(w,beta)
-  !      gb0fless(i)= pi2*xi*An
-  !      gb0fgtr(i) = pi2*xi*(An-A)
-  !   enddo
-  !   call fftgf_rw2rt(gb0fless,gb0tless,nstep)  ; gb0tless=fmesh/pi2*gb0tless
-  !   call fftgf_rw2rt(gb0fgtr, gb0tgtr,nstep)   ; gb0tgtr =fmesh/pi2*gb0tgtr
-  !   gb0tgtr =exa*gb0tgtr
-  !   gb0tless=exa*gb0tless
-  !   !Get the Self-energy contribution of the bath:
-  !   !=================================================
-  !   S0gtr=zero
-  !   S0less=zero
-  !   S0less=Vpd**2*gb0tless
-  !   S0gtr =Vpd**2*gb0tgtr
-  !   call system("mkdir BATH")   
-  !   call splot("BATH/bathG0less_t.ipt",t(-nstep:nstep),gb0tless)
-  !   call splot("BATH/bathG0gtr_t.ipt",t(-nstep:nstep),gb0tgtr)
-  !   call splot("BATH/S0less_t.ipt",t(-nstep:nstep),S0less)
-  !   call splot("BATH/S0gtr_t.ipt",t(-nstep:nstep),S0gtr)
-  !   print '(A)',"" 
-  !   return
-  ! end subroutine Get_Bath_w
-
-
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
-
 
 
 
