@@ -45,30 +45,27 @@ contains
 
     call msg("Get Sigma(t,t')")
 
-    forall(i=0:nstep,j=0:nstep)
-       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i) 
-       Sigma%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)
-    end forall
-
-    forall(i=0:nstep,itau=0:Ltau)&
-         Sigma%lmix(i,itau) = (U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i)
-    forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))
-
-
     forall(i=0:Ltau)eq_Stau(i)=(U**2)*(eq_G0tau(i)**2)*eq_G0tau(Ltau-i)
     forall(i=1:Ltau)eq_Stau(-i)=-eq_Stau(Ltau-i)
-    call fftgf_tau2iw(eq_Stau(0:),eq_Siw,beta)
-    !?? also: should I fix the Sigma(0,0) points?
-    forall(i=0:Ltau,j=0:Ltau)Sigma%mats(i,j)=eq_Stau(j-i)
-    !??
+    call fftgf_tau2iw(eq_Stau(0:),eq_Siw,beta)                   !Get S(iw) from S(tau)
 
-    call splot("eq_Sigma_tau.ipt",taureal,eq_Stau,append=.true.)
-    call splot("eq_Sigma_iw.ipt",wm,eq_Siw,append=.true.)
+    forall(i=0:Ltau,j=0:Ltau)Sigma%mats(i,j)=eq_Stau(i-j)        !get Sigma^M(tau,tau`)
+
+    forall(i=0:nstep,j=0:nstep)
+       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)    !get Sigma^>(t,t`)
+       Sigma%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)    !get Sigma^<(t,t`)
+    end forall
+
+    forall(i=0:nstep,itau=0:Ltau)Sigma%lmix(i,itau)=&
+         (U**2)*(G0%lmix(i,itau)**2)*G0%gmix(Ltau-itau,i)        !get Sigma^\lmix(t,tau`)
+    forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))  !get Sigma^\gmix(tau,t`)
 
     !Save data:
     if(mpiID==0)then
        call write_kbm_contour_gf(Sigma,trim(data_dir)//"/Sigma")
        if(plot3D)call plot_kbm_contour_gf(Sigma,t(0:),tau(0:),trim(plot_dir)//"/Sigma")
+       call splot("eq_Sigma_tau.ipt",taureal,eq_Stau,append=.true.)
+       call splot("eq_Sigma_iw.ipt",wm,eq_Siw,append=.true.)
     endif
 
   end subroutine neq_solve_ipt

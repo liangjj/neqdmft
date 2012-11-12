@@ -181,31 +181,6 @@ contains
   !******************************************************************
   !******************************************************************
 
-
-  ! subroutine keldysh_contour_gf_sum_d(Ga,Gb,C)
-  !   type(keldysh_contour_gf)  :: Ga
-  !   type(keldysh_contour_gf)  :: Gb
-  !   real(8)               :: C
-  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-  ! end subroutine keldysh_contour_gf_sum_d
-
-  ! !******************************************************************
-  ! !******************************************************************
-  ! !******************************************************************
-
-  ! subroutine keldysh_contour_gf_sum_z(Ga,Gb,C)
-  !   type(keldysh_contour_gf)  :: Ga
-  !   type(keldysh_contour_gf)  :: Gb
-  !   complex(8)            ::C
-  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-  ! end subroutine keldysh_contour_gf_sum_z
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
   function keldysh_contour_gf_scalarL_d(C,G) result(F)
     real(8),intent(in) :: C
     type(keldysh_contour_gf),intent(in) :: G
@@ -421,36 +396,6 @@ contains
   !******************************************************************
   !******************************************************************
 
-  ! subroutine kbm_contour_gf_sum_d(Ga,Gb,C)
-  !   type(kbm_contour_gf)  :: Ga
-  !   type(kbm_contour_gf)  :: Gb
-  !   real(8)               :: C
-  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-  !   Ga%lmix(0:,0:) = Ga%lmix(0:,0:) + Gb%lmix(0:,0:)*C
-  !   Ga%gmix(0:,0:) = Ga%gmix(0:,0:) + Gb%gmix(0:,0:)*C
-  !   Ga%mats(0:,0:) = Ga%mats(0:,0:) + Gb%mats(0:,0:)*C
-  ! end subroutine kbm_contour_gf_sum_d
-
-  ! !******************************************************************
-  ! !******************************************************************
-  ! !******************************************************************
-
-  ! subroutine kbm_contour_gf_sum_z(Ga,Gb,C)
-  !   type(kbm_contour_gf)  :: Ga
-  !   type(kbm_contour_gf)  :: Gb
-  !   complex(8)            ::C
-  !   Ga%less(0:,0:) = Ga%less(0:,0:) + Gb%less(0:,0:)*C
-  !   Ga%gtr(0:,0:)  = Ga%gtr(0:,0:)  + Gb%gtr(0:,0:)*C
-  !   Ga%lmix(0:,0:) = Ga%lmix(0:,0:) + Gb%lmix(0:,0:)*C
-  !   Ga%gmix(0:,0:) = Ga%gmix(0:,0:) + Gb%gmix(0:,0:)*C
-  !   Ga%mats(0:,0:) = Ga%mats(0:,0:) + Gb%mats(0:,0:)*C
-  ! end subroutine kbm_contour_gf_sum_z
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
   function kbm_contour_gf_scalarL_d(C,G) result(F)
     real(8),intent(in) :: C
     type(kbm_contour_gf),intent(in) :: G
@@ -538,7 +483,7 @@ contains
     type(kbm_contour_gf),intent(inout) :: G
     if( .not.g%status )call error("ERROR contour_gf/mpi_bcast_kbm_contour_gf: object function not allocated.")    
     call MPI_BCAST(G%less(0:,0:),size(G%less(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BCAST(G%gtr(0:,0:),size(G%gtr(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
+    call MPI_BCAST(G%gtr(0:,0:) ,size(G%gtr(0:,0:)) ,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(G%lmix(0:,0:),size(G%lmix(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(G%gmix(0:,0:),size(G%gmix(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
     call MPI_BCAST(G%mats(0:,0:),size(G%mats(0:,0:)),MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,MPIerr)

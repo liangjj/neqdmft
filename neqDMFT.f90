@@ -32,7 +32,9 @@ program neqDMFT
   Lk   = square_lattice_dimension(Nx,Ny)
   allocate(epsik(Lk),wt(Lk))
   wt   = square_lattice_structure(Lk,Nx,Ny)
-  epsik= square_lattice_dispersion_array(Lk,ts=ts)
+  epsik= square_lattice_dispersion_array(Lk,ts)
+  allocate(sorted_epsik(Lk),sorted_ik(Lk))
+  sorted_epsik=epsik ; call sort_array(sorted_epsik,sorted_ik)
   if(mpiID==0)call get_free_dos(epsik,wt)
 
   !SET THE ELECTRIC FIELD (in electric_field):
@@ -51,20 +53,20 @@ program neqDMFT
 
   !START DMFT LOOP SEQUENCE:
   !==============================================================
-
   !initialize the run by guessing/reading the self-energy functions (in IPT_NEQ.f90):
   call neq_init_run
 
   iloop=0;converged=.false.
-  do while (.not.converged);iloop=iloop+1
+  do while(.not.converged);iloop=iloop+1
      call start_loop(iloop,nloop,"DMFT-loop",unit=6)
      !
      call neq_get_localgf        !-|(in kadanoff-baym)
+     if(iloop==2)stop
      call neq_update_weiss_field !-|SELF-CONSISTENCY (in funx_neq)
      !
      call neq_solve_ipt          !-|IMPURITY SOLVER (in ipt_neq)
      !
-     call print_observables      !(in funx_neq)
+     ! call print_observables      !(in funx_neq)
      converged = convergence_check()
      call MPI_BCAST(converged,1,MPI_LOGICAL,0,MPI_COMM_WORLD,mpiERR)
      !

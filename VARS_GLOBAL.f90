@@ -72,8 +72,8 @@ MODULE VARS_GLOBAL
 
   !LATTICE (weight & dispersion) ARRAYS:
   !=========================================================  
-  real(8),dimension(:),allocatable :: wt,epsik
-
+  real(8),dimension(:),allocatable :: wt,epsik,sorted_epsik
+  integer,allocatable,dimension(:) :: sorted_ik
 
   !ELECTRIC FIELD VARIABLES (& NML):
   !=========================================================  
@@ -102,8 +102,7 @@ MODULE VARS_GLOBAL
   real(8),allocatable,dimension(:)     :: eq_Stau
   complex(8),allocatable,dimension(:)  :: eq_Giw
   real(8),allocatable,dimension(:)     :: eq_Gtau
-  !
-  ! real(8),allocatable,dimension(:)     :: eq_nk
+  real(8),allocatable,dimension(:)     :: eq_nk
   !
 
 
@@ -116,8 +115,9 @@ MODULE VARS_GLOBAL
   !LOCAL GF
   type(kbm_contour_gf) :: locG
   !Bath SELF-ENERGY
-  complex(8),allocatable,dimension(:)   :: S0gtr,S0less
-  complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
+  type(kbm_contour_gf) :: S0
+  ! complex(8),allocatable,dimension(:)   :: S0gtr,S0less
+  ! complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
   !MOMENTUM-DISTRIBUTION
   real(8),allocatable,dimension(:,:)    :: nk
 
@@ -376,10 +376,11 @@ contains
     !Local Green's functions:
     call allocate_kbm_contour_gf(locG,Nstep,Ltau)
     !Bath self-energies:
-    allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
-    allocate(S0gmix(0:Ltau,0:nstep),S0lmix(0:nstep,0:Ltau))
+    call allocate_kbm_contour_gf(S0,Nstep,Ltau)
+    ! allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
+    ! allocate(S0gmix(0:Ltau,0:nstep),S0lmix(0:nstep,0:Ltau))
     !Momentum-distribution:
-    allocate(nk(0:nstep,Lk))
+    allocate(nk(0:nstep,Lk),eq_nk(Lk))
     !Equilibrium/Wigner rotated Green's function
     call allocate_gf(gf0,nstep)
     call allocate_gf(gf,nstep)

@@ -11,6 +11,7 @@ module BATH
   private
   integer,parameter                :: Lw=2048 !# of frequencies
   real(8),allocatable,dimension(:) :: bath_dens,wfreq
+
   public                           :: get_thermostat_bath
 
 contains
@@ -51,31 +52,45 @@ contains
     end select
 
 
-    S0less=zero ; S0gtr=zero
-    S0lmix=zero; S0gmix=zero
-    do iw=1,Lw
-       en   = wfreq(iw)
-       nless= fermi0(en,beta)
-       ngtr = fermi0(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
-       do i=-nstep,nstep
-          peso=exp(-xi*t(i)*en)
-          S0less(i)=S0less(i)+ xi*Vbath**2*nless*peso*bath_dens(iw)*dw
-          S0gtr(i) =S0gtr(i) + xi*Vbath**2*ngtr*peso*bath_dens(iw)*dw
-       enddo
-       do itau=0,Ltau
+    ! S0less=zero ; S0gtr=zero
+    ! S0lmix=zero; S0gmix=zero
+    S0 = zero
+    if(Vbath/=0.d0)then
+       do iw=1,Lw
+          en   = wfreq(iw)
+          nless= fermi0(en,beta)
+          ngtr = fermi0(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
           do i=0,nstep
-             peso=exp(-en*tau(itau))*exp(-xi*en*t(i))
-             if(beta*en>35.d0)peso=exp(-xi*en*t(i))*exp(-(tau(itau)+beta)*en)
-             S0lmix(i,itau) = S0lmix(i,itau) + xi*Vbath**2*nless*peso*bath_dens(iw)*dw
+             do j=0,nstep
+                peso=exp(-xi*(t(i)-t(j))*en)
+                S0%less(i,j)=S0%less(i,j)+ xi*Vbath**2*nless*peso*bath_dens(iw)*dw
+                S0%gtr(i,j) =S0%gtr(i,j) + xi*Vbath**2*ngtr*peso*bath_dens(iw)*dw
+             enddo
+
+             if(en>=0.d0)then
+                do itau=0,Ltau
+                   peso=exp(-xi*en*t(i))*exp(-en*(beta-tau(itau)))/(1.d0+exp(-en*beta))
+                   if(beta*en>20.d0)peso=exp(-xi*en*t(i))*exp(-en*(beta-tau(itau)))
+                   S0%lmix(i,itau) = S0%lmix(i,itau) + xi*Vbath**2*peso*bath_dens(iw)*dw
+                enddo
+             else
+                do itau=0,Ltau
+                   peso=exp(-xi*en*t(i))*exp(-en*(beta-tau(itau)))/(1.d0+exp(-en*beta))
+                   if(beta*en<-20.d0)peso=exp(-xi*en*t(i))*exp(en*tau(itau))
+                   S0%lmix(i,itau) = S0%lmix(i,itau) + xi*Vbath**2*peso*bath_dens(iw)*dw
+                enddo
+             endif
           enddo
        enddo
-    enddo
-    forall(i=0:Ltau)S0gmix(i,:)=conjg(S0lmix(:,Ltau-i))
+       forall(i=0:Ltau)S0%gmix(i,:)=conjg(S0%lmix(:,Ltau-i))
+    endif
+
     if(mpiID==0)then
-       call splot("Bath/S0less_t.ipt",t,S0less)
-       call splot("Bath/S0gtr_t.ipt",t,S0gtr)
-       call splot("Bath/S0lmix_t_tau",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))
        call splot("Bath/DOSbath.lattice",wfreq,bath_dens)
+       if(Vbath/=0.d0 .AND. plot3D)call plot_kbm_contour_gf(S0,t(0:),tau(0:),"Bath/S0")          
+       ! call splot("Bath/S0less_t.ipt",t,S0less)
+       ! call splot("Bath/S0gtr_t.ipt",t,S0gtr)
+       ! call splot("Bath/S0lmix_t_tau",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))
     endif
 
   end subroutine get_thermostat_bath
