@@ -220,7 +220,7 @@ contains
        I1=zero; Ib=zero
        do i=1,it
           I1 = I1 + SretF(it,i)*locG%less(i,it) + Sigma%less(it,i)*conjg(GretF(it,i))
-          Ib = Ib + S0retF(it-i)*locG%less(i,it) + S0%less(it-i)*conjg(GretF(it,i))
+          Ib = Ib + S0retF(it,i)*locG%less(i,it) + S0%less(it,i)*conjg(GretF(it,i))
        enddo
        Epot(it)= -xi*I1*dt/2.d0
        Eb(it)= -xi*Ib*dt/2.d0
@@ -571,10 +571,10 @@ contains
 
 
   !-------------------------------------------------------!
-  function S0retF(i)
-    integer,intent(in) :: i
+  function S0retF(i,j)
+    integer,intent(in) :: i,j
     complex(8)         :: S0retF
-    S0retF = heaviside(t(i))*(S0%gtr(i)-S0%less(i))
+    S0retF = heaviside(t(i)-t(j))*(S0%gtr(i,j)-S0%less(i,j))
   end function S0retF
   !-------------------------------------------------------!
 

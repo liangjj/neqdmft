@@ -7,8 +7,8 @@
 MODULE VARS_GLOBAL
   !Local:
   USE CONTOUR_GF
+ !SciFor library
   USE PARSE_CMD
-  !SciFor library
   USE COMMON_VARS
   USE GREENFUNX
   USE TIMER
@@ -61,13 +61,8 @@ MODULE VARS_GLOBAL
   !FREQS & TIME ARRAYS:
   !=========================================================  
   real(8),dimension(:),allocatable    :: wr,t,wm,tau,taureal
-  real(8)                             :: dtaureal
 
-  !KADANOFF-BAYM-MATSUBARA CONTOUR:
-  !=========================================================  
-  integer                               :: t1min,t1max,t2min,t2max,t3min,t3max
-  real(8),allocatable,dimension(:)      :: tloc
-  complex(8),allocatable,dimension(:)   :: dtloc
+
 
 
   !LATTICE (weight & dispersion) ARRAYS:

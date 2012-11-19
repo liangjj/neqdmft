@@ -122,7 +122,7 @@ contains
     logical    :: converged
     complex(8) :: zeta
     real(8)    :: n,z,wmax_
-    complex(8),allocatable,dimension(:) :: sold
+    complex(8),allocatable,dimension(:) :: sold,sigt
     call msg("Solving  Equilibrium problem on Real-axis:")
     call create_data_dir("Equilibrium/Real")
     allocate(fg_(L))

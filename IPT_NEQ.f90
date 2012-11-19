@@ -42,7 +42,7 @@ contains
   !+-------------------------------------------------------------------+
   subroutine neq_solve_ipt()
     integer      :: i,j,itau
-
+    real(8),dimension(0:nstep)            :: nt             !occupation(time)
     call msg("Get Sigma(t,t')")
 
     forall(i=0:Ltau)eq_Stau(i)=(U**2)*(eq_G0tau(i)**2)*eq_G0tau(Ltau-i)
@@ -52,13 +52,15 @@ contains
     forall(i=0:Ltau,j=0:Ltau)Sigma%mats(i,j)=eq_Stau(i-j)        !get Sigma^M(tau,tau`)
 
     forall(i=0:nstep,j=0:nstep)
-       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)    !get Sigma^>(t,t`)
        Sigma%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)    !get Sigma^<(t,t`)
+       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)    !get Sigma^>(t,t`)
     end forall
 
-    forall(i=0:nstep,itau=0:Ltau)Sigma%lmix(i,itau)=&
-         (U**2)*(G0%lmix(i,itau)**2)*G0%gmix(Ltau-itau,i)        !get Sigma^\lmix(t,tau`)
-    forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))  !get Sigma^\gmix(tau,t`)
+    forall(i=0:nstep,itau=0:Ltau)&
+         Sigma%lmix(i,itau)=(U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i) !get Sigma^\lmix(t,tau`)
+    !    Sigma%gmix(itau,i)=(U**2)*(G0%gmix(itau,i)**2)*G0%lmix(i,itau) !get Sigma^\gmix(t,tau`)
+    ! end forall
+    forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))    !get Sigma^\gmix(tau,t`)
 
     !Save data:
     if(mpiID==0)then
@@ -66,6 +68,10 @@ contains
        if(plot3D)call plot_kbm_contour_gf(Sigma,t(0:),tau(0:),trim(plot_dir)//"/Sigma")
        call splot("eq_Sigma_tau.ipt",taureal,eq_Stau,append=.true.)
        call splot("eq_Sigma_iw.ipt",wm,eq_Siw,append=.true.)
+       call splot("Sigma_less_t0.ipt",t(0:),Sigma%less(0:,0))
+       call splot("Sigma_lmix_tau0.ipt",t(0:),Sigma%lmix(0:,0))
+       forall(i=0:nstep)nt(i)=-xi*Sigma%less(i,i)
+       call splot("nsVStime.ipt",t(0:nstep),nt(0:nstep),append=TT)
     endif
 
   end subroutine neq_solve_ipt
