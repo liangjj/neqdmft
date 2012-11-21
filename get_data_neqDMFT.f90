@@ -2,14 +2,12 @@ program getDATA
   USE VARS_GLOBAL
   USE ELECTRIC_FIELD
   USE BATH
-  USE FUNX_NEQ
-  !USE DLPLOT
   implicit none
   !Add here the extra variables 
   integer                                :: i,j,ik,loop,narg,iarg,k,ia,ir,irel,iave
   character(len=16)                      :: DIR
   complex(8),dimension(:,:),allocatable  :: locGret,Sret,impGret,G0ret
-  type(keldysh_contour_gf)               :: guessG0
+  !type(keldysh_contour_gf)               :: guessG0
   logical                                :: file
   !Wigner variables:
   real(8),dimension(:),allocatable       :: trel,tave
@@ -18,13 +16,14 @@ program getDATA
   complex(8),dimension(:,:),allocatable  :: gfret_wgn,sfret_wgn,gfless_wgn
   real(8),dimension(:,:),allocatable     :: nf_wgn
 
-  call read_input_init("used.inputFILE.in",printf=.false.)
+  call read_input_init("used.inputFILE.in")
   include "grid_setup.f90"  
   Lk   = square_lattice_dimension(Nx,Ny)
   allocate(epsik(Lk),wt(Lk))
   wt   = square_lattice_structure(Lk,Nx,Ny)
   epsik= square_lattice_dispersion_array(Lk,ts=ts)
-  Ek = set_efield_vector(Ex,Ey)
+
+  call set_efield_vector()
 
   DIR="RESULTS"
   if(Lkreduced<200)Lkreduced=200
@@ -42,18 +41,15 @@ contains
 
     call massive_allocation()
 
-    !call get_thermostat_bath()
+    call get_thermostat_bath()
 
     !Read the functions:
-    call read_keldysh_contour_gf(S0,"Bath/S0")
-    call read_keldysh_contour_gf(G0,reg_filename(data_dir)//"/G0")
-    call read_keldysh_contour_gf(locG,reg_filename(data_dir)//"/locG")
-    call read_keldysh_contour_gf(locG1,reg_filename(data_dir)//"/locG1")
-    call read_keldysh_contour_gf(locG2,reg_filename(data_dir)//"/locG2")
-    call read_keldysh_contour_gf(Sigma,reg_filename(data_dir)//"/Sigma")
-    call read_keldysh_contour_gf(guessG0,"InitialConditions/guessG0")
+    call read_keldysh_contour_gf(G0,trim(data_dir)//"/G0")
+    call read_keldysh_contour_gf(locG,trim(data_dir)//"/locG")
+    call read_keldysh_contour_gf(Sigma,trim(data_dir)//"/Sigma")
+    !call read_keldysh_contour_gf(guessG0,trim(data_dir)//"/guessG0")
 
-    call sread(reg_filename(data_dir)//"/nk.data",nk(0:nstep,1:Lk))
+    call sread(trim(data_dir)//"/nk.data",nk(0:nstep,1:Lk))
 
     if(fchi)then
        call sread("locChi_11.data",chi(1,1,0:nstep,0:nstep))
@@ -83,7 +79,7 @@ contains
   subroutine massive_allocation
     call global_memory_allocation() !allocate memory as in the main code
     !+ something extra:
-    call allocate_keldysh_contour_gf(guessG0,nstep)
+    !call allocate_keldysh_contour_gf(guessG0,nstep)
     allocate(locGret(0:nstep,0:nstep))
     allocate(Sret(0:nstep,0:nstep))
     allocate(G0ret(0:nstep,0:nstep))
@@ -325,11 +321,10 @@ contains
     if(.not.plot3D)then         !functions have not be plotted during run, plot them now
        !if(Efield/=0.d0 .or. Vpd/=0.0)call dplot_3d_surface_animated("3dFSVSpiVSt","$k_x$","$k_y$","$FS(k_x,k_y)$",&
        !kgrid(0:Nx,0)%x,kgrid(0,0:Ny)%y,nDens(0:Nx,0:Ny,0:nstep))
-       call create_data_dir("PLOT")
-       call plot_keldysh_contour_gf(guessG0,t(0:),"PLOT/guessG0")
-       call plot_keldysh_contour_gf(G0,t(0:),"PLOT/G0")
-       call plot_keldysh_contour_gf(locG,t(0:),"PLOT/locG")
-       call plot_keldysh_contour_gf(Sigma,t(0:),"PLOT/Sigma")
+       !call plot_keldysh_contour_gf(guessG0,t(0:),trim(plot_dir)//"/guessG0")
+       call plot_keldysh_contour_gf(G0,t(0:),trim(plot_dir)//"/G0")
+       call plot_keldysh_contour_gf(locG,t(0:),trim(plot_dir)//"/locG")
+       call plot_keldysh_contour_gf(Sigma,t(0:),trim(plot_dir)//"/Sigma")
     endif
     call system("rm -rf "//dir//"/3d* 2>/dev/null")
     call system("rm -rf "//dir//"/*3D 2>/dev/null")
@@ -373,15 +368,15 @@ contains
     if(heaviside(0.d0)==1.d0)gf0%ret%t(0)=gf0%ret%t(0)/2.d0 !; gf0%ret%t(0)=-xi
     if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0
     if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0   !; gf%ret%t(0)=-xi
-    if(loop==1)then
-       call splot(dir//"/guessG0less_t.ipt",t(-nstep:nstep),gf0%less%t)
-       call splot(dir//"/guessG0gtr_t.ipt",t(-nstep:nstep),gf0%gtr%t)
-       call splot(dir//"/guessG0ret_t.ipt",t(-nstep:nstep),gf0%ret%t)
-    else
-       call splot(dir//"/G0less_t.ipt",t(-nstep:nstep),gf0%less%t)
-       call splot(dir//"/G0gtr_t.ipt",t(-nstep:nstep),gf0%gtr%t)
-       call splot(dir//"/G0ret_t.ipt",t(-nstep:nstep),gf0%ret%t)
-    endif
+    ! if(loop==1)then
+    !    call splot(dir//"/guessG0less_t.ipt",t(-nstep:nstep),gf0%less%t)
+    !    call splot(dir//"/guessG0gtr_t.ipt",t(-nstep:nstep),gf0%gtr%t)
+    !    call splot(dir//"/guessG0ret_t.ipt",t(-nstep:nstep),gf0%ret%t)
+    ! else
+    call splot(dir//"/G0less_t.ipt",t(-nstep:nstep),gf0%less%t)
+    call splot(dir//"/G0gtr_t.ipt",t(-nstep:nstep),gf0%gtr%t)
+    call splot(dir//"/G0ret_t.ipt",t(-nstep:nstep),gf0%ret%t)
+    ! endif
     call splot(dir//"/Sless_t.ipt",t(-nstep:nstep),sf%less%t)
     call splot(dir//"/Sgtr_t.ipt",t(-nstep:nstep),sf%gtr%t)
     call splot(dir//"/Sret_t.ipt",t(-nstep:nstep),sf%ret%t)
@@ -392,11 +387,11 @@ contains
     call fftgf_rt2rw(gf0%ret%t,gf0%ret%t,nstep) ;    gf0%ret%t=gf0%ret%t*dt ; call swap_fftrt2rw(gf0%ret%t)
     call fftgf_rt2rw(gf%ret%t,gf%ret%t,nstep)   ;    gf%ret%t=gf%ret%t*dt   ; call swap_fftrt2rw(gf%ret%t)
     call fftgf_rt2rw(sf%ret%t,sf%ret%t,nstep)   ;    sf%ret%t=dt*sf%ret%t   ; call swap_fftrt2rw(sf%ret%t)
-    if(loop==1)then
-       call splot(dir//"/guessG0ret_realw.ipt",wr,gf0%ret%t)
-    else
-       call splot(dir//"/G0ret_realw.ipt",wr,gf0%ret%t)
-    endif
+    ! if(loop==1)then
+    !    call splot(dir//"/guessG0ret_realw.ipt",wr,gf0%ret%t)
+    ! else
+    call splot(dir//"/G0ret_realw.ipt",wr,gf0%ret%t)
+    ! endif
     call splot(dir//"/Sret_realw.ipt",wr,sf%ret%t)
     call splot(dir//"/DOS.ipt",wr,-aimag(gf%ret%t)/pi)
 

@@ -31,12 +31,12 @@ contains
     call msg("|E|=E0="//trim(txtfy(Efield/modulo)),id=0)
     if(alat==0)call error("a_lat=0! EXIT")
     check=.false.
-    check=field_profile=="dc".OR.&
-         field_profile=="ac".OR.&
-         field_profile=="acdc".OR.&
-         field_profile=="pulse".OR.&
-         field_profile=="ramp"
-    if(.not.check)call error("ELECTRIC_FIELD/Afield: wrong field_profile. set:dc,ac,acdc,pulse,ramp")
+    check=field_type=="dc".OR.&
+         field_type=="ac".OR.&
+         field_type=="acdc".OR.&
+         field_type=="pulse".OR.&
+         field_type=="ramp"
+    if(.not.check)call error("ELECTRIC_FIELD/Afield: wrong field_type. set:dc,ac,acdc,pulse,ramp")
     if(mpiID==0)call print_Afield_form(t(0:nstep))
   end subroutine set_efield_vector
 
@@ -51,7 +51,7 @@ contains
     type(vect2D)            :: Afield
     complex(8)              :: zp,zm
 
-    select case(field_profile)
+    select case(field_type)
     case ("dc")                !DC ELECTRIC FIELD:
        ftime=-(step(t-t0)*(t-t0 + (t1-t)*step(t-t1) - (t1-t0)*step(t0-t1)))
        Afield=E*Efield*ftime       !A(t) = E0*F(t)*(e_x + e_y)
@@ -82,7 +82,6 @@ contains
        !!add more here:
     end select
     !-----------------------------
-
 
 
   end function Afield
@@ -117,7 +116,7 @@ contains
     enddo
     close(10)
     close(11)
-    if(field_profile=="ac")call msg("Root condition: "//trim(txtfy(bessel_j0(Efield/Omega0))))
+    if(field_type=="ac")call msg("Root condition: "//trim(txtfy(bessel_j0(Efield/Omega0))))
   end subroutine print_Afield_form
 
 

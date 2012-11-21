@@ -4,17 +4,11 @@
 !###############################################################
 module IPT_NEQ
   USE VARS_GLOBAL
-  !USE EQUILIBRIUM
-  !USE ELECTRIC_FIELD
-  !USE MATRIX
   implicit none
   private
 
   public  :: neq_init_run
   public  :: neq_solve_ipt
-
-  ! integer :: Liw,Lw
-  ! real(8),allocatable,dimension(:)    :: wr_,wm_
 
 contains
 
@@ -40,8 +34,6 @@ contains
        call read_nkfile(eq_nk,trim(irdnkfile))
     else
        !Get non-interacting n(k):
-       ! xmu_=xmu   ; if(iquench)xmu_=xmu0
-       ! beta_=beta ; if(iquench)beta_=beta0
        do ik=1,Lk
           eq_nk(ik)=fermi((epsik(ik)),beta)
        enddo

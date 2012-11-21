@@ -26,56 +26,55 @@ MODULE VARS_GLOBAL
 
   !Gloabl  variables
   !=========================================================
-  integer,protected :: Lmu           !# of bath energies
-  integer,protected :: Ltau          !Imaginary time slices
   integer           :: nstep         !Number of Time steps
+  integer           :: Lmu           !# of bath energies
+  integer           :: Ltau          !Imaginary time slices
   integer           :: L             !a big number
   integer           :: Lk            !total lattice  dimension
   integer           :: Lkreduced     !reduced lattice dimension
   integer           :: Nx,Ny         !lattice grid dimensions
   integer           :: iloop,nloop    !dmft loop variables
-  integer           :: eqnloop
+  integer           :: eqnloop        !dmft loop of the equilibrium solution
   real(8)           :: ts             !n.n./n.n.n. hopping amplitude
   real(8)           :: u              !local,non-local interaction 
-  real(8)           :: Vbath
+  real(8)           :: Vbath          !Hopping amplitude to the BATH
   real(8)           :: Wbath          !Width of the BATH DOS
   real(8)           :: dt,dtau        !time step
   real(8)           :: fmesh          !freq. step
   real(8)           :: beta           !inverse temperature
   real(8)           :: eps            !broadening
-  ! real(8)           :: beta0,xmu0,U0 !quench variables
-  ! logical           :: iquench       !quench flag
-  logical           :: Equench       !initial condition with (T) or without (F) electric field
+  character(len=16) :: int_method     !choose the method of integration
   logical           :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
   logical           :: solve_wfftw   !solve_wfftw=TT solve Kadanof-Baym equations using FFTw (iff Efield=0)
-  character(len=6)  :: method        !choose the perturbation theory method: IPT,SPT
   character(len=16) :: bath_type     !choose the shape of the BATH
-  character(len=16) :: field_profile !choose the profile of the electric field
+  character(len=16) :: field_type !choose the profile of the electric field
   real(8)           :: eps_error     !convergence error threshold
   integer           :: Nsuccess      !number of convergence success
   real(8)           :: weight        !mixing weight parameter
   real(8)           :: wmin,wmax     !min/max frequency
   real(8)           :: tmin,tmax     !min/max time
-  logical           :: plotVF,plot3D,fchi
-  integer           :: size_cutoff
+  logical           :: plot3D        !
+  logical           :: fchi          !
   logical           :: solve_eq      !Solve equilibrium Flag:
-  logical           :: g0loc_guess   !use non-interacting local GF as guess.
-  !
+
+  !remove 
+
+  ! logical           :: plotVF
+  ! logical           :: equench       !initial condition with (T) or without (F) electric field
+  ! character(len=6)  :: method        !choose the perturbation theory method: IPT,SPT
+  ! logical           :: g0loc_guess   !use non-interacting local GF as guess.
+  ! real(8)           :: beta0,xmu0,U0 !quench variables
+  ! logical           :: iquench       !quench flag
+
 
   !FILES TO RESTART
   !=========================================================
-  character(len=32) :: irdSFILE,irdNkfile !irdG0wfile,irdG0iwfile
+  character(len=32) :: irdSFILE,irdNkfile
 
 
   !FREQS & TIME ARRAYS:
   !=========================================================  
   real(8),dimension(:),allocatable    :: wr,t,wm,tau
-
-  !KADANOFF-BAYM-MATSUBARA CONTOUR:
-  !=========================================================  
-  integer                               :: t1min,t1max,t2min,t2max,t3min,t3max
-  ! real(8),allocatable,dimension(:)      :: tloc
-  complex(8),allocatable,dimension(:)   :: dtloc
 
 
   !LATTICE (weight & dispersion) ARRAYS:
@@ -95,23 +94,11 @@ MODULE VARS_GLOBAL
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
-
-  !Frequency domain:
   type(keldysh_equilibrium_gf)        :: gf0
   type(keldysh_equilibrium_gf)        :: gf
   type(keldysh_equilibrium_gf)        :: sf
   real(8),dimension(:),allocatable    :: exa
-
-
-  !MATSUBARA GREEN'S FUNCTION and n(k)
-  !=========================================================
-  real(8),allocatable,dimension(:)     :: eq_nk
-  complex(8),allocatable,dimension(:)  :: eq_G0w
-  !
-  complex(8),allocatable,dimension(:)  :: eq_G0iw
-  real(8),allocatable,dimension(:)     :: eq_G0tau
-  complex(8),allocatable,dimension(:)  :: eq_Siw
-  real(8),allocatable,dimension(:)     :: eq_Stau
+  real(8),allocatable,dimension(:)    :: eq_nk
 
 
   !NON-EQUILIBRIUM FUNCTIONS:
@@ -124,10 +111,8 @@ MODULE VARS_GLOBAL
   type(keldysh_contour_gf) :: locG
   !Bath SELF-ENERGY
   type(keldysh_contour_gf) :: S0
-
   !MOMENTUM-DISTRIBUTION
   real(8),allocatable,dimension(:,:)    :: nk
-
 
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
@@ -140,7 +125,6 @@ MODULE VARS_GLOBAL
   !DATA DIRECTORY:
   !=========================================================
   character(len=32) :: data_dir,plot_dir
-
 
 
   !NAMELISTS:
@@ -161,11 +145,11 @@ MODULE VARS_GLOBAL
        eps_error,&
        nsuccess,&
        weight,&
-       field_profile,&
+       field_type,&
        Ex,Ey,t0,t1,tau0,w0,omega0,E1,&
        Nx,Ny,&
        L,Ltau,Lmu,Lkreduced,&       
-       update_wfftw,solve_wfftw,plotVF,plot3D,fchi,equench,solve_eq,g0loc_guess,&
+       update_wfftw,solve_wfftw,plot3D,fchi,solve_eq,&
        irdSFILE,irdNkfile,&
        data_dir,plot_dir!,&
   !iquench,beta0,xmu0,U0
@@ -225,11 +209,11 @@ contains
          ' w0=[20]                  -- Frequency of the of the impulsive Electric field',&
          ' omega0=[pi/4]            -- Frequency of the of the Oscillating Electric field',&        
          ' E1=[1]                   -- Strenght of the electric field for the AC+DC case, to be tuned to resonate',&
-         ' field_profile=[dc]       -- Type of electric field profile (constant,gaussian,ramp)',&
-         ' method=[ipt]     -- ',&
-         ' update_wfftw=[F] -- ',&
-         ' solve_wfftw =[F] -- ',&
-         ' plotVF=[F]       -- ',&
+         ' field_type=[dc]       -- Type of electric field profile (constant,gaussian,ramp)',&
+         ' bath_type=[constant]     -- ',&
+         ' int_method=["trapz"]     -- ',&
+         ' update_wfftw=[F]         -- ',&
+         ' solve_wfftw =[F]         -- ',&
          ' plot3D=[F]       -- ',&
          ' data_dir=[DATAneq]       -- ',&
          ' fchi=[F]         -- ',&
@@ -238,17 +222,12 @@ contains
          ' Ltau=[32]        -- ',&
          ' Lmu=[2048]       -- ',&
          ' Lkreduced=[200]  -- ',&
-         ' wbath=[10.0]     -- ',&
-         ' bath_type=[constant] -- ',&
+         ' wbath=[10.0]     -- ',&         
          ' eps=[0.05d0]         -- ',&
          ' irdnkfile =[restartNk]-- ',&
          ' irdSfile=[restartSigma]-- ',&
          ' Nx=[50]      -- ',&
          ' Ny=[50]      -- ',&    
-         ' iquench=[F]  -- ',&
-         ' beta0=[100]  -- ',&
-         ' U0=[6]       -- ',&
-         ' xmu0=[0]     -- ',& 
          '  '])
     call parse_cmd_help(help_buffer)
 
@@ -257,7 +236,7 @@ contains
     beta          = 100.0
     U             = 6.0
     Efield        = 0.0
-    Vbath           = 0.0
+    Vbath         = 0.0
     ts            = 1.0
     nstep         = 50
     nloop         = 30
@@ -274,20 +253,17 @@ contains
     w0            = 20.d0
     omega0        = pi/4.d0
     E1            = 1.d0
-    field_profile ='constant'
+    field_type ='constant'
     !GRID k-POINTS:
     Nx=25 
     Ny=25
     !FLAGS:
-    method        = 'ipt'
+    int_method    = 'trapz'
     update_wfftw  = .false.
     solve_wfftw   = .false.
-    plotVF        = .false.
     plot3D        = .true.
     fchi          = .false.
-    equench       = .false.
     solve_eq      = .false.
-    g0loc_guess   = .false.
     !PARAMETERS:
     L             = 1024
     Ltau          = 100
@@ -301,10 +277,6 @@ contains
     irdNkfile='restartNk'
     data_dir='DATAneq'
     plot_dir='PLOT'
-    ! !QUENCH
-    ! iquench = .false.
-    ! beta0   = 100.d0
-    ! xmu0    = 0.d0
 
     inquire(file=adjustl(trim(inputFILE)),exist=control)
     if(control)then
@@ -340,18 +312,17 @@ contains
     call parse_cmd_variable(t1 ,"T1")
     call parse_cmd_variable(tau0 ,"TAU0")
     call parse_cmd_variable(w0 ,"W0")
-    call parse_cmd_variable(field_profile ,"FIELD_PROFILE")
+    call parse_cmd_variable(field_type ,"FIELD_TYPE")
     !GRID k-POINTS:
     call parse_cmd_variable(Nx ,"NX")
     call parse_cmd_variable(Ny ,"NY")
     !FLAGS:
-    call parse_cmd_variable(method ,"METHOD")
+    call parse_cmd_variable(int_method ,"INT_METHOD")
     call parse_cmd_variable(solve_eq ,"SOLVE_EQ")
     call parse_cmd_variable(update_wfftw ,"UPDATE_WFFTW")
     call parse_cmd_variable(solve_wfftw ,"SOLVE_WFFTW")
     call parse_cmd_variable(plot3D ,"PLOT3D")
     call parse_cmd_variable(fchi ,"FCHI")
-    call parse_cmd_variable(g0loc_guess ,"G0LOC_GUESS")
     !PARAMETERS:
     call parse_cmd_variable(L ,"L")
     call parse_cmd_variable(Ltau ,"LTAU")
@@ -362,12 +333,6 @@ contains
     !FILES&DIR:
     call parse_cmd_variable(data_dir,"DATA_DIR")
     call parse_cmd_variable(plot_dir,"PLOT_DIR")
-    !QUENCH:
-    ! call parse_cmd_variable(iquench ,"IQUENCH")
-    ! call parse_cmd_variable(beta0 ,"BETA0")
-    ! call parse_cmd_variable(U0 ,"U0")
-    ! call parse_cmd_variable(xmu0 ,"XMU0") 
-    ! include "nml_read_cml.f90"
 
 
 
