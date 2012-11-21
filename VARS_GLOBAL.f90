@@ -7,7 +7,7 @@
 MODULE VARS_GLOBAL
   !Local:
   USE CONTOUR_GF
- !SciFor library
+  !SciFor library
   USE PARSE_CMD
   USE COMMON_VARS
   USE GREENFUNX
@@ -50,7 +50,15 @@ MODULE VARS_GLOBAL
   logical           :: plot3D,fchi
   logical           :: solveEQ
   integer           :: size_cutoff
-  logical           :: g0loc_guess   !use non-interacting local GF as guess.
+  logical           :: g0loc_guess    !use non-interacting local GF as guess.
+  integer           :: iloop,nloop    !dmft loop variables
+  real(8)           :: ts             !n.n./n.n.n. hopping amplitude
+  real(8)           :: u              !local,non-local interaction 
+  real(8)           :: dt,dtau        !time step
+  real(8)           :: fmesh          !freq. step
+  real(8)           :: beta           !inverse temperature
+  real(8)           :: eps            !broadening
+  integer           :: P,Q            !Uniform Power Mesh parameters
   !
 
   !FILES and VARS TO RESTART
@@ -60,15 +68,16 @@ MODULE VARS_GLOBAL
 
   !FREQS & TIME ARRAYS:
   !=========================================================  
-  real(8),dimension(:),allocatable    :: wr,t,wm,tau,taureal
-
-
+  real(8),dimension(:),allocatable :: wr,t,wm
+  real(8),dimension(:),allocatable :: tau
+  real(8),dimension(:),allocatable :: ftau
 
 
   !LATTICE (weight & dispersion) ARRAYS:
   !=========================================================  
   real(8),dimension(:),allocatable :: wt,epsik,sorted_epsik
   integer,allocatable,dimension(:) :: sorted_ik
+
 
   !ELECTRIC FIELD VARIABLES (& NML):
   !=========================================================  
@@ -111,8 +120,6 @@ MODULE VARS_GLOBAL
   type(kbm_contour_gf) :: locG
   !Bath SELF-ENERGY
   type(kbm_contour_gf) :: S0
-  ! complex(8),allocatable,dimension(:)   :: S0gtr,S0less
-  ! complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
   !MOMENTUM-DISTRIBUTION
   real(8),allocatable,dimension(:,:)    :: nk
 
@@ -139,7 +146,7 @@ MODULE VARS_GLOBAL
        Ex,Ey,t0,t1,tau0,w0,omega0,E1,field_profile,&                 !field
        Nx,Ny,&                                                       !k-points 
        method,update_wfftw,solve_wfftw,plot3D,g0loc_guess,solveEQ,&  !flags
-       L,Ltau,Lkreduced,Wbath,bath_type,eps,&                        !other parameters
+       L,p,q,Lkreduced,Wbath,bath_type,eps,&                        !other parameters
        data_dir,plot_dir,fchi,&       
        irdFILE,&
        iquench,beta0,xmu0,U0
@@ -203,7 +210,8 @@ contains
          ' plot_dir=[PLOT]          -- Name of the directory containing plot files',&
          ' fchi=[F]                 -- Flag for the calculation of the optical response',&
          ' L=[1024]                 -- A large number for whatever reason',&
-         ' Ltau=[32]                -- Number of imaginary time slices',&
+         ' P=[5]                    -- Uniform Power mesh power-mesh parameter',&
+         ' Q=[5]                    -- Uniform Power mesh uniform-mesh parameter',&
          ' eps=[0.05d0]             -- Broadening on the real-axis',&
          ' Nx=[50]                  -- Number of k-points along x-axis ',&
          ' Ny=[50]                  -- Number of k-points along y-axis ',&    
@@ -220,6 +228,8 @@ contains
     nstep=100
     nloop=30
     eqnloop=30
+    p=5
+    q=5
     !CONVERGENCE:
     eps_error=1.d-4
     Nsuccess=2
@@ -247,7 +257,6 @@ contains
     g0loc_guess= .false.
     !PARAMETERS:
     L=1024
-    Ltau=50
     Lkreduced=200
     wbath=20.d0 
     bath_type='constant'
@@ -281,6 +290,8 @@ contains
     call parse_cmd_variable(Efield ,"EFIELD")
     call parse_cmd_variable(Vbath ,"VBATH")
     call parse_cmd_variable(ts ,"TS")
+    call parse_cmd_variable(p ,"P")
+    call parse_cmd_variable(q ,"Q")
     call parse_cmd_variable(nstep ,"NSTEP")
     call parse_cmd_variable(nloop ,"NLOOP")
     call parse_cmd_variable(eqnloop ,"EQNLOOP")
@@ -310,7 +321,6 @@ contains
     call parse_cmd_variable(g0loc_guess ,"G0LOC_GUESS")
     !PARAMETERS:
     call parse_cmd_variable(L ,"L")
-    call parse_cmd_variable(Ltau ,"LTAU")
     call parse_cmd_variable(Lkreduced ,"LKREDUCED")
     call parse_cmd_variable(wbath ,"WBATH")
     call parse_cmd_variable(bath_type ,"BATH_TYPE")
@@ -324,7 +334,7 @@ contains
     call parse_cmd_variable(U0 ,"U0")
     call parse_cmd_variable(xmu0 ,"XMU0") 
 
-
+    Ltau=2*P*Q
 
 
     if(mpiID==0)then
@@ -399,12 +409,52 @@ contains
   !******************************************************************
 
 
-  pure function fermi0(x,beta)
-    real(8),intent(in) :: x,beta
-    real(8) :: fermi0
-    fermi0=fermi(x,beta)
-  end function fermi0
-
+  subroutine fftgf_iw2tau_upm(wm,gw,tm,gt,beta)
+    integer                             :: i,j,N,L
+    real(8),dimension(:)                :: wm
+    complex(8),dimension(size(wm))      :: gw
+    real(8),dimension(:)                :: tm
+    real(8),dimension(size(tm))         :: gt
+    real(8),dimension(2*size(wm))       :: tmpGw
+    complex(8)                          :: tail,fg
+    real(8)                             :: tau,beta,mues,At,foo
+    !
+    L=size(wm)
+    N=size(tm)
+    !
+    mues =-real(gw(L),8)*wm(L)**2
+    !
+    tmpGw=(0.d0,0.d0)
+    do i=1,L
+       tail=-cmplx(mues,wm(i),8)/(mues**2+wm(i)**2)
+       fg  = (0.d0,0.d0)
+       if(i<=N)fg  = gw(i)-tail
+       tmpGw(2*i)  = dimag(fg)
+       tmpGw(2*i-1)= dreal(fg)
+    enddo
+    do i=1,N-1
+       tau=tm(i)
+       if(mues > 0.d0)then
+          if((mues*beta) > 30.d0)then
+             At = -exp(-mues*tau)
+          else
+             At = -exp(-mues*tau)/(1.d0 + exp(-beta*mues))
+          endif
+       else
+          if((mues*beta) < -30.d0)then
+             At = -exp(mues*(beta-tau))
+          else
+             At = -exp(-mues*tau)/(1.d0 + exp(-beta*mues))
+          endif
+       endif
+       foo=0.d0
+       do j=1,L
+          foo=foo + sin(wm(j)*tau)*tmpGw(2*j) + cos(wm(j)*tau)*tmpGw(2*j-1)
+       enddo
+       gt(i) = foo*2.d0/beta + At
+    enddo
+    gt(N)=-(gt(1)+1.d0)
+  end subroutine fftgf_iw2tau_upm
 
 end module VARS_GLOBAL
 

@@ -6,15 +6,15 @@ EXE   = neqDMFT
 DIREXE= $(HOME)/.bin
 
 .SUFFIXES: .f90 
-OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o UPDATE_WF.o KADANOFBAYM.o
+OBJS =  CONTOUR_GF.o VARS_GLOBAL.o EQUILIBRIUM.o ELECTRIC_FIELD.o BATH.o  IPT_NEQ.o UPDATE_WF.o KADANOFBAYM.o
 
 ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
 ARGS_DEB=$(LIBDMFT_DEB) $(SFMODS_DEB) $(SFLIBS_DEB)
 BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
 
 #=================STANDARD COMPILATION====================================
-all:	FLAG=$(STD)
-all: 	version $(OBJS)
+all: FLAG=$(STD)
+all: version $(OBJS)
 	@echo " ..................... compile ........................... "
 	$(FC)  $(FLAG) $(OBJS) $(EXE).f90 -o $(DIREXE)/$(EXE)_$(BRANCH) $(ARGS)
 	@echo " ...................... done .............................. "
@@ -23,8 +23,8 @@ all: 	version $(OBJS)
 	@echo "created" $(DIREXE)/$(EXE)_$(BRANCH)
 
 #================OPTIMIZED COMPILATION====================================
-opt: 	FLAG=$(OPT)
-opt: 	version $(OBJS)
+opt: FLAG=$(OPT)
+opt: version $(OBJS)
 	@echo " ..................... compile ........................... "
 	$(FC) $(FLAG) $(OBJS) $(EXE).f90 -o $(DIREXE)/$(EXE)_$(BRANCH) $(ARGS)
 	@echo " ...................... done .............................. "
@@ -33,8 +33,8 @@ opt: 	version $(OBJS)
 	@echo "created" $(DIREXE)/$(EXE)_$(BRANCH)
 
 #================DEBUGGIN COMPILATION=====================================
-debug:	FLAG=$(DEB)
-debug:	version $(OBJS)
+debug: FLAG=$(DEB)
+debug: version $(OBJS)
 	@echo " ..................... compile ........................... "
 	$(FC)  $(FLAG) $(OBJS) $(EXE).f90 -o $(DIREXE)/$(EXE)_$(BRANCH) $(ARGS_DEB)
 	@echo " ...................... done .............................. "

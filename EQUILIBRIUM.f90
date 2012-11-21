@@ -6,8 +6,7 @@
 !########################################################
 module EQUILIBRIUM
   USE VARS_GLOBAL
-  USE IPT_SOPT
-  USE IPT_MATS
+  USE INTEGRATE
   implicit none
   private
 
@@ -18,8 +17,6 @@ module EQUILIBRIUM
   real(8),allocatable,dimension(:)    :: wr_,wm_
 
   public  :: solve_equilibrium_ipt
-  public  :: update_equilibrium_weiss_field
-  public  :: get_equilibrium_localgf
   !public :: get_equilibrium_impuritygf
 
 contains
@@ -30,34 +27,14 @@ contains
     complex(8) :: zeta
     logical    :: init,check(2)
     if(mpiID==0)then
-       ! init=.true.
-       ! do i=1,3
-       !    inquire(file=trim(irdFILE(i)),exist=check(i))
-       !    if(.not.check(i))inquire(file=trim(irdFILE(i))//".gz",exist=check(i))
-       !    init=init.AND.check(i)
-       ! enddo
-       ! if(init)then                !equilibrium solution exists:
-       !    call msg("Equilibrium solution exist:")
-       ! else
-
        call create_data_dir("Equilibrium")
        call solve_equilibrium_ipt_matsubara
        call solve_equilibrium_ipt_realaxis
-
-       ! !Write the Weiss-fields G0(w):
-       ! call splot(trim(irdFILE(1)),wr_,fg0_)
-
-       ! !Write the Sigma(iw)
-       ! call splot(trim(irdFILE(2)),stau_(0:))
-
-       ! !Write the Weiss-fields G0(iw):
-       ! call splot(trim(irdFILE(3)),f0tau_(0:))
 
        deallocate(sigma_,fg_,fg0_)
        deallocate(siw_,fiw_,f0iw_)
        deallocate(stau_,ftau_,f0tau_)
        deallocate(wr_,wm_)
-       ! endif
     endif
   end subroutine solve_equilibrium_ipt
 
@@ -66,7 +43,6 @@ contains
   !******************************************************************
   !******************************************************************
   !******************************************************************
-
 
 
   subroutine solve_equilibrium_ipt_matsubara()
@@ -107,8 +83,17 @@ contains
     call splot("Equilibrium/Matsubara/G_iw.ipt",wm_,fiw_)
     call splot("Equilibrium/Matsubara/G0_iw.ipt",wm_,f0iw_)
     call splot("Equilibrium/Matsubara/Sigma_iw.ipt",wm_,siw_)
-    call splot("Equilibrium/Matsubara/G0_tau.ipt",taureal(0:),f0tau_(0:))
-    call splot("Equilibrium/Matsubara/Sigma_tau.ipt",taureal(0:),stau_(0:))
+    call splot("Equilibrium/Matsubara/G0_tau.ipt",tau(0:),f0tau_(0:))
+    call splot("Equilibrium/Matsubara/Sigma_tau.ipt",tau(0:),stau_(0:))
+  contains
+    function solve_ipt_matsubara(fg0_) result(sigma_)
+      complex(8),dimension(L)  :: fg0_
+      complex(8),dimension(L)  :: sigma_
+      real(8),dimension(0:L)   :: fg0tau_,sigmatau_
+      call fftgf_iw2tau(fg0_,fg0tau_,beta)
+      forall(i=0:L)sigmatau_(i)=U**2*(fg0tau_(i))**2*fg0tau_(L-i)
+      call fftgf_tau2iw(sigmatau_,sigma_,beta)
+    end function solve_ipt_matsubara
   end subroutine solve_equilibrium_ipt_matsubara
 
 
@@ -118,11 +103,13 @@ contains
 
 
   subroutine solve_equilibrium_ipt_realaxis()
-    integer    :: i,j,loop
-    logical    :: converged
-    complex(8) :: zeta
-    real(8)    :: n,z,wmax_
+    integer                             :: i,j,loop
+    logical                             :: converged
+    complex(8)                          :: zeta
+    real(8)                             :: n,z,wmax_,mesh
     complex(8),allocatable,dimension(:) :: sold,sigt
+    integer,allocatable,dimension(:,:)  :: iy_m_ix
+    real(8),dimension(:),allocatable    :: A0m,A0p,P1,P2
     call msg("Solving  Equilibrium problem on Real-axis:")
     call create_data_dir("Equilibrium/Real")
     allocate(fg_(L))
@@ -130,8 +117,9 @@ contains
     allocate(fg0_(L))
     allocate(sold(L))
     allocate(wr_(L))
+    call get_frequency_index
     wmax_= min(20.d0,wmax)
-    wr_ = linspace(-wmax_,wmax_,L)
+    wr_ = linspace(-wmax_,wmax_,L,mesh=mesh)
     sigma_=zero ; sold=sigma_
     loop=0 ; converged=.false.             
     do while (.not.converged)
@@ -143,9 +131,9 @@ contains
        enddo
        n      = sum(aimag(fg_)*fermi(wr_,beta))/sum(aimag(fg_))
        fg0_   = one/(one/fg_ + sigma_)
-       sigma_= solve_ipt_sopt(fg0_,wr_)
-       sigma_= weight*sigma_ + (1.d0-weight)*sold
        sold  = sigma_
+       call solve_ipt_sopt()
+       sigma_= weight*sigma_ + (1.d0-weight)*sold
        converged=check_convergence(sigma_,eps_error,nsuccess,eqNloop)
        call splot("Equilibrium/Real/nVSiloop.ipt",loop,n,append=TT)
     enddo
@@ -154,6 +142,71 @@ contains
     call splot("Equilibrium/Real/G_realw.ipt",wr_,fg_)
     call splot("Equilibrium/Real/G0_realw.ipt",wr_,fg0_)
     call splot("Equilibrium/Real/Sigma_realw.ipt",wr_,sigma_)
+  contains
+    subroutine solve_ipt_sopt()
+      call getAs
+      call getPolarization
+      call Sopt
+    end subroutine solve_ipt_sopt
+    !
+    subroutine get_frequency_index()
+      integer :: ix,iy,iz
+      if(.not.allocated(iy_m_ix))allocate(iy_m_ix(L,L))
+      iy_m_ix=0
+      do ix=1,L
+         do iy=1,L
+            iz = iy - ix + L/2 
+            if(iz<1 .OR. iz>L) iz=-1 !out of range-> if(iz>-L)
+            iy_m_ix(iy,ix)=iz
+         enddo
+      enddo
+      if(.not.allocated(A0m))allocate(A0m(L))
+      if(.not.allocated(A0p))allocate(A0p(L))
+      if(.not.allocated(P1)) allocate(P1(L))
+      if(.not.allocated(P2)) allocate(P2(L))
+    end subroutine get_frequency_index
+    !
+    subroutine getAs
+      real(8) :: dos(L)
+      dos(:) =-aimag(fg0_(:))/pi
+      A0p(:) = dos(:)*fermi(wr_(:),beta)
+      A0m(:) = dos(:)*(1.d0-fermi(wr_(:),beta))
+    end subroutine getAs
+    !
+    subroutine getPolarization
+      integer :: ix,iy,iz    
+      P1=zero
+      P2=zero
+      do ix=1,L
+         do iy=1,L
+            iz= iy_m_ix(iy,ix)
+            if(iz>0)then
+               P1(ix)=P1(ix) + A0p(iy)*A0m(iz)*mesh
+               P2(ix)=P2(ix) + A0m(iy)*A0p(iz)*mesh
+            endif
+         enddo
+      enddo
+    end subroutine getPolarization
+    !
+    subroutine Sopt
+      integer              :: ix,iy,iz
+      real(8)              :: sum1,sum2
+      real(8),dimension(L) :: reS,imS
+      do ix=1,L
+         sum1=zero
+         sum2=zero
+         do iy=1,L
+            iz= iy_m_ix(iy,ix)
+            if(iz>0)then
+               sum1=sum1+A0p(L-iz+1)*P1(iy)*mesh
+               sum2=sum2+A0m(L-iz+1)*P2(iy)*mesh
+            end if
+         enddo
+         imS(ix)=-(U**2)*(sum1+sum2)*pi
+      enddo
+      reS = kronig(imS,wr_,size(ImS))
+      sigma_ = reS + xi*imS
+    end subroutine Sopt
   end subroutine solve_equilibrium_ipt_realaxis
 
 
@@ -161,123 +214,6 @@ contains
   !********************************************************************
   !********************************************************************
   !********************************************************************
-
-
-
-  !+-------------------------------------------------------------------+
-  !PURPOSE  : Solve the equilibrium case
-  !+-------------------------------------------------------------------+
-  subroutine get_equilibrium_localgf()
-    integer    :: i,j,ik
-    complex(8) :: A,zetan
-    real(8)    :: w,n
-    complex(8) :: funcM(L),sigmaM(L)
-    real(8)    :: funcT(0:L) 
-    if(mpiID==0)then
-       !Get Sret(w) = FFT(Sret(t-t'))
-       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
-       sf%ret%t=exa*sf%ret%t ; call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=dt*sf%ret%w
-
-       !Get locGret(w)
-       gf%ret%w=zero
-       do i=1,2*nstep
-          w=wr(i)
-          zetan=cmplx(w,eps,8)-sf%ret%w(i) !-eqsbfret(i)
-          do ik=1,Lk
-             gf%ret%w(i)=gf%ret%w(i)+wt(ik)/(zetan-epsik(ik))
-          enddo
-       enddo
-
-       !Get locG<(w/t),locG>(w/t)
-       gf%less%w=less_component_w(gf%ret%w,wr,beta)
-       gf%gtr%w=gtr_component_w(gf%ret%w,wr,beta)
-       call fftgf_rw2rt(gf%less%w,gf%less%t,nstep)  ; gf%less%t=exa*fmesh/pi2*gf%less%t
-       call fftgf_rw2rt(gf%gtr%w,gf%gtr%t,nstep)    ; gf%gtr%t=exa*fmesh/pi2*gf%gtr%t
-
-
-       forall(i=0:nstep,j=0:nstep)
-          locG%less(i,j) = gf%less%t(i-j)
-          locG%gtr(i,j)  = gf%gtr%t(i-j)
-          gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
-       end forall
-
-       !This is just to get n(k)
-       call get_matsubara_gf_from_dos(wr,sf%ret%w,sigmaM,beta)
-       do ik=1,Lk
-          funcM=zero
-          do i=1,L
-             w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigmaM(i)
-             funcM(i)=one/(zetan - epsik(ik))
-          enddo
-          call fftgf_iw2tau(funcM,funcT,beta)
-          n=-funcT(L)
-          nk(:,ik)=n
-       enddo
-    endif
-    call MPI_BCAST(locG%less,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(locG%gtr,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
-    call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
-    call splot('nkVSepsk.ipt',epsik,nk(nstep/2,:),append=TT)
-    call splot('locSM_iw.ipt',wm,sigmaM,append=TT)
-    call splot("eqG_w.ipt",wr,gf%ret%w,append=TT)
-    call splot("eqSigma_w.ipt",wr,sf%ret%w,append=TT)
-    return
-  end subroutine get_equilibrium_localgf
-
-
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
-
-  subroutine update_equilibrium_weiss_field
-    integer :: M,i,j,k,itau,jtau,NN
-    real(8) :: R,deg
-    real(8) :: w,A,An
-    forall(i=0:nstep,j=0:nstep)
-       gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
-       sf%ret%t(i-j) = heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
-    end forall
-    if(heaviside(0.d0)==1.d0)gf%ret%t(0)=gf%ret%t(0)/2.d0
-    if(heaviside(0.d0)==1.d0)sf%ret%t(0)=sf%ret%t(0)/2.d0
-
-    call fftgf_rt2rw(gf%ret%t,gf%ret%w,nstep) ; gf%ret%w=gf%ret%w*dt ; call swap_fftrt2rw(gf%ret%w)
-    call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=sf%ret%w*dt ; call swap_fftrt2rw(sf%ret%w)
-    gf0%ret%w  = one/(one/gf%ret%w + sf%ret%w)
-    gf0%less%w = less_component_w(gf0%ret%w,wr,beta)
-    gf0%gtr%w  = gtr_component_w(gf0%ret%w,wr,beta)
-    ! call splot("updateG0ret_w.ipt",wr,gf0%ret%w,append=TT)
-    ! call splot("updateG0less_w.ipt",wr,gf0%less%w,append=TT)
-    ! call splot("updateG0gtr_w.ipt",wr,gf0%gtr%w,append=TT)
-
-    call fftgf_rw2rt(gf0%less%w,gf0%less%t,nstep) ; gf0%less%t=exa*fmesh/pi2*gf0%less%t
-    call fftgf_rw2rt(gf0%gtr%w, gf0%gtr%t,nstep)  ; gf0%gtr%t =exa*fmesh/pi2*gf0%gtr%t
-    call fftgf_rw2rt(gf0%ret%w, gf0%ret%t,nstep)  ; gf0%ret%t =exa*fmesh/pi2*gf0%ret%t
-    forall(i=0:nstep,j=0:nstep)
-       G0%less(i,j)= gf0%less%t(i-j)
-       G0%gtr(i,j) = gf0%gtr%t(i-j)
-    end forall
-    ! call splot("updateG0ret_t.ipt",t,gf0%ret%t,append=TT)
-    ! call splot("G0less3D",t(0:nstep)/dt,t(0:nstep)/dt,G0less(0:nstep,0:nstep))
-    ! call splot("G0gtr3D",t(0:nstep)/dt,t(0:nstep)/dt,G0gtr(0:nstep,0:nstep))
-
-    ! !PLus this:
-    ! forall(i=0:nstep,j=0:nstep)
-    !    G0ret(i,j)=heaviside(t(i-j))*(G0gtr(i,j) - G0less(i,j))
-    !    gf0%ret%t(i-j)=G0ret(i,j)
-    ! end forall
-    ! call fftgf_rt2rw(gf0%ret%t,gf0%less%w,nstep) ; gf0%less%w=gf0%less%w*dt ; call swap_fftrt2rw(gf0%less%w)
-  end subroutine update_equilibrium_weiss_field
-
-
-
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
-
 
 
   ! subroutine get_equilibrium_impuritygf
@@ -294,7 +230,7 @@ contains
   !   call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep)   ;  sf%ret%w=dt*sf%ret%w   ; call swap_fftrt2rw(sf%ret%w)   !swap because F(t) are not oscillating in this formalism:
   !   gf%ret%w = one/(one/gf0%ret%w - sf%ret%w)
   !   do i=1,2*nstep
-  !      w = wr(i)
+  !      w = wr_(i)
   !      A=-aimag(gf%ret%w(i))/pi
   !      gf%less%w(i)= pi2*xi*fermi(w,beta)*A
   !      gf%gtr%w(i) = pi2*xi*(fermi(w,beta)-1.d0)*A
@@ -307,6 +243,10 @@ contains
   !   end forall
 
   ! end subroutine get_equilibrium_impuritygf
+
+
+
+
 
 
 end module EQUILIBRIUM

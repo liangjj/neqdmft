@@ -58,8 +58,8 @@ contains
     if(Vbath/=0.d0)then
        do iw=1,Lw
           en   = wfreq(iw)
-          nless= fermi0(en,beta)
-          ngtr = fermi0(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
+          nless= fermi(en,beta)
+          ngtr = fermi(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
           do i=0,nstep
              do j=0,nstep
                 peso=exp(-xi*(t(i)-t(j))*en)
@@ -136,12 +136,12 @@ contains
     complex(8) :: gf,zeta
 
     bath_dens = exp(-0.5d0*(wfreq/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
-    !bath_dens = exp(-((wfreq+xmu)/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
+    !bath_dens = exp(-((wfreq)/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
 
     !    !!w/ erf in frquency space: coded from Abramowitz-Stegun
     ! do i=-Lw,Lw
     !    !w=wfreq(i)
-    !    !zeta=cmplx(w+xmu,eps,8)
+    !    !zeta=cmplx(w,eps,8)
     !    !sig=aimag(zeta)/abs(dimag(zeta))
     !    !gf=-sig*xi*sqrt(pi)*wfun(zeta/Wbath)/Wbath
     !    !bath_dens(i)=-aimag(gf)/pi
@@ -167,7 +167,7 @@ contains
     complex(8) :: gf,zeta
 
     do i=1,Lw
-       w=wfreq(i)+xmu
+       w=wfreq(i)
        zeta=cmplx(w,eps,8)
        gf=gfbether(w,zeta,wbath/2.d0)
        bath_dens(i)=-aimag(gf)/pi

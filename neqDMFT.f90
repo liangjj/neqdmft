@@ -14,6 +14,7 @@ program neqDMFT
   USE KADANOFBAYM                 !solves KB equations numerically to get k-sum
   implicit none
 
+  integer :: i
   logical :: converged
 
   call MPI_INIT(mpiERR)
@@ -50,7 +51,6 @@ program neqDMFT
   if(solveEQ)call solve_equilibrium_ipt()
 
 
-
   !START DMFT LOOP SEQUENCE:
   !==============================================================
   !initialize the run by guessing/reading the self-energy functions (in IPT_NEQ.f90):
@@ -76,5 +76,42 @@ program neqDMFT
   call msg("BRAVO")
   call MPI_BARRIER(MPI_COMM_WORLD,mpiERR)
   call MPI_FINALIZE(mpiERR)
+
+
+contains
+
+
+  !+-------------------------------------------------------------------+
+  !PURPOSE  : check convergence of the calculation:
+  !+-------------------------------------------------------------------+
+  function convergence_check() result(converged)
+    logical                         :: converged
+    integer                         :: i,ik,ix,iy
+    type(vect2D)                    :: Jk,Ak
+    type(vect2D),dimension(0:nstep) :: Jloc                   !local Current 
+    real(8),dimension(0:nstep)      :: test_func
+    integer                         :: selector
+    if(mpiID==0)then
+       if(solve_wfftw)then
+          forall(i=0:nstep)test_func(i)=-xi*locG%less(i,i)
+       elseif(Efield/=0.d0)then
+          Jloc=Vzero
+          do ik=1,Lk
+             ix=ik2ix(ik);iy=ik2iy(ik)
+             do i=0,nstep
+                Ak= Afield(t(i),Ek)
+                Jk= nk(i,ik)*square_lattice_velocity(kgrid(ix,iy) - Ak)
+                Jloc(i) = Jloc(i) +  wt(ik)*Jk
+             enddo
+          enddo
+          test_func(0:nstep)=modulo(Jloc(0:nstep))
+       else
+          forall(i=0:nstep)test_func(i)=-xi*Sigma%less(i,i)!-xi*locG%less(i,i)
+       endif
+       converged=check_convergence(test_func(0:nstep),eps_error,Nsuccess,nloop,id=0)
+    endif
+  end function convergence_check
+
+
 
 end PROGRAM neqDMFT

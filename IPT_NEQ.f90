@@ -4,7 +4,7 @@
 !###############################################################
 module IPT_NEQ
   USE VARS_GLOBAL
-  USE EQUILIBRIUM
+  !USE EQUILIBRIUM
   USE ELECTRIC_FIELD
   USE MATRIX
   implicit none
@@ -66,7 +66,7 @@ contains
     if(mpiID==0)then
        call write_kbm_contour_gf(Sigma,trim(data_dir)//"/Sigma")
        if(plot3D)call plot_kbm_contour_gf(Sigma,t(0:),tau(0:),trim(plot_dir)//"/Sigma")
-       call splot("eq_Sigma_tau.ipt",taureal,eq_Stau,append=.true.)
+       call splot("eq_Sigma_tau.ipt",tau,eq_Stau,append=.true.)
        call splot("eq_Sigma_iw.ipt",wm,eq_Siw,append=.true.)
        call splot("Sigma_less_t0.ipt",t(0:),Sigma%less(0:,0))
        call splot("Sigma_lmix_tau0.ipt",t(0:),Sigma%lmix(0:,0))

@@ -9,7 +9,7 @@ module KADANOFBAYM
   !LOCAL:
   USE VARS_GLOBAL
   USE ELECTRIC_FIELD
-  USE EQUILIBRIUM
+  !USE EQUILIBRIUM
   implicit none
   private
   !k-dependent GF:
@@ -126,11 +126,12 @@ contains
          MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     call MPI_ALLREDUCE(tmpG%gmix(0:,0:),locG%gmix(0:,0:),(Nstep+1)*(Ltau+1),&
          MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
-    ! call MPI_ALLREDUCE(tmpG%mats(0:,0:),locG%mats(0:,0:),(Ltau+1)*(Ltau+1),&
-    !      MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,MPIerr)
-    call fftgf_iw2tau(eq_Giw,eq_Gtau(0:),beta)
+
+    !Get equilibrium GF:
+    call fftgf_iw2tau_upm(wm,eq_Giw,tau,eq_Gtau(0:),beta)
     forall(i=1:Ltau)eq_Gtau(-i)=-eq_Gtau(Ltau-i)
-    forall(i=0:Ltau,j=0:Ltau)locG%mats(i,j)=eq_Gtau(i-j)
+
+    forall(i=0:Ltau,j=0:Ltau)locG%mats(i,j)=eq_Gtau(i-j)!?? check-out here, possible problems
     !
     call MPI_ALLREDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     !
@@ -197,7 +198,8 @@ contains
     !to provide initial conditions to the real-time part of the contour:
     if(istep==0)then
        Gkiw = one/(xi*wm -epsik(ik) -eq_Siw)    !get G_k(iw)
-       call fftgf_iw2tau(Gkiw,Gktau(0:),beta)   !get G_k(tau>0)
+       !call fftgf_iw2tau(Gkiw,Gktau(0:),beta)   !get G_k(tau>0)
+       call fftgf_iw2tau_upm(wm,Gkiw,tau(0:),Gktau(0:),beta)   !get G_k(tau>0)
        forall(i=1:Ltau)Gktau(-i)=-Gktau(Ltau-i) !get G_k(tau<0)
        forall(i=0:Ltau,j=0:Ltau)&
             Gk%mats(i,j)=Gktau(i-j)             !get G^M_k(tau,tau`) = xi*G_k(tau-tau`)
@@ -561,6 +563,74 @@ contains
 
 
 
+  !+-------------------------------------------------------------------+
+  !PURPOSE  : Solve the equilibrium case
+  !+-------------------------------------------------------------------+
+  subroutine get_equilibrium_localgf()
+    integer    :: i,j,ik
+    complex(8) :: A,zetan
+    real(8)    :: w,n
+    complex(8) :: funcM(L),sigmaM(L)
+    real(8)    :: funcT(0:L) 
+    if(mpiID==0)then
+       !Get Sret(w) = FFT(Sret(t-t'))
+       forall(i=0:nstep,j=0:nstep) sf%ret%t(i-j)=heaviside(t(i-j))*(Sigma%gtr(i,j)-Sigma%less(i,j))
+       sf%ret%t=exa*sf%ret%t ; call fftgf_rt2rw(sf%ret%t,sf%ret%w,nstep) ; sf%ret%w=dt*sf%ret%w
+
+       !Get locGret(w)
+       gf%ret%w=zero
+       do i=1,2*nstep
+          w=wr(i)
+          zetan=cmplx(w,eps,8)-sf%ret%w(i) !-eqsbfret(i)
+          do ik=1,Lk
+             gf%ret%w(i)=gf%ret%w(i)+wt(ik)/(zetan-epsik(ik))
+          enddo
+       enddo
+
+       !Get locG<(w/t),locG>(w/t)
+       gf%less%w=less_component_w(gf%ret%w,wr,beta)
+       gf%gtr%w=gtr_component_w(gf%ret%w,wr,beta)
+       call fftgf_rw2rt(gf%less%w,gf%less%t,nstep)  ; gf%less%t=exa*fmesh/pi2*gf%less%t
+       call fftgf_rw2rt(gf%gtr%w,gf%gtr%t,nstep)    ; gf%gtr%t=exa*fmesh/pi2*gf%gtr%t
+
+
+       forall(i=0:nstep,j=0:nstep)
+          locG%less(i,j) = gf%less%t(i-j)
+          locG%gtr(i,j)  = gf%gtr%t(i-j)
+          gf%ret%t(i-j) = heaviside(t(i-j))*(locG%gtr(i,j)-locG%less(i,j))
+       end forall
+
+       !This is just to get n(k)
+       call get_matsubara_gf_from_dos(wr,sf%ret%w,sigmaM,beta)
+       do ik=1,Lk
+          funcM=zero
+          do i=1,L
+             w=pi/beta*dble(2*i-1) ; zetan=cmplx(0.d0,w,8) - sigmaM(i)
+             funcM(i)=one/(zetan - epsik(ik))
+          enddo
+          call fftgf_iw2tau(funcM,funcT,beta)
+          n=-funcT(L)
+          nk(:,ik)=n
+       enddo
+    endif
+    call MPI_BCAST(locG%less,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(locG%gtr,(nstep+1)**2,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,mpiERR)
+    call MPI_BCAST(nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,mpiERR)
+    call splot('nkVSepsk.ipt',epsik,nk(nstep/2,:),append=TT)
+    call splot('locSM_iw.ipt',wm,sigmaM,append=TT)
+    call splot("eqG_w.ipt",wr,gf%ret%w,append=TT)
+    call splot("eqSigma_w.ipt",wr,sf%ret%w,append=TT)
+    return
+  end subroutine get_equilibrium_localgf
+
+
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
+
+
+
 
   !+-------------------------------------------------------------------+
   !PURPOSE  : print out useful information
@@ -581,9 +651,7 @@ contains
        call splot("testGlesst0.ipt",t(0:),locG%less(0:,0))
        call splot("testGlmixtau0.ipt",t(0:),locG%lmix(0:,0))
        call splot("eq_G_iw.ipt",wm,eq_Giw,append=.true.)
-       ! call fftgf_iw2tau(eq_Giw,eq_Gtau(0:),beta)
-       ! forall(i=1:Ltau)eq_Gtau(-i)=-eq_Gtau(Ltau-i)
-       call splot("eq_G_tau.ipt",taureal,eq_Gtau,append=.true.)
+       call splot("eq_G_tau.ipt",tau,eq_Gtau,append=.true.)
        call splot("eq_nk.ipt",epsik,nk(0,:),append=.true.)
 
        forall(i=0:nstep,j=0:nstep)
