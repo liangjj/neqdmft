@@ -11,7 +11,6 @@ MODULE ELECTRIC_FIELD
 
   public :: Afield
   public :: set_efield_vector
-  public :: print_Afield_form
 
 
 contains
@@ -19,35 +18,27 @@ contains
   !+------------------------------------------------------------+
   !PURPOSE: set the normalized electric field versors using given direction
   !+------------------------------------------------------------+
-  function set_efield_vector(Ex,Ey) result(E)
-    type(vect2D)  :: E
-    real(8)       :: Ex,Ey
+  subroutine set_efield_vector() 
     real(8)       :: modulo
     integer       :: i
+    logical  :: check
     !Normalize the Electric Field components
     !Keep unaltered the Electric Field Strenght Efield=E0
     modulo=sqrt(Ex**2+Ey**2)
     Ex=Ex/modulo
     Ey=Ey/modulo
-    E%x=Ex;E%y=Ey
+    Ek%x=Ex;Ek%y=Ey
     call msg("|E|=E0="//trim(txtfy(Efield/modulo)),id=0)
     if(alat==0)call error("a_lat=0! EXIT")
-    select case(field_profile)
-    case default
-       stop "ELECTRIC_FIELD/Afield: wrong field_profile. set:dc,ac,acdc,pulse,ramp"
-    case ("dc")                !DC ELECTRIC FIELD:
-       return
-    case("ac")                  !AC ELECTRIC FIELD
-       return
-    case("acdc")                !AC+DC ELECTRIC FIELD (super-bloch)
-       return
-    case("pulse")               !LIGHT PULSE (for Pump&Probe)
-       return
-    case("ramp")                !RAMP TO CONSTANT DC-FIELD:
-       return
-       !!add more here:
-    end select
-  end function set_efield_vector
+    check=.false.
+    check=field_profile=="dc".OR.&
+         field_profile=="ac".OR.&
+         field_profile=="acdc".OR.&
+         field_profile=="pulse".OR.&
+         field_profile=="ramp"
+    if(.not.check)call error("ELECTRIC_FIELD/Afield: wrong field_profile. set:dc,ac,acdc,pulse,ramp")
+    if(mpiID==0)call print_Afield_form(t(0:nstep))
+  end subroutine set_efield_vector
 
 
   !+------------------------------------------------------------+

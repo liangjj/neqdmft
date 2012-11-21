@@ -71,7 +71,7 @@
      allocate(mat_G0(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = mat_locG(0:,0:)*dt**2
      call matrix_inverse(mat_locG(0:,0:))
-     mat_G0(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:) !why there a wrong sign here!?!
+     mat_G0(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:)
      mat_G0(0:,0:) = mat_G0(0:,0:)*dt**2
      call matrix_inverse(mat_G0(0:,0:))
 

@@ -4,17 +4,17 @@
 !###############################################################
 module IPT_NEQ
   USE VARS_GLOBAL
-  USE EQUILIBRIUM
-  USE ELECTRIC_FIELD
-  USE MATRIX
+  !USE EQUILIBRIUM
+  !USE ELECTRIC_FIELD
+  !USE MATRIX
   implicit none
   private
 
   public  :: neq_init_run
   public  :: neq_solve_ipt
 
-  integer :: Liw,Lw
-  real(8),allocatable,dimension(:)    :: wr_,wm_
+  ! integer :: Liw,Lw
+  ! real(8),allocatable,dimension(:)    :: wr_,wm_
 
 contains
 
@@ -22,150 +22,108 @@ contains
   !PURPOSE  : Initialize the run guessing/reading/setting initial conditions
   !+-------------------------------------------------------------------+
   subroutine neq_init_run()
+    logical :: init,checknk
     integer                          :: i,j,ik
-    integer                          :: iselect,irdL
-    real(8)                          :: en,intE,A,fmesh_
-    real(8)                          :: nless,ngtr,xmu_,beta_
-    complex(8)                       :: peso
-    logical                          :: checkS,checkG0,checkNk
-    real(8) :: xgrid(2*Nstep)
-    complex(8) :: G0ret_t(-nstep:nstep),G0ret_w(2*nstep),G0mat(0:Nstep,0:Nstep),G0tmp(0:nstep,0:nstep)
 
-    call create_data_dir("InitialConditions")
+    init = inquire_keldysh_contour_gf(trim(irdSFILE))
+    if(init)then
+       call msg(bold("Reading components of the input Self-energy and nk"))
+       call read_keldysh_contour_gf(Sigma,trim(irdSFILE))
+    else
+       call msg(bold("Start from the Hartree-Fock self-energy"))
+       Sigma=zero
+    endif
 
-    !Check if n(k) file exists.
     inquire(file=trim(irdnkfile),exist=checkNk)
     if(.not.checkNk)inquire(file=trim(irdNkfile)//".gz",exist=checkNk)
     if(checkNk)then
-       allocate(eq_nk(Lk))
        call read_nkfile(eq_nk,trim(irdnkfile))
     else
        !Get non-interacting n(k):
-       xmu_=xmu   ; if(iquench)xmu_=xmu0
-       beta_=beta ; if(iquench)beta_=beta0
-       allocate(eq_nk(Lk))
+       ! xmu_=xmu   ; if(iquench)xmu_=xmu0
+       ! beta_=beta ; if(iquench)beta_=beta0
        do ik=1,Lk
-          eq_nk(ik)=fermi0((epsik(ik)-xmu_),beta_)
+          eq_nk(ik)=fermi((epsik(ik)),beta)
        enddo
     endif
-    if(mpiID==0)call splot("InitialConditions/ic_nkVSepsk.ipt",epsik,eq_nk)
-
-    !Restart from a previous solution: check if Sigma^<,> file exists.
-    checkS=inquire_keldysh_contour_gf(trim(irdSfile))
-
-    if(checkS)then
-       call msg("Reading self-energy guess from input file.",lines=1,id=0)
-       call read_keldysh_contour_gf(Sigma,trim(irdSfile))
-
-    else  !DEFAULT: no files read, start from non-interacting HF solution or G0_loc if required       
-
-       if(.not.g0loc_guess)then
-          call msg("Using Hartree-Fock for self-energy guess",id=0)
-          call msg("G0less=G0gtr=zero",lines=1,id=0)
-          G0=zero
-
-       elseif(g0loc_guess)then
-          if(equench)then
-             call msg("Using G0_loc + electric field for self-energy guess",lines=1,id=0)
-             do ik=1,Lk
-                en   = epsik(ik)
-                nless= fermi0(en,beta)
-                ngtr = fermi0(en,beta)-1.d0
-                do j=0,nstep
-                   do i=0,nstep
-                      intE=int_Ht(ik,i,j)
-                      peso=exp(-xi*intE)
-                      G0%less(i,j)= G0%less(i,j) + xi*nless*peso*wt(ik)
-                      G0%gtr(i,j) = G0%gtr(i,j)  + xi*ngtr*peso*wt(ik)
-                   enddo
-                enddo
-             enddo
-          else
-             call msg("Using G0_loc for self-energy guess",lines=1,id=0)
-             do ik=1,Lk
-                en   = epsik(ik)
-                nless= fermi0(en,beta)
-                ngtr = fermi0(en,beta)-1.d0
-                A    = wt(ik)
-                do i=0,nstep
-                   do j=0,nstep
-                      peso=exp(-xi*en*(t(i)-t(j)))
-                      G0%less(i,j)=G0%less(i,j) + xi*nless*A*peso
-                      G0%gtr(i,j) =G0%gtr(i,j)  + xi*ngtr*A*peso
-                   enddo
-                enddo
-             enddo
-          endif
-       endif
-
-       if(mpiID==0)then
-          call write_keldysh_contour_gf(G0,"InitialConditions/guessG0")
-          if(plot3D)call plot_keldysh_contour_gf(G0,t(0:),"PLOT/guessG0")
-       endif
-
-       call neq_solve_ipt()
-
-    endif
+    if(mpiID==0)call splot("ic_nkVSepsk.ipt",epsik,eq_nk)
 
 
-    ! !Start from a non HF guess given the BATH: check if G0(w) file exists.
-    ! inquire(file=trim(irdG0wfile),exist=checkG0)
-    ! if(.not.checkG0)inquire(file=trim(irdG0wfile)//".gz",exist=checkG0)
-    ! if(checkS)then              !S^<,>(t,t') file exists
-    !    iselect=1
-    ! elseif(checkG0)then         !G0(w) file exists
-    !    iselect=2
-    ! endif
-    ! select case(iselect)
-    !    !
-    ! case default 
-    ! case(2)
-    !    call msg("Reading G0(w) from input file.",id=0)
-    !    call msg("Using G0(w) to guess the self-energy.",lines=1,id=0)
-    !    !
-    !    Lw=file_length(trim(irdG0wfile))
-    !    allocate(eq_G0w(Lw),wr_(Lw))
-    !    call sread(trim(irdG0wfile),wr_,eq_G0w)
-    !    fmesh_=abs(wr_(2)-wr_(1))
-    !    !
-    !    G0=zero
-    !    do ik=1,Lw
-    !       en   = wr_(ik)
-    !       nless= fermi0(en,beta)
-    !       ngtr = fermi0(en,beta)-1.d0
-    !       A    = -aimag(eq_G0w(ik))/pi*fmesh_
-    !       do i=0,nstep
-    !          do j=0,nstep
-    !             peso=exp(-xi*en*(t(i)-t(j)))
-    !             G0%less(i,j)=G0%less(i,j) + xi*nless*A*peso
-    !             G0%gtr(i,j) =G0%gtr(i,j)  + xi*ngtr*A*peso
+
+
+    ! integer                          :: iselect,irdL
+    ! real(8)                          :: en,intE,A,fmesh_
+    ! real(8)                          :: nless,ngtr,xmu_,beta_
+    ! complex(8)                       :: peso
+    ! logical                          :: checkS,checkG0,checkNk
+    ! real(8) :: xgrid(2*Nstep)
+    ! complex(8) :: G0ret_t(-nstep:nstep),G0ret_w(2*nstep),G0mat(0:Nstep,0:Nstep),G0tmp(0:nstep,0:nstep)
+    ! !Restart from a previous solution: check if Sigma^<,> file exists.
+    ! checkS=inquire_keldysh_contour_gf(trim(irdSfile))
+    ! if(checkS)then
+    !    call msg("Reading self-energy guess from input file.",lines=1,id=0)
+    !    call read_keldysh_contour_gf(Sigma,trim(irdSfile))
+    ! else  !DEFAULT: no files read, start from non-interacting HF solution or G0_loc if required       
+    !    if(.not.g0loc_guess)then
+    !       call msg("Using Hartree-Fock for self-energy guess",id=0)
+    !       call msg("G0less=G0gtr=zero",lines=1,id=0)
+    !       G0=zero
+    !    elseif(g0loc_guess)then
+    !       if(equench)then
+    !          call msg("Using G0_loc + electric field for self-energy guess",lines=1,id=0)
+    !          do ik=1,Lk
+    !             en   = epsik(ik)
+    !             nless= fermi0(en,beta)
+    !             ngtr = fermi0(en,beta)-1.d0
+    !             do j=0,nstep
+    !                do i=0,nstep
+    !                   intE=int_Ht(ik,i,j)
+    !                   peso=exp(-xi*intE)
+    !                   G0%less(i,j)= G0%less(i,j) + xi*nless*peso*wt(ik)
+    !                   G0%gtr(i,j) = G0%gtr(i,j)  + xi*ngtr*peso*wt(ik)
+    !                enddo
+    !             enddo
     !          enddo
-    !       enddo
-    !    enddo
-    !    deallocate(wr_)
+    !       else
+    !          call msg("Using G0_loc for self-energy guess",lines=1,id=0)
+    !          do ik=1,Lk
+    !             en   = epsik(ik)
+    !             nless= fermi0(en,beta)
+    !             ngtr = fermi0(en,beta)-1.d0
+    !             A    = wt(ik)
+    !             do i=0,nstep
+    !                do j=0,nstep
+    !                   peso=exp(-xi*en*(t(i)-t(j)))
+    !                   G0%less(i,j)=G0%less(i,j) + xi*nless*A*peso
+    !                   G0%gtr(i,j) =G0%gtr(i,j)  + xi*ngtr*A*peso
+    !                enddo
+    !             enddo
+    !          enddo
+    !       endif
+    !    endif
     !    if(mpiID==0)then
     !       call write_keldysh_contour_gf(G0,"InitialConditions/guessG0")
     !       if(plot3D)call plot_keldysh_contour_gf(G0,t(0:),"PLOT/guessG0")
     !    endif
     !    call neq_solve_ipt()
-    ! end select
+    ! endif
 
 
   contains
 
-    function int_Ht(ik,it,jt)
-      real(8)      :: int_Ht
-      integer      :: i,j,ii,ik,it,jt,sgn
-      type(vect2D) :: kt,Ak
-      int_Ht=0.d0 ; if(it==jt)return
-      sgn=1 ; if(jt > it)sgn=-1
-      i=ik2ix(ik); j=ik2iy(ik)
-      do ii=jt,it,sgn
-         Ak=Afield(t(ii),Ek)
-         kt=kgrid(i,j) - Ak
-         int_Ht=int_Ht + sgn*square_lattice_dispersion(kt)*dt
-      enddo
-    end function int_Ht
+    ! function int_Ht(ik,it,jt)
+    !   real(8)      :: int_Ht
+    !   integer      :: i,j,ii,ik,it,jt,sgn
+    !   type(vect2D) :: kt,Ak
+    !   int_Ht=0.d0 ; if(it==jt)return
+    !   sgn=1 ; if(jt > it)sgn=-1
+    !   i=ik2ix(ik); j=ik2iy(ik)
+    !   do ii=jt,it,sgn
+    !      Ak=Afield(t(ii),Ek)
+    !      kt=kgrid(i,j) - Ak
+    !      int_Ht=int_Ht + sgn*square_lattice_dispersion(kt)*dt
+    !   enddo
+    ! end function int_Ht
 
     subroutine read_nkfile(irdnk,file)
       character(len=*)     :: file
@@ -202,14 +160,12 @@ contains
   !+-------------------------------------------------------------------+
   subroutine neq_solve_ipt()
     integer      :: i,j,itau
-
     !Get SIgma:
     call msg("Get Sigma(t,t')")
 
-    Sigma=zero
     forall(i=0:nstep,j=0:nstep)
-       Sigma%gtr (i,j) = U**2*(G0%gtr(i,j)**2)*G0%less(j,i)
-       Sigma%less(i,j) = U**2*(G0%less(i,j)**2)*G0%gtr(j,i)
+       Sigma%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)
+       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)
     end forall
 
     ! !Get impurity GF and use SPT method if required
@@ -224,11 +180,10 @@ contains
 
     !Save data:
     if(mpiID==0)then
-       call write_keldysh_contour_gf(Sigma,reg_filename(data_dir)//"/Sigma")
-       if(plot3D)call plot_keldysh_contour_gf(Sigma,t(0:),"PLOT/Sigma")
+       call write_keldysh_contour_gf(Sigma,trim(data_dir)//"/Sigma")
+       if(plot3D)call plot_keldysh_contour_gf(Sigma,t(0:),trim(plot_dir)//"/Sigma")
     endif
-
-  end subroutine Neq_solve_ipt
+  end subroutine neq_solve_ipt
 
 
 

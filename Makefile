@@ -1,31 +1,30 @@
-FC=mpif90
-EXE   = neqDMFT
-DIREXE= $(HOME)/.bin
-
 #=========================================================================
 include lib.mk
 #=========================================================================
+FC=$(SFMPI)/mpif90
+EXE   = neqDMFT
+DIREXE= $(HOME)/.bin
 
 .SUFFIXES: .f90 
-OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o FUNX_NEQ.o KADANOFBAYM.o
+OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o UPDATE_WF.o KADANOFBAYM.o
 
 #=================STANDARD COMPILATION====================================
-all:	FLAG=$(STD)
-	ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
-	BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
-all: 	compile
+all:FLAG=$(STD)
+    ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
+    BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
+all:compile
 
 #================OPTIMIZED COMPILATION====================================
-opt: 	FLAG=$(OPT)
-	ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
-	BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
-opt: 	compile
+opt:FLAG=$(OPT)
+    ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
+    BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
+opt:compile
 
 #================DEBUGGIN COMPILATION=====================================
-debug:	FLAG=$(DEB)
-	ARGS=$(LIBDMFT_DEB) $(SFMODS_DEB) $(SFLIBS_DEB)
-	BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
-debug:	compile
+debug:FLAG=$(DEB)
+      ARGS=$(LIBDMFT_DEB) $(SFMODS_DEB) $(SFLIBS_DEB)
+      BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
+debug:compile
 
 
 compile: version $(OBJS)

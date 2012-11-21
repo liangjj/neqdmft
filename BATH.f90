@@ -50,25 +50,25 @@ contains
 
     end select
 
-
     S0=zero
-    do iw=1,Lw
-       en   = wfreq(iw)
-       nless= fermi0(en,beta)
-       ngtr = fermi0(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
-       do i=0,nstep
-          do j=0,nstep
-             peso=exp(-xi*(t(i)-t(j))*en)
-             S0%less(i,j)=S0%less(i,j)+ xi*Vpd**2*nless*peso*bath_dens(iw)*dw
-             S0%gtr(i,j) =S0%gtr(i,j) + xi*Vpd**2*ngtr*peso*bath_dens(iw)*dw
+    if(Vbath/=0.d0)then
+       do iw=1,Lw
+          en   = wfreq(iw)
+          nless= fermi(en,beta)
+          ngtr = fermi(en,beta)-1.d0 !it absorbs the minus sign of the greater functions
+          do i=0,nstep
+             do j=0,nstep
+                peso=exp(-xi*(t(i)-t(j))*en)
+                S0%less(i,j)=S0%less(i,j)+ xi*Vbath**2*nless*peso*bath_dens(iw)*dw
+                S0%gtr(i,j) =S0%gtr(i,j) + xi*Vbath**2*ngtr*peso*bath_dens(iw)*dw
+             enddo
           enddo
        enddo
-    enddo
+    endif
 
     if(mpiID==0)then
-       call write_keldysh_contour_gf(S0,"Bath/S0")
        call splot("Bath/DOSbath.lattice",wfreq,bath_dens)
-       if(plot3D)call plot_keldysh_contour_gf(S0,t(0:),"PLOT/S0")
+       if(Vbath/=0.d0.AND.plot3D)call plot_keldysh_contour_gf(S0,t(0:),trim(plot_dir)//"/S0")
     endif
 
   end subroutine get_thermostat_bath
@@ -114,12 +114,12 @@ contains
     complex(8) :: gf,zeta
 
     bath_dens = exp(-0.5d0*(wfreq/Wbath)**2)/(sqrt(pi2)*Wbath) !standard Gaussian
-    !bath_dens = exp(-((wfreq+xmu)/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
+    !bath_dens = exp(-((wfreq)/Wbath)**2)/(sqrt(pi)*Wbath) !Camille's choice
 
     !    !!w/ erf in frquency space: coded from Abramowitz-Stegun
     ! do i=-Lw,Lw
     !    !w=wfreq(i)
-    !    !zeta=cmplx(w+xmu,eps,8)
+    !    !zeta=cmplx(w,eps,8)
     !    !sig=aimag(zeta)/abs(dimag(zeta))
     !    !gf=-sig*xi*sqrt(pi)*wfun(zeta/Wbath)/Wbath
     !    !bath_dens(i)=-aimag(gf)/pi
@@ -145,7 +145,7 @@ contains
     complex(8) :: gf,zeta
 
     do i=1,Lw
-       w=wfreq(i)+xmu
+       w=wfreq(i)
        zeta=cmplx(w,eps,8)
        gf=gfbether(w,zeta,wbath/2.d0)
        bath_dens(i)=-aimag(gf)/pi
