@@ -9,7 +9,7 @@ module KADANOFBAYM
   !LOCAL:
   USE VARS_GLOBAL
   USE ELECTRIC_FIELD
-  !USE EQUILIBRIUM
+  USE INTEGRATE
   implicit none
   private
   !k-dependent GF:
@@ -20,12 +20,11 @@ module KADANOFBAYM
   complex(8),allocatable,dimension(:)   :: Ikless,Ikgtr
   complex(8),allocatable,dimension(:)   :: Ikless0,Ikgtr0
   complex(8),allocatable,dimension(:)   :: Iklmix,Iklmix0
-  complex(8),allocatable,dimension(:)   :: Ikgmix,Ikgmix0
   real(8)                               :: Ikdiag
   !Auxiliary operators:
   complex(8),allocatable,dimension(:,:) :: Udelta,Vdelta
 
-  public                                  :: neq_get_localgf
+  public                                :: neq_get_localgf
 
 contains
 
@@ -67,15 +66,12 @@ contains
     call buildUV
 
     call msg("Entering Kadanoff-Baym")
-
-    !Set to Zero loc GF:
+    call msg("Using integration method: "//bold(trim(int_method)))
+    call msg("Using Ltau slices: "//bold(txtfy(Ltau)))
+    !Set to Zero GF and nk:
     eq_Giw = zero
     locG   = zero
     nk     = 0.d0
-
-    !Allocate k-dependent GF:
-    call allocate_kbm_contour_gf(Gk,Nstep,Ltau)
-    allocate(Gkiw(L),Gktau(-Ltau:Ltau))
 
     !Allocate tmp array for MPI storage
     call allocate_kbm_contour_gf(tmpG,Nstep,Ltau)
@@ -84,6 +80,9 @@ contains
     tmpG=zero
     tmpnk=0.d0
 
+    !Allocate k-dependent GF:
+    call allocate_kbm_contour_gf(Gk,Nstep,Ltau)
+    allocate(Gkiw(L),Gktau(-Ltau:Ltau))
 
     !=============START K-POINTS LOOP======================
     call start_timer
@@ -104,7 +103,6 @@ contains
        tmpG%gtr(0:,0:)  = tmpG%gtr(0:,0:)  + Gk%gtr(0:,0:)*wt(ik)
        tmpG%lmix(0:,0:) = tmpG%lmix(0:,0:) + Gk%lmix(0:,0:)*wt(ik)
        tmpG%gmix(0:,0:) = tmpG%gmix(0:,0:) + Gk%gmix(0:,0:)*wt(ik)
-       !tmpG%mats(0:,0:) = tmpG%mats(0:,0:) + Gk%mats(0:,0:)*wt(ik)
        forall(istep=0:nstep)tmpnk(istep,ik)=-xi*Gk%less(istep,istep)
        call eta(ik,Lk)
     enddo
@@ -126,16 +124,18 @@ contains
          MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     call MPI_ALLREDUCE(tmpG%gmix(0:,0:),locG%gmix(0:,0:),(Nstep+1)*(Ltau+1),&
          MPI_DOUBLE_COMPLEX,MPI_SUM,MPI_COMM_WORLD,MPIerr)
+    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
 
     !Get equilibrium GF:
-    call fftgf_iw2tau_upm(wm,eq_Giw,tau,eq_Gtau(0:),beta)
-    forall(i=1:Ltau)eq_Gtau(-i)=-eq_Gtau(Ltau-i)
-
-    forall(i=0:Ltau,j=0:Ltau)locG%mats(i,j)=eq_Gtau(i-j)!?? check-out here, possible problems
+    !??? THERE IS A LITTLE PROBLEM FOR G_TAU, EXTREMA ARE SLIGHTLY NON-SYMMETRIC. CHECK!!!
+    !apparently it converges with the number of k-points
+    call fftgf_iw2tau_upm(wm,eq_Giw,tau(0:),eq_Gtau(0:),beta)
+    call fftgf_beta_sym(eq_Gtau,Ltau)
+    !forall(i=1:Ltau)eq_Gtau(-i)=-eq_Gtau(Ltau-i)
+    forall(i=0:Ltau,j=0:Ltau)locG%mats(i,j)=eq_Gtau(i-j)
     !
     call MPI_ALLREDUCE(tmpnk,nk,(nstep+1)*Lk,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,MPIerr)
     !
-    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
 
     !deallocating memory:
     call deallocate_kbm_contour_gf(tmpG)
@@ -160,7 +160,6 @@ contains
     allocate(Ikless(0:nstep),Ikgtr(0:nstep))
     allocate(Ikless0(0:nstep),Ikgtr0(0:nstep))
     allocate(Iklmix(0:Ltau),Iklmix0(0:Ltau))
-    allocate(Ikgmix(0:Ltau),Ikgmix0(0:Ltau))
     !Aux. operators
     allocate(Udelta(Lk,0:nstep),Vdelta(Lk,0:nstep))
     !Chi
@@ -173,7 +172,6 @@ contains
     deallocate(Ikless,Ikgtr)
     deallocate(Ikless0,Ikgtr0)
     deallocate(Iklmix,Iklmix0)
-    deallocate(Ikgmix,Ikgmix0)
     !Aux. operators
     deallocate(Udelta,Vdelta)
     !Chi
@@ -198,12 +196,10 @@ contains
     !to provide initial conditions to the real-time part of the contour:
     if(istep==0)then
        Gkiw = one/(xi*wm -epsik(ik) -eq_Siw)    !get G_k(iw)
-       !call fftgf_iw2tau(Gkiw,Gktau(0:),beta)   !get G_k(tau>0)
        call fftgf_iw2tau_upm(wm,Gkiw,tau(0:),Gktau(0:),beta)   !get G_k(tau>0)
        forall(i=1:Ltau)Gktau(-i)=-Gktau(Ltau-i) !get G_k(tau<0)
        forall(i=0:Ltau,j=0:Ltau)&
             Gk%mats(i,j)=Gktau(i-j)             !get G^M_k(tau,tau`) = xi*G_k(tau-tau`)
-
        Gk%less(0,0) = -xi*Gktau(Ltau)           !get G^<_k(0,0)=xi*G_k(0-)=-G_k(beta) !ex:!icGkless(ik)
        Gk%gtr(0,0)  =  xi*Gktau(0)              !get G^>_k(0,0)=xi*G_k(0+)=xi*(G_k(0-)-1.0)
        forall(i=0:Ltau)
@@ -217,8 +213,7 @@ contains
        case(1)
           !First step: get collision integrals up to t=T=istep
           call get_Ikcollision(istep)
-          Ikless0 = Ikless ; Ikgtr0  = Ikgtr
-          Iklmix0 = Iklmix ; Ikgmix0 = Ikgmix
+          Ikless0 = Ikless ; Ikgtr0  = Ikgtr ; Iklmix0 = Iklmix 
           Ikdiag  =-2.d0*real(Ikless(istep),8)
           !Ikdiag  = real(Ikgtr(istep),8)-real(Ikless(istep),8)
        case(2)
@@ -227,40 +222,51 @@ contains
           Ikless   = (Ikless  + Ikless0)/2.d0
           Ikgtr    = (Ikgtr   + Ikgtr0)/2.d0
           Iklmix   = (Iklmix  + Iklmix0)/2.d0
-          Ikgmix   = (Ikgmix  + Ikgmix0)/2.d0
           Ikdiag   = (-2.d0*real(Ikless(istep+1),8) + Ikdiag)/2.d0 
           !Ikdiag   = (real(Ikgtr(istep+1),8)-real(Ikless(istep+1),8)+Ikdiag)/2.d0
        end select
 
        !Evolve the solution of KB equations for all the k-points:
        forall(it=0:istep)
-          Gk%less(it,istep+1)  = Gk%less(it,istep)*conjg(Udelta(ik,istep))-Ikless(it)*conjg(Vdelta(ik,istep))
-          Gk%gtr(istep+1,it)   = Gk%gtr(istep,it)*Udelta(ik,istep)-Ikgtr(it)*Vdelta(ik,istep)
+          Gk%less(it,istep+1)  = Gk%less(it,istep)*conjg(Udelta(ik,istep))-&
+               Ikless(it)*conjg(Vdelta(ik,istep))
+          Gk%gtr(istep+1,it)   = Gk%gtr(istep,it)*Udelta(ik,istep)-&
+               Ikgtr(it)*Vdelta(ik,istep)
        end forall
+       forall(itau=0:Ltau)Gk%lmix(istep+1,itau)=Gk%lmix(istep,itau)*Udelta(ik,istep)-&
+            Iklmix(itau)*Vdelta(ik,istep)
        Gk%gtr(istep+1,istep)   =(Gk%less(istep,istep)-xi)*Udelta(ik,istep)-Ikgtr(istep)*Vdelta(ik,istep)
        Gk%less(istep+1,istep+1)= Gk%less(istep,istep)-xi*dt*Ikdiag
        Gk%gtr(istep+1,istep+1) = Gk%less(istep+1,istep+1)-xi
+
        do i=0,istep+1
           Gk%less(istep+1,i)=-conjg(Gk%less(i,istep+1))
           Gk%gtr(i,istep+1) =-conjg(Gk%gtr(istep+1,i))
        enddo
 
-       forall(itau=0:Ltau)&
-            Gk%lmix(istep+1,itau)=Gk%lmix(istep,itau)*Udelta(ik,istep)-Iklmix(itau)*Vdelta(ik,istep)
-       !    Gk%gmix(itau,istep+1)=Gk%gmix(itau,istep)*conjg(Udelta(ik,istep))-Ikgmix(itau)*conjg(Vdelta(ik,istep))
-       ! end forall
        forall(itau=0:Ltau)Gk%gmix(itau,istep+1)=conjg(Gk%lmix(istep+1,Ltau-itau))
     enddo
 
-    if(istep==Nstep-1)then
-       call get_Iktau(Iktau)
-       call splot("iktauVStime_"//trim(txtfy(iloop))//"_Ltau"//trim(txtfy(Ltau))//".ipt",&
-            t(0:Nstep),Iktau(0:Nstep),append=.true.)
-       call splot("iktau_nstep"//trim(txtfy(iloop))//"_Ltau"//trim(txtfy(Ltau))//".ipt",&
-            dble(ik),Iktau(nstep),append=.true.)
-       write(100,*)ik,kgrid(ik2ix(ik),ik2iy(ik))%x,kgrid(ik2ix(ik),ik2iy(ik))%y
-    end if
+    ! if(istep==Nstep-1)then
+    !    call get_Iktau(Iktau)
+    !    call splot("iktauVStime_"//trim(txtfy(iloop))//"_Ltau"//trim(txtfy(Ltau))//".ipt",&
+    !         t(0:Nstep),Iktau(0:Nstep),append=.true.)
+    !    call splot("iktau_nstep"//trim(txtfy(iloop))//"_Ltau"//trim(txtfy(Ltau))//".ipt",&
+    !         dble(ik),Iktau(nstep),append=.true.)
+    !    write(100,*)ik,kgrid(ik2ix(ik),ik2iy(ik))%x,kgrid(ik2ix(ik),ik2iy(ik))%y
+    ! end if
   end subroutine Step_kbm_contour_gf
+  ! subroutine get_Iktau(Iktau)
+  !   integer :: i,it
+  !   complex(8) :: Iktau(0:Nstep)
+  !   complex(8) :: Vgmix(0:Ltau)
+  !   do i=0,Ltau
+  !      Vgmix(i)= Sigma%gmix(i,Nstep) + S0%gmix(i,Nstep)
+  !   end do
+  !   do it=0,Nstep
+  !      Iktau(it)=sum(Gk%lmix(it,0:Ltau)*Vgmix(0:Ltau))*dtau !
+  !   enddo
+  ! end subroutine get_Iktau
 
 
 
@@ -280,19 +286,6 @@ contains
   ! A more general form has been tested in the past, using direct
   ! expression of the matrices in {k,k'}. See repo.
   !+-------------------------------------------------------------------+
-  subroutine get_Iktau(Iktau)
-    integer :: i,it
-    complex(8) :: Iktau(0:Nstep)
-    complex(8) :: Vgmix(0:Ltau)
-    do i=0,Ltau
-       Vgmix(i)= Sigma%gmix(i,Nstep) + S0%gmix(i,Nstep)
-    end do
-    do it=0,Nstep
-       Iktau(it)=sum(Gk%lmix(it,0:Ltau)*Vgmix(0:Ltau))*dtau !
-    enddo
-  end subroutine get_Iktau
-
-
   subroutine get_Ikcollision(Nt)
     integer,intent(in)          :: Nt
     integer                     :: i,itau,it,itp
@@ -301,76 +294,108 @@ contains
     complex(8),dimension(0:Ltau):: Vlmix,Vgmix
     complex(8),dimension(0:Nt)  :: Fadv,Fret
 
-    Ikless=zero; Ikgtr=zero; Iklmix=zero; Ikgmix=zero
+    Ikless=zero; Ikgtr=zero; Iklmix=zero
     if(Nt==0)return
 
     do i=0,Nt
        Vless(i)= Sigma%less(i,Nt) + S0%less(i,Nt)
        Vgtr(i) = Sigma%gtr(Nt,i)  + S0%gtr(Nt,i)
        Vret(i) = SretF(Nt,i)      + S0retF(Nt,i)
-       Vadv(i) = conjg(Vret(i)) 
+       Vadv(i) = conjg(Vret(i))
     end do
     do i=0,Ltau
        Vlmix(i)= Sigma%lmix(Nt,i) + S0%lmix(Nt,i)
        Vgmix(i)= Sigma%gmix(i,Nt) + S0%gmix(i,Nt)
     end do
 
+    select case(int_method)
+    case default             !trapz
+       do it=0,Nt                                  !for all t=0:T//T+\Delta
+          forall(i=0:it)Fret(i) = GkretF(it,i)     !was: forall(i=0:NT)          
+          I1=trapz(dt,Fret(0:it)*Vless(0:it))
+          I2=trapz(dt,Gk%less(it,0:Nt)*Vadv(0:Nt))
+          Ib=trapz(tau(0:Ltau),Gk%lmix(it,0:Ltau)*Vgmix(0:Ltau)) !
+          Ikless(it)=I1 + I2 - Ib*xi
+       enddo
 
-    !Get I^<(t=it,t`=Nt/T) it:0,...,Nt == t=0,...,T+\Delta
-    !I1 =  \int_0^t  G^R*Sigma^<     = sum_i=0^t G^R(t,i)Sigma^<(i,T)
-    !I2 =  \int_0^T  G^<*Sigma^A     = sum_i=0^T G^<(t,i)Sigma^A(i,T)
-    !Ib =-i\int_0^\b G^\lmix*S^\gmix = -isum_i=0^\b G^\lmix(t,i)Sigma^\gmix(i,T)
-    !===============================================================
-    !$OMP PARALLEL SHARED(Ikless) PRIVATE(i,it,I1,I2,Fret,Fadv)
-    !$OMP DO
-    do it=0,Nt                                  !for all t=0:T//T+\Delta
-       forall(i=0:it)Fret(i) = GkretF(it,i)     !was: forall(i=0:NT)
-       I1=sum(Fret(0:it)*Vless(0:it))           !
-       I2=sum(Gk%less(it,0:Nt)*Vadv(0:Nt))      !
-       Ib=sum(Gk%lmix(it,0:Ltau)*Vgmix(0:Ltau)) !
-       Ikless(it)=I1*dt + I2*dt - Ib*xi*dtau
-    enddo
-    !$OMP END DO
-    !$OMP END PARALLEL
+       do itp=0,Nt
+          forall(i=0:itp)Fadv(i) = conjg(GkretF(itp,i)) !was: forall(i=0:Nt)
+          I1=trapz(dt,Vret(0:Nt)*Gk%gtr(0:Nt,itp))
+          I2=trapz(dt,Vgtr(0:itp)*Fadv(0:itp))
+          Ib=trapz(tau(0:Ltau),Vlmix(0:Ltau)*Gk%gmix(0:Ltau,itp))
+          Ikgtr(itp)=I1 + I2 - Ib*xi
+       enddo
 
-
-
-
-    !Get I^>(t=Nt,t`=itp) itp:0,...,Nt == t` = 0,...,T+\Delta=Nt
-    !I1 =  \int_0^T  S^R*G^>         = sum_i=0^T  Sigma^R(T,i)G^>(i,t`=itp)
-    !I2 =  \int_0^t` S^>*G^A         = sum_i=0^t` Sigma^>(T,i)G^A(i,t`) G^A=0 for i>t`
-    !Ib =-i\int_0^\b S^\lmix*G^\gmix = -isum_i=0^\b Sigma^\lmix(T,i)G^\gmix(i,t`)
-    !===============================================================
-    !$OMP PARALLEL SHARED(Ikgtr) PRIVATE(i,itp,I1,I2,Fadv)
-    !$OMP DO
-    do itp=0,Nt
-       forall(i=0:itp)Fadv(i) = conjg(GkretF(itp,i)) !was: forall(i=0:Nt)
-       I1=sum(Vret(0:Nt)*Gk%gtr(0:Nt,itp))           !
-       I2=sum(Vgtr(0:itp)*Fadv(0:itp))               !
-       Ib=sum(Vlmix(0:Ltau)*Gk%gmix(0:Ltau,itp))     !
-       Ikgtr(itp)=I1*dt + I2*dt - Ib*xi*dtau
-    enddo
-    !$OMP END DO
-    !$OMP END PARALLEL
+       do itau=0,Ltau
+          I1=trapz(dt,Vret(0:Nt)*Gk%lmix(0:Nt,itau))
+          Ib=trapz(tau(0:Ltau),Vlmix(0:Ltau)*Gk%mats(0:Ltau,itau))
+          Iklmix(itau)=I1 + Ib
+       enddo
 
 
+    case("simps")
+       do it=0,Nt                                  !for all t=0:T//T+\Delta
+          forall(i=0:it)Fret(i) = GkretF(it,i)     !was: forall(i=0:NT)
+          I1=simps(dt,Fret(0:it)*Vless(0:it))           !
+          I2=simps(dt,Gk%less(it,0:Nt)*Vadv(0:Nt))      !
+          Ib=simps(tau(0:Ltau),Gk%lmix(it,0:Ltau)*Vgmix(0:Ltau)) !
+          Ikless(it)=I1 + I2 - Ib*xi
+       enddo
 
-    !Get I^\lmix(Nt,itau) itau=0:Ltau == -tau=0:beta
-    !I1 = \int_0^T    S^Ret*G^\rceil = sum_i=0^L Sigma^R(T,i)G^\lmix(i,tau)
-    !Ib = \int_0^\b S^\lceil* G^\M   = sum_i=0^L Sigma^\lmix(T,i)(xi*G(i,tau))
-    !===============================================================
-    !$OMP PARALLEL SHARED(Iklmix) PRIVATE(i,itau,I1,Ib)
-    !$OMP DO
-    do itau=0,Ltau
-       I1=sum(Vret(0:Nt)*Gk%lmix(0:Nt,itau))
-       Ib=sum(Vlmix(0:Ltau)*Gk%mats(0:Ltau,itau))
-       Iklmix(itau)=I1*dt + Ib*dtau
-    enddo
-    !$OMP END DO
-    !$OMP END PARALLEL
+       do itp=0,Nt
+          forall(i=0:itp)Fadv(i) = conjg(GkretF(itp,i)) !was: forall(i=0:Nt)
+          I1=simps(dt,Vret(0:Nt)*Gk%gtr(0:Nt,itp))           !
+          I2=simps(dt,Vgtr(0:itp)*Fadv(0:itp))               !
+          Ib=simps(tau(0:Ltau),Vlmix(0:Ltau)*Gk%gmix(0:Ltau,itp))     !
+          Ikgtr(itp)=I1 + I2 - Ib*xi
+       enddo
 
-    forall(itau=0:Ltau)Ikgmix(itau)=conjg(Iklmix(Ltau-itau))
+       do itau=0,Ltau
+          I1=simps(dt,Vret(0:Nt)*Gk%lmix(0:Nt,itau))
+          Ib=simps(tau(0:Ltau),Vlmix(0:Ltau)*Gk%mats(0:Ltau,itau))
+          Iklmix(itau)=I1 + Ib
+       enddo
 
+
+    case ("rect")               !The older version all comments kept
+       !Get I^<(t=it,t`=Nt/T) it:0,...,Nt == t=0,...,T+\Delta
+       !I1 =  \int_0^t  G^R*Sigma^<     = sum_i=0^t G^R(t,i)Sigma^<(i,T)
+       !I2 =  \int_0^T  G^<*Sigma^A     = sum_i=0^T G^<(t,i)Sigma^A(i,T)
+       !Ib =-i\int_0^\b G^\lmix*S^\gmix = -isum_i=0^\b G^\lmix(t,i)Sigma^\gmix(i,T)
+       !$OMP PARALLEL SHARED(Ikless) PRIVATE(i,it,I1,I2,Fret,Fadv)
+       !$OMP DO
+       do it=0,Nt                                  !for all t=0:T//T+\Delta
+          forall(i=0:it)Fret(i) = GkretF(it,i)     !was: forall(i=0:NT)
+          I1=sum(Fret(0:it)*Vless(0:it))           !
+          I2=sum(Gk%less(it,0:Nt)*Vadv(0:Nt))      !
+          Ib=sum(Gk%lmix(it,0:Ltau)*Vgmix(0:Ltau)) !
+          Ikless(it)=I1*dt + I2*dt - Ib*xi*dtau
+       enddo
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       !Get I^>(t=Nt,t`=itp) itp:0,...,Nt == t` = 0,...,T+\Delta=Nt
+       !I1 =  \int_0^T  S^R*G^>         = sum_i=0^T  Sigma^R(T,i)G^>(i,t`=itp)
+       !I2 =  \int_0^t` S^>*G^A         = sum_i=0^t` Sigma^>(T,i)G^A(i,t`) G^A=0 for i>t`
+       !Ib =-i\int_0^\b S^\lmix*G^\gmix = -isum_i=0^\b Sigma^\lmix(T,i)G^\gmix(i,t`)
+       do itp=0,Nt
+          forall(i=0:itp)Fadv(i) = conjg(GkretF(itp,i)) !was: forall(i=0:Nt)
+          I1=sum(Vret(0:Nt)*Gk%gtr(0:Nt,itp))           !
+          I2=sum(Vgtr(0:itp)*Fadv(0:itp))               !
+          Ib=sum(Vlmix(0:Ltau)*Gk%gmix(0:Ltau,itp))     !
+          Ikgtr(itp)=I1*dt + I2*dt - Ib*xi*dtau
+       enddo
+
+       !Get I^\lmix(Nt,itau) itau=0:Ltau == -tau=0:beta
+       !I1 = \int_0^T    S^Ret*G^\rceil = sum_i=0^L Sigma^R(T,i)G^\lmix(i,tau)
+       !Ib = \int_0^\b S^\lceil* G^\M   = sum_i=0^L Sigma^\lmix(T,i)(xi*G(i,tau))
+       do itau=0,Ltau
+          I1=sum(Vret(0:Nt)*Gk%lmix(0:Nt,itau))
+          Ib=sum(Vlmix(0:Ltau)*Gk%mats(0:Ltau,itau))
+          Iklmix(itau)=I1*dt + Ib*dtau
+       enddo
+
+    end select
   end subroutine get_Ikcollision
 
 
@@ -414,17 +439,17 @@ contains
   end subroutine buildUV
 
   function UdeltaF(ik,istep) 
-    integer,intent(in)    :: ik,istep
-    complex(8) :: UdeltaF
-    complex(8) :: arg
+    integer,intent(in) :: ik,istep
+    complex(8)         :: UdeltaF
+    real(8)            :: arg
     arg=Hbar(ik,istep)
     UdeltaF=exp(-xi*arg*dt)
   end function UdeltaF
 
   function VdeltaF(ik,istep)
-    integer,intent(in)    :: ik,istep
-    complex(8) :: VdeltaF
-    complex(8) :: arg
+    integer,intent(in) :: ik,istep
+    complex(8)         :: VdeltaF
+    real(8)            :: arg
     arg=Hbar(ik,istep)
     VdeltaF=exp(-xi*arg*dt)
     if(abs(arg*dt) <= 1.d-9)then
@@ -442,8 +467,6 @@ contains
 
 
 
-
-
   !+-------------------------------------------------------------------+
   !PURPOSE  : This is the time-dependent hamiltonian
   ! a more general code would require this quantity to be definied 
@@ -453,7 +476,7 @@ contains
   function Hbar(ik,istep)
     integer,intent(in) :: ik,istep  
     integer      :: i,j
-    complex(8)   :: Hbar
+    real(8)      :: Hbar
     real(8)      :: tbar
     type(vect2D) :: kt,Ak
     tbar=t(istep) + dt/2.d0
@@ -641,17 +664,16 @@ contains
     type(vect2D),dimension(0:nstep) :: Jloc                   !local Current 
     real(8),dimension(0:nstep)      :: nt,modJloc             !occupation(time)
     if(mpiID==0)then
-
        call write_kbm_contour_gf(locG,trim(data_dir)//"/locG")
        call splot(trim(data_dir)//"/nk.data",nk(0:,:))
-
        if(plot3D)then
           call plot_kbm_contour_gf(locG,t(0:),tau(0:),trim(plot_dir)//"/locG")
        end if
-       call splot("testGlesst0.ipt",t(0:),locG%less(0:,0))
-       call splot("testGlmixtau0.ipt",t(0:),locG%lmix(0:,0))
+       call splot("locGlesst0.ipt",t(0:),locG%less(0:,0))
+       call splot("locGlmixtau0.ipt",t(0:),locG%lmix(0:,0))
+       call splot("locGlmix_t0_tau.ipt",tau(0:),locG%lmix(0,0:))
        call splot("eq_G_iw.ipt",wm,eq_Giw,append=.true.)
-       call splot("eq_G_tau.ipt",tau,eq_Gtau,append=.true.)
+       call splot("eq_G_tau.ipt",tau(0:),eq_Gtau(0:),append=.true.)
        call splot("eq_nk.ipt",epsik,nk(0,:),append=.true.)
 
        forall(i=0:nstep,j=0:nstep)

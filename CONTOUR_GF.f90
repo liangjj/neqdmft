@@ -2,6 +2,7 @@ MODULE CONTOUR_GF
   USE COMMON_VARS
   USE TOOLS
   USE IOTOOLS
+  USE SPLINE
   USE MPI
   implicit none
   private
@@ -363,7 +364,8 @@ contains
     type(kbm_contour_gf)  :: G
     character(len=*)      :: file
     real(8),dimension(0:) :: t,tau
-    integer               :: N,L
+    integer               :: i,j,N,L,M
+    real(8),allocatable   :: ftau(:),upmGtau(:),Gtau(:),Gmats(:,:)
     N=G%N+1 ; L=G%L+1
     if( (size(G%less)/=N**2) .OR. (size(G%gtr)/=N**2) )&
          call error("ERROR contour_gf/plot_kbm_contour_gf: wrong dimensions 1")
@@ -375,7 +377,16 @@ contains
     call splot(trim(file)//"_gtr_t_t",t(0:),t(0:),G%gtr(0:,0:))
     call splot(trim(file)//"_lmix_t_tau",t(0:),tau(0:),G%lmix(0:,0:))
     call splot(trim(file)//"_gmix_tau_t",tau(0:),t(0:),G%gmix(0:,0:))
-    call splot(trim(file)//"_mats_tau_tau",tau(0:),tau(0:),G%mats(0:,0:))
+    L=G%L
+    M=min(2*L,200)
+    allocate(ftau(0:M),upmGtau(0:L),Gtau(-M:M),Gmats(0:M,0:M))
+    ftau(0:) = linspace(minval(tau(0:)),maxval(tau(0:)),M+1)
+    forall(i=0:L)upmGtau(i) = G%mats(i,0)
+    call cubic_spline(upmGtau(0:L),tau(0:L),Gtau(0:M),ftau(0:M))
+    forall(i=1:M)Gtau(-i)=-Gtau(M-i)
+    forall(i=0:M,j=0:M)Gmats(i,j)=Gtau(i-j)
+    call splot(trim(file)//"_mats_tau_tau",ftau(0:),ftau(0:),Gmats(0:,0:))
+    deallocate(ftau,upmGtau,Gtau,Gmats)
   end subroutine plot_kbm_contour_gf
 
   !******************************************************************

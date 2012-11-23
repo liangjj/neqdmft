@@ -41,20 +41,17 @@ contains
        wfreq= linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_gaussian_dos()
 
-    case ("constant")
+    case ("flat")
        wfin  = 2.d0*Wbath ; wini=-wfin
        wfreq = linspace(wini,wfin,Lw,mesh=dw)
        call get_bath_constant_dos()
 
     case default
-       call abort("Bath type:"//trim(adjustl(trim(bath_type)))//" not supported. Accepted values are: constant,gaussian,bethe.")
+       call abort("Bath type:"//trim(adjustl(trim(bath_type)))//" not supported. Accepted values are: flat,gaussian,bethe.")
 
     end select
 
-
-    ! S0less=zero ; S0gtr=zero
-    ! S0lmix=zero; S0gmix=zero
-    S0 = zero
+    S0=zero
     if(Vbath/=0.d0)then
        do iw=1,Lw
           en   = wfreq(iw)
@@ -87,7 +84,7 @@ contains
 
     if(mpiID==0)then
        call splot("Bath/DOSbath.lattice",wfreq,bath_dens)
-       if(Vbath/=0.d0 .AND. plot3D)call plot_kbm_contour_gf(S0,t(0:),tau(0:),"Bath/S0")          
+       if(Vbath/=0.d0.AND.plot3D)call plot_kbm_contour_gf(S0,t(0:),tau(0:),trim(plot_dir)//"/S0")
        ! call splot("Bath/S0less_t.ipt",t,S0less)
        ! call splot("Bath/S0gtr_t.ipt",t,S0gtr)
        ! call splot("Bath/S0lmix_t_tau",t(0:nstep),tau(0:Ltau),S0lmix(0:nstep,0:Ltau))

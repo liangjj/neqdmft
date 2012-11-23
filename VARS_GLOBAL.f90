@@ -8,12 +8,13 @@ MODULE VARS_GLOBAL
   !Local:
   USE CONTOUR_GF
   !SciFor library
-  USE PARSE_CMD
   USE COMMON_VARS
+  USE PARSE_CMD
   USE GREENFUNX
   USE TIMER
   USE VECTORS
   USE SQUARE_LATTICE
+  USE INTEGRATE
   USE IOTOOLS
   USE FFTGF
   USE SPLINE
@@ -26,103 +27,96 @@ MODULE VARS_GLOBAL
 
   !Gloabl  variables
   !=========================================================
-  integer           :: L             !a big number
-  integer           :: Ltau          !Imaginary time slices
-  integer           :: Nstep         !Number of Time steps
-  integer           :: Lk            !total lattice  dimension
-  integer           :: Lkreduced     !reduced lattice dimension
-  integer           :: Nx,Ny         !lattice grid dimensions
-  integer           :: eqnloop       !Number of dmft loop for the equilibrium solution
-  real(8)           :: beta0,xmu0,U0 !quench variables
-  logical           :: iquench       !initial quench
-  logical           :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
-  logical           :: solve_wfftw   !solve_wfftw=TT solve Kadanof-Baym equations using FFTw (iff Efield=0)
-  character(len=6)  :: method        !choose the perturbation theory method: IPT,SPT
-  character(len=16) :: bath_type     !choose the shape of the BATH
-  character(len=16) :: field_profile !choose the profile of the electric field
-  real(8)           :: Vbath
-  real(8)           :: Wbath         !Width of the BATH DOS
-  real(8)           :: eps_error     !convergence error threshold
-  integer           :: Nsuccess      !number of convergence success
-  real(8)           :: weight        !mixing weight parameter
-  real(8)           :: wmin,wmax     !min/max frequency
-  real(8)           :: tmin,tmax     !min/max time
-  logical           :: plot3D,fchi
-  logical           :: solveEQ
-  integer           :: size_cutoff
-  logical           :: g0loc_guess    !use non-interacting local GF as guess.
-  integer           :: iloop,nloop    !dmft loop variables
-  real(8)           :: ts             !n.n./n.n.n. hopping amplitude
-  real(8)           :: u              !local,non-local interaction 
-  real(8)           :: dt,dtau        !time step
-  real(8)           :: fmesh          !freq. step
-  real(8)           :: beta           !inverse temperature
-  real(8)           :: eps            !broadening
-  integer           :: P,Q            !Uniform Power Mesh parameters
+  integer                                :: nstep         !Number of Time steps
+  integer                                :: L             !a big number
+  integer                                :: Ltau          !Imaginary time slices
+  integer                                :: Lk            !total lattice  dimension
+  integer                                :: Lkreduced     !reduced lattice dimension
+  integer                                :: Nx,Ny         !lattice grid dimensions
+  integer                                :: iloop,nloop    !dmft loop variables
+  integer                                :: eqnloop        !dmft loop of the equilibrium solution
+  real(8)                                :: ts             !n.n./n.n.n. hopping amplitude
+  real(8)                                :: u              !local,non-local interaction 
+  real(8)                                :: Vbath          !Hopping amplitude to the BATH
+  real(8)                                :: Wbath          !Width of the BATH DOS
+  real(8)                                :: dt,dtau        !time step
+  real(8)                                :: fmesh          !freq. step
+  real(8)                                :: beta           !inverse temperature
+  real(8)                                :: eps            !broadening
+  logical                                :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
+  logical                                :: solve_wfftw   !solve_wfftw=TT solve Kadanof-Baym equations using FFTw (iff Efield=0)
+  character(len=16)                      :: int_method    !choose the integration method (rect,trapz,simps)
+  character(len=16)                      :: bath_type     !choose the shape of the BATH
+  character(len=16)                      :: field_type !choose the profile of the electric field
+  real(8)                                :: eps_error     !convergence error threshold
+  integer                                :: Nsuccess      !number of convergence success
+  real(8)                                :: weight        !mixing weight parameter
+  real(8)                                :: wmin,wmax     !min/max frequency
+  real(8)                                :: tmin,tmax     !min/max time
+  logical                                :: plot3D,fchi
+  logical                                :: solve_eq
+  integer                                :: P,Q            !Uniform Power Mesh parameters
   !
 
   !FILES and VARS TO RESTART
   !=========================================================
-  character(len=32)              :: irdFILE
+  character(len=32)                      :: irdFILE
 
 
   !FREQS & TIME ARRAYS:
   !=========================================================  
-  real(8),dimension(:),allocatable :: wr,t,wm
-  real(8),dimension(:),allocatable :: tau
-  real(8),dimension(:),allocatable :: ftau
+  real(8),dimension(:),allocatable       :: wr,t,wm
+  real(8),dimension(:),allocatable       :: tau
+  real(8),dimension(:),allocatable       :: ftau
 
 
   !LATTICE (weight & dispersion) ARRAYS:
   !=========================================================  
-  real(8),dimension(:),allocatable :: wt,epsik,sorted_epsik
-  integer,allocatable,dimension(:) :: sorted_ik
+  real(8),dimension(:),allocatable       :: wt,epsik
 
 
   !ELECTRIC FIELD VARIABLES (& NML):
   !=========================================================  
-  type(vect2D)    :: Ak,Ek         !Electric field vector potential and vector
-  real(8)         :: Efield        !Electric field strength
-  real(8)         :: Ex,Ey         !Electric field vectors as input
-  real(8)         :: t0,t1         !turn on/off time, t0 also center of the pulse
-  real(8)         :: w0,tau0       !parameters for pulsed light
-  real(8)         :: omega0        !parameter for the Oscilatting field
-  real(8)         :: E1            !Electric field strenght for the AC+DC case (tune to resonate)
+  type(vect2D)                           :: Ak,Ek         !Electric field vector potential and vector
+  real(8)                                :: Efield        !Electric field strength
+  real(8)                                :: Ex,Ey         !Electric field vectors as input
+  real(8)                                :: t0,t1         !turn on/off time, t0 also center of the pulse
+  real(8)                                :: w0,tau0       !parameters for pulsed light
+  real(8)                                :: omega0        !parameter for the Oscilatting field
+  real(8)                                :: E1            !Electric field strenght for the AC+DC case (tune to resonate)
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
-  !Frequency domain:
-  type(keldysh_equilibrium_gf)        :: gf0
-  type(keldysh_equilibrium_gf)        :: gf
-  type(keldysh_equilibrium_gf)        :: sf
-  real(8),dimension(:),allocatable    :: exa
+  type(keldysh_equilibrium_gf)           :: gf0
+  type(keldysh_equilibrium_gf)           :: gf
+  type(keldysh_equilibrium_gf)           :: sf
+  real(8),dimension(:),allocatable       :: exa
 
 
   !MATSUBARA GREEN'S FUNCTION and n(k)
   !=========================================================
-  complex(8),allocatable,dimension(:)  :: eq_G0iw
-  real(8),allocatable,dimension(:)     :: eq_G0tau
-  complex(8),allocatable,dimension(:)  :: eq_Siw
-  real(8),allocatable,dimension(:)     :: eq_Stau
-  complex(8),allocatable,dimension(:)  :: eq_Giw
-  real(8),allocatable,dimension(:)     :: eq_Gtau
-  real(8),allocatable,dimension(:)     :: eq_nk
+  complex(8),allocatable,dimension(:)    :: eq_G0iw
+  real(8),allocatable,dimension(:)       :: eq_G0tau
+  complex(8),allocatable,dimension(:)    :: eq_Siw
+  real(8),allocatable,dimension(:)       :: eq_Stau
+  complex(8),allocatable,dimension(:)    :: eq_Giw
+  real(8),allocatable,dimension(:)       :: eq_Gtau
+  real(8),allocatable,dimension(:)       :: eq_nk
   !
 
 
   !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
   !WEISS-FIELDS
-  type(kbm_contour_gf) :: G0
+  type(kbm_contour_gf)                   :: G0
   !SELF-ENERGY
-  type(kbm_contour_gf) :: Sigma
+  type(kbm_contour_gf)                   :: Sigma
   !LOCAL GF
-  type(kbm_contour_gf) :: locG
+  type(kbm_contour_gf)                   :: locG
   !Bath SELF-ENERGY
-  type(kbm_contour_gf) :: S0
+  type(kbm_contour_gf)                   :: S0
   !MOMENTUM-DISTRIBUTION
-  real(8),allocatable,dimension(:,:)    :: nk
-
+  real(8),allocatable,dimension(:,:)     :: nk
 
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
@@ -134,22 +128,59 @@ MODULE VARS_GLOBAL
 
   !DATA DIRECTORY:
   !=========================================================
-  character(len=32) :: data_dir,plot_dir
-
+  character(len=32)                      :: data_dir,plot_dir
 
 
   !NAMELISTS:
   !=========================================================
-  namelist/variables/dt,beta,U,Efield,Vbath,ts,nstep,nloop,eqnloop,& !global parameters
-       eps_error,nsuccess,&                                          !convergence
-       weight,&                                                      !mix
-       Ex,Ey,t0,t1,tau0,w0,omega0,E1,field_profile,&                 !field
-       Nx,Ny,&                                                       !k-points 
-       method,update_wfftw,solve_wfftw,plot3D,g0loc_guess,solveEQ,&  !flags
-       L,p,q,Lkreduced,Wbath,bath_type,eps,&                        !other parameters
-       data_dir,plot_dir,fchi,&       
-       irdFILE,&
-       iquench,beta0,xmu0,U0
+  namelist/variables/&
+       dt,&
+       beta,&
+       Nstep        ,& 
+       U            ,& 
+       p            ,& 
+       q            ,& 
+       ts           ,& 
+       eps          ,& 
+       L            ,& 
+       Lkreduced    ,& 
+                                !DMFT
+       nloop        ,& 
+       eqnloop      ,& 
+                                !BATH:
+       bath_type    ,& 
+       Vbath        ,& 
+       Wbath        ,& 
+                                !FIELD:
+       Efield       ,& 
+       field_type   ,& 
+       Ex           ,& 
+       Ey           ,& 
+       t0           ,& 
+       t1           ,& 
+       tau0         ,& 
+       w0           ,& 
+       omega0       ,& 
+       E1           ,& 
+                                !K-GRID
+       Nx           ,& 
+       Ny           ,& 
+                                !CONVERGENCE:
+       eps_error    ,& 
+       nsuccess     ,& 
+       weight       ,& 
+                                !FLAGS:
+       int_method   ,& 
+       solve_eq     ,& 
+       update_wfftw ,& 
+       solve_wfftw  ,& 
+       plot3D       ,& 
+       fchi         ,& 
+                                !FILES&DIR:
+       irdFILE      ,& 
+       data_dir     ,& 
+       plot_dir
+
 
 
 contains
@@ -204,8 +235,11 @@ contains
          ' t1=[10^6]                -- Switching off time parameter for the Electric field',&
          ' tau0=[1]                 -- Width of gaussian packect envelope for the impulsive Electric field',&
          ' w0=[20]                  -- Frequency of the of the impulsive Electric field',&
-         ' field_profile=[dc]       -- Type of electric field profile (dc,ac,ac+dc,etc..)',&
-         ' bath_type=[constant]     -- Fermionic thermostat type (constant,gaussian,bethe,etc..)',&         
+         ' omega0=[pi/4]            -- Frequency of the of the Oscillating Electric field',&        
+         ' E1=[1]                   -- Strenght of the electric field for the AC+DC case, to be tuned to resonate',&
+         ' field_type=[dc]       -- Type of electric field profile (dc,ac,ac+dc,etc..)',&
+         ' bath_type=[flat]     -- Fermionic thermostat type (constant,gaussian,bethe,etc..)',&
+         ' int_method=["trapz"]     -- ',&
          ' data_dir=[DATAneq]       -- Name of the directory containing data files',&
          ' plot_dir=[PLOT]          -- Name of the directory containing plot files',&
          ' fchi=[F]                 -- Flag for the calculation of the optical response',&
@@ -214,62 +248,63 @@ contains
          ' Q=[5]                    -- Uniform Power mesh uniform-mesh parameter',&
          ' eps=[0.05d0]             -- Broadening on the real-axis',&
          ' Nx=[50]                  -- Number of k-points along x-axis ',&
-         ' Ny=[50]                  -- Number of k-points along y-axis ',&    
+         ' Ny=[50]                  -- Number of k-points along y-axis ',&
+         ' solve_wfftw =[F]         -- ',&
+         ' plot3D=[F]       -- ',&
+         ' L=[1024]         -- ',&
+         ' Lkreduced=[200]  -- ',&
+         ' eps=[0.05d0]         -- ',&
+         ' irdFILE=[restartSigma]-- ',&
          '  '])
     call parse_cmd_help(help_buffer)
 
-
-    dt=0.1d0
-    beta= 100.d0
-    U=4.d0
-    Efield=0.d0
-    Vbath=0.d0
-    ts=1.d0
-    nstep=100
-    nloop=30
-    eqnloop=30
-    p=5
-    q=5
-    !CONVERGENCE:
-    eps_error=1.d-4
-    Nsuccess=2
-    !MIX:
-    weight=1.d0
+    !GLOBAL
+    dt           = 0.1d0
+    beta         = 10.d0
+    Nstep        = 100
+    U            = 4.d0
+    p            = 5
+    q            = 5
+    ts           = 1.d0
+    eps          = 0.01d0
+    L            = 2048  
+    Lkreduced    = 300
+    !DMFT
+    nloop        = 30
+    eqnloop      = 50
+    !BATH:
+    bath_type    = 'flat'
+    Vbath        = 0.d0
+    Wbath        = 20.d0
     !FIELD:
-    Ex=1.d0 
-    Ey=0.d0
-    E1=0.d0
-    t0=0.d0 
-    t1=1.d9
-    tau0=0.d0
-    w0=0.d0 
-    field_profile='dc'
-    !GRID k-POINTS:
-    Nx=25 
-    Ny=25
+    Efield       = 0.d0
+    field_type   = 'dc'
+    Ex           = 1.d0
+    Ey           = 0.d0
+    t0           = 0.d0
+    t1           = 1.d9
+    tau0         = 0.d0
+    w0           = 0.d0
+    omega0       = pi/4.d0
+    E1           = 0.d0
+    !K-GRID
+    Nx           = 25
+    Ny           = 25
+    !CONVERGENCE:
+    eps_error    = 1.d-4
+    nsuccess     = 2
+    weight       = 1.d0
     !FLAGS:
-    method='ipt'
-    solveEQ=.false. 
-    update_wfftw= .false.
-    solve_wfftw= .false.
-    plot3D= .false.
-    fchi= .false.
-    g0loc_guess= .false.
-    !PARAMETERS:
-    L=1024
-    Lkreduced=200
-    wbath=20.d0 
-    bath_type='constant'
-    eps=0.01d0
+    int_method   = 'trapz'
+    solve_eq     = .false. 
+    update_wfftw = .false.
+    solve_wfftw  = .false.
+    plot3D       = .false.
+    fchi         = .false.
     !FILES&DIR:
-    irdFILE='restartSigma'
-    data_dir='DATAneq'
-    plot_dir='PLOT'
-    !QUENCH:
-    iquench=.false.
-    beta0=50.d0
-    U0=6.d0
-    xmu0=0.d0 
+    irdFILE      = 'restartSigma'
+    data_dir     = 'DATAneq'
+    plot_dir     = 'PLOT'
 
     inquire(file=adjustl(trim(inputFILE)),exist=control)
     if(control)then
@@ -283,59 +318,56 @@ contains
        call error("Can not find INPUT file, dumping a default version in default."//trim(inputFILE))
     endif
 
-    ! !GLOBAL
-    call parse_cmd_variable(dt ,"DT")
-    call parse_cmd_variable(beta ,"BETA")
-    call parse_cmd_variable(U ,"U")
-    call parse_cmd_variable(Efield ,"EFIELD")
-    call parse_cmd_variable(Vbath ,"VBATH")
-    call parse_cmd_variable(ts ,"TS")
-    call parse_cmd_variable(p ,"P")
-    call parse_cmd_variable(q ,"Q")
-    call parse_cmd_variable(nstep ,"NSTEP")
-    call parse_cmd_variable(nloop ,"NLOOP")
-    call parse_cmd_variable(eqnloop ,"EQNLOOP")
+    !GLOBAL
+    call parse_cmd_variable(dt           ,"DT")
+    call parse_cmd_variable(beta         ,"BETA")
+    call parse_cmd_variable(nstep        ,"NSTEP")
+    call parse_cmd_variable(U            ,"U")
+    call parse_cmd_variable(p            ,"P")
+    call parse_cmd_variable(q            ,"Q")
+    call parse_cmd_variable(ts           ,"TS")
+    call parse_cmd_variable(eps          ,"EPS")
+    call parse_cmd_variable(L            ,"L")
+    call parse_cmd_variable(Lkreduced    ,"LKREDUCED")
+    !DMFT
+    call parse_cmd_variable(nloop        ,"NLOOP")
+    call parse_cmd_variable(eqnloop      ,"EQNLOOP")
+    !BATH
+    call parse_cmd_variable(Vbath        ,"VBATH")
+    call parse_cmd_variable(wbath        ,"WBATH")
+    call parse_cmd_variable(bath_type    ,"BATH_TYPE")
+    !EFIELD
+    call parse_cmd_variable(field_type   ,"FIELD_TYPE")
+    call parse_cmd_variable(Efield       ,"EFIELD")
+    call parse_cmd_variable(Ex           ,"EX")
+    call parse_cmd_variable(Ey           ,"EY")
+    call parse_cmd_variable(t0           ,"T0")
+    call parse_cmd_variable(t1           ,"T1")
+    call parse_cmd_variable(tau0         ,"TAU0")
+    call parse_cmd_variable(w0           ,"W0")
+    call parse_cmd_variable(omega0       ,"OMEGA0")
+    call parse_cmd_variable(E1           ,"E1")
     !CONVERGENCE:
-    call parse_cmd_variable(eps_error ,"EPS_ERROR")
-    call parse_cmd_variable(Nsuccess ,"NSUCCESS")
-    !MIX:
-    call parse_cmd_variable(weight ,"WEIGHT")
-    !FIELD:
-    call parse_cmd_variable(Ex ,"EX")
-    call parse_cmd_variable(Ey ,"EY")
-    call parse_cmd_variable(t0 ,"T0")
-    call parse_cmd_variable(t1 ,"T1")
-    call parse_cmd_variable(tau0 ,"TAU0")
-    call parse_cmd_variable(w0 ,"W0")
-    call parse_cmd_variable(field_profile ,"FIELD_PROFILE")
+    call parse_cmd_variable(eps_error    ,"EPS_ERROR")
+    call parse_cmd_variable(Nsuccess     ,"NSUCCESS")
+    call parse_cmd_variable(weight       ,"WEIGHT")
     !GRID k-POINTS:
-    call parse_cmd_variable(Nx ,"NX")
-    call parse_cmd_variable(Ny ,"NY")
+    call parse_cmd_variable(Nx           ,"NX")
+    call parse_cmd_variable(Ny           ,"NY")
     !FLAGS:
-    call parse_cmd_variable(method ,"METHOD")
-    call parse_cmd_variable(solveEQ ,"SOLVEEQ")
+    call parse_cmd_variable(int_method   ,"INT_METHOD")
+    call parse_cmd_variable(solve_eq     ,"SOLVE_EQ")
     call parse_cmd_variable(update_wfftw ,"UPDATE_WFFTW")
-    call parse_cmd_variable(solve_wfftw ,"SOLVE_WFFTW")
-    call parse_cmd_variable(plot3D ,"PLOT3D")
-    call parse_cmd_variable(fchi ,"FCHI")
-    call parse_cmd_variable(g0loc_guess ,"G0LOC_GUESS")
-    !PARAMETERS:
-    call parse_cmd_variable(L ,"L")
-    call parse_cmd_variable(Lkreduced ,"LKREDUCED")
-    call parse_cmd_variable(wbath ,"WBATH")
-    call parse_cmd_variable(bath_type ,"BATH_TYPE")
-    call parse_cmd_variable(eps ,"EPS")
+    call parse_cmd_variable(solve_wfftw  ,"SOLVE_WFFTW")
+    call parse_cmd_variable(plot3D       ,"PLOT3D")
+    call parse_cmd_variable(fchi         ,"FCHI")
     !FILES&DIR:
-    call parse_cmd_variable(data_dir,"DATA_DIR")
-    call parse_cmd_variable(plot_dir,"PLOT_DIR")
-    !QUENCH:
-    call parse_cmd_variable(iquench ,"IQUENCH")
-    call parse_cmd_variable(beta0 ,"BETA0")
-    call parse_cmd_variable(U0 ,"U0")
-    call parse_cmd_variable(xmu0 ,"XMU0") 
+    call parse_cmd_variable(irdFILE      ,"IRDFILE")
+    call parse_cmd_variable(data_dir     ,"DATA_DIR")
+    call parse_cmd_variable(plot_dir     ,"PLOT_DIR")
 
     Ltau=2*P*Q
-
+    if(int_method=="rect".AND.P/=1)call error("Integration method: +rect requires P=1: uniform mesh")
 
     if(mpiID==0)then
        write(*,*)"CONTROL PARAMETERS"
@@ -349,7 +381,6 @@ contains
     if(plot3D)call create_data_dir(trim(plot_dir))
 
   contains
-
     subroutine dump_input_file(prefix)
       character(len=*) :: prefix
       if(mpiID==0)then
@@ -434,7 +465,7 @@ contains
     enddo
     do i=1,N-1
        tau=tm(i)
-       if(mues > 0.d0)then
+       if(mues > 0.d0)then          
           if((mues*beta) > 30.d0)then
              At = -exp(-mues*tau)
           else
@@ -455,6 +486,39 @@ contains
     enddo
     gt(N)=-(gt(1)+1.d0)
   end subroutine fftgf_iw2tau_upm
+
+
+
+  subroutine fftgf_tau2iw_upm(wm,gw,tm,gt,beta)
+    integer                             :: i,j,N,L,NN
+    real(8),dimension(:)                :: wm
+    complex(8),dimension(size(wm))      :: gw
+    real(8),dimension(:)                :: tm
+    real(8),dimension(size(tm))         :: gt
+    real(8),allocatable                 :: tmpGt(:),tmpt(:)
+    complex(8)                          :: foo,tail,fg,xi
+    real(8)                             :: tau,beta,mues,wn
+    !
+    L=size(wm)
+    N=size(tm)
+    NN=min(32*L,2**14)
+    xi=cmplx(0.d0,1.d0,8)
+    allocate(tmpt(NN),tmpGt(NN))
+    tmpt = linspace(0.d0,beta,NN)
+    call cubic_spline(gt,tm,tmpGt,tmpt)
+    do j=1,L                    !for all Matsubara frequencies:
+       wn    = wm(j)!pi/beta*real(2*j-1,8)
+       gw(j) = trapz(tmpt(:),exp(xi*wn*tmpt(:))*tmpGt(:))
+    enddo
+    deallocate(tmpt,tmpGt)
+  end subroutine fftgf_tau2iw_upm
+
+  
+  subroutine fftgf_beta_sym(gt,L)
+    real(8),dimension(-L:L) :: gt
+    integer                 :: i,L
+    forall(i=1:L)gt(-i)=-gt(L-i)
+  end subroutine fftgf_beta_sym
 
 end module VARS_GLOBAL
 

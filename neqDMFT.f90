@@ -34,8 +34,6 @@ program neqDMFT
   allocate(epsik(Lk),wt(Lk))
   wt   = square_lattice_structure(Lk,Nx,Ny)
   epsik= square_lattice_dispersion_array(Lk,ts)
-  allocate(sorted_epsik(Lk),sorted_ik(Lk))
-  sorted_epsik=epsik ; call sort_array(sorted_epsik,sorted_ik)
   if(mpiID==0)call get_free_dos(epsik,wt)
 
   !SET THE ELECTRIC FIELD (in electric_field):
@@ -44,11 +42,11 @@ program neqDMFT
   !ALLOCATE FUNCTIONS IN THE MEMORY (in vars_global):
   call global_memory_allocation
 
+  !SOLVE THE EQUILIBRIUM PROBLEM WITH IPT (in equilibrium):
+  if(solve_eq)call solve_equilibrium_ipt()
+
   !BUILD THE  DISSIPATIVE BATH FUNCTIONS (in bath):
   call get_thermostat_bath()
-
-  !SOLVE THE EQUILIBRIUM PROBLEM WITH IPT (in equilibrium):
-  if(solveEQ)call solve_equilibrium_ipt()
 
 
   !START DMFT LOOP SEQUENCE:
