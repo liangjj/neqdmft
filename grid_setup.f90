@@ -1,24 +1,24 @@
   allocate(wr(2*nstep),t(-nstep:nstep))
-  allocate(wm(L))
-  allocate(tau(-Ltau:Ltau),ftau(-Ltau:Ltau))
   wmax = pi/dt
   tmax = dt*real(nstep,8)
   t    = linspace(-tmax,tmax,2*nstep+1)
   wr   = linspace(-wmax,wmax,2*nstep,mesh=fmesh)-fmesh/2.d0
   !t   = wr(-nstep:nstep)/fmesh*dt
+
+  allocate(wm(L))
   wm   = pi/beta*real(2*arange(1,L)-1,8)
 
-  tau(0:)  = upminterval(0.d0,beta,beta/2.d0,P,Q,type=0)
-  ftau(0:) = linspace(0.d0,beta,Ltau+1,mesh=dtau)
-
+  allocate(tau(-Ltau:Ltau),ftau(-Ltau:Ltau))
+  tau(0:)  = linspace(0.d0,beta,Ltau+1,mesh=dtau)
+  ftau(0:) = upminterval(0.d0,beta,beta/2.d0,P,Q,type=0)
   forall(i=1:Ltau)
      tau(-i)  =-tau(i)
      ftau(-i) =-ftau(i)
   end forall
 
   if(mpiID==0)then
-     write(*,'(A,F12.6)')"dt   =",dt
-     write(*,'(A,F12.6)')"dw   =",fmesh
-     write(*,'(A,F12.6)')"wmax =",wmax
-     write(*,'(A,F12.6)')"tmax =",dt*dble(nstep)
+     call msg("dt   ="//txtfy(dt))
+     call msg("dw   ="//txtfy(fmesh))
+     call msg("wmax ="//txtfy(wmax))
+     call msg("tmax ="//txtfy(dt*dble(nstep)))
   endif

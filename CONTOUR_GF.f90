@@ -24,8 +24,6 @@ MODULE CONTOUR_GF
   public :: read_keldysh_contour_gf
   public :: plot_keldysh_contour_gf
   public :: inquire_keldysh_contour_gf
-  public :: mpi_reduce_keldysh_contour_gf
-  public :: mpi_bcast_keldysh_contour_gf
 
   !##################################################################
   ! KELDYSH-BAYM-MATSUBARS CONTOUR GREEN'S FUNCTIONS:
@@ -46,8 +44,6 @@ MODULE CONTOUR_GF
   public :: inquire_kbm_contour_gf
   public :: read_kbm_contour_gf
   public :: plot_kbm_contour_gf
-  public :: mpi_reduce_kbm_contour_gf
-  public :: mpi_bcast_kbm_contour_gf
 
 
   interface operator(*)
@@ -61,6 +57,7 @@ MODULE CONTOUR_GF
      module procedure &
           keldysh_contour_gf_equality,&
           keldysh_contour_gf_equality_,&
+          kbm_contour_gf_equality,&
           kbm_contour_gf_equality_
   end interface assignment(=)
   public :: assignment(=)
@@ -230,34 +227,6 @@ contains
   !******************************************************************
   !******************************************************************
 
-  !This a rough implementation: just a shortcut:
-  subroutine mpi_reduce_keldysh_contour_gf(tmpG,G)
-    type(keldysh_contour_gf) :: tmpG
-    type(keldysh_contour_gf) :: G
-    if( .not.g%status )call error("ERROR contour_gf/mpi_reduce_keldysh_contour_gf: object function not allocated.")
-    if( (G%N /= tmpG%N) )call error("ERROR contour_gf/mpi_reduce_keldysh_contour_gf: wrong dimensions.")
-    call MPI_REDUCE(tmpG%less(0:,0:),G%less(0:,0:),size(tmpG%less(0:,0:)),&
-         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpG%gtr(0:,0:),G%gtr(0:,0:),size(tmpG%gtr(0:,0:)),&
-         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
-  end subroutine mpi_reduce_keldysh_contour_gf
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-  subroutine mpi_bcast_keldysh_contour_gf(G)
-    type(keldysh_contour_gf),intent(inout) :: G
-    if( .not.g%status )call error("ERROR contour_gf/mpi_bcast_keldysh_contour_gf: object function not allocated.")    
-    call MPI_BCAST(G%less(0:,0:),size(G%less(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BCAST(G%gtr(0:,0:),size(G%gtr(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
-  end subroutine mpi_bcast_keldysh_contour_gf
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
 
 
 
@@ -365,7 +334,7 @@ contains
     character(len=*)      :: file
     real(8),dimension(0:) :: t,tau
     integer               :: i,j,N,L,M
-    real(8),allocatable   :: ftau(:),upmGtau(:),Gtau(:),Gmats(:,:)
+    !real(8),allocatable   :: ftau(:),upmGtau(:),Gtau(:),Gmats(:,:)
     N=G%N+1 ; L=G%L+1
     if( (size(G%less)/=N**2) .OR. (size(G%gtr)/=N**2) )&
          call error("ERROR contour_gf/plot_kbm_contour_gf: wrong dimensions 1")
@@ -377,23 +346,24 @@ contains
     call splot(trim(file)//"_gtr_t_t",t(0:),t(0:),G%gtr(0:,0:))
     call splot(trim(file)//"_lmix_t_tau",t(0:),tau(0:),G%lmix(0:,0:))
     call splot(trim(file)//"_gmix_tau_t",tau(0:),t(0:),G%gmix(0:,0:))
-    L=G%L
-    M=min(2*L,200)
-    allocate(ftau(0:M),upmGtau(0:L),Gtau(-M:M),Gmats(0:M,0:M))
-    ftau(0:) = linspace(minval(tau(0:)),maxval(tau(0:)),M+1)
-    forall(i=0:L)upmGtau(i) = G%mats(i,0)
-    call cubic_spline(upmGtau(0:L),tau(0:L),Gtau(0:M),ftau(0:M))
-    forall(i=1:M)Gtau(-i)=-Gtau(M-i)
-    forall(i=0:M,j=0:M)Gmats(i,j)=Gtau(i-j)
-    call splot(trim(file)//"_mats_tau_tau",ftau(0:),ftau(0:),Gmats(0:,0:))
-    deallocate(ftau,upmGtau,Gtau,Gmats)
+    call splot(trim(file)//"_mats_tau_tau",tau(0:),tau(0:),G%mats(0:,0:))
+    ! L=G%L
+    ! M=min(2*L,200)
+    ! allocate(ftau(0:M),upmGtau(0:L),Gtau(-M:M),Gmats(0:M,0:M))
+    ! ftau(0:) = linspace(minval(tau(0:)),maxval(tau(0:)),M+1)
+    ! forall(i=0:L)upmGtau(i) = G%mats(i,0)
+    ! call cubic_spline(upmGtau(0:L),tau(0:L),Gtau(0:M),ftau(0:M))
+    ! forall(i=1:M)Gtau(-i)=-Gtau(M-i)
+    ! forall(i=0:M,j=0:M)Gmats(i,j)=Gtau(i-j)
+    ! call splot(trim(file)//"_mats_tau_tau",ftau(0:),ftau(0:),Gmats(0:,0:))
+    ! deallocate(ftau,upmGtau,Gtau,Gmats)
   end subroutine plot_kbm_contour_gf
 
   !******************************************************************
   !******************************************************************
   !******************************************************************
 
-  subroutine kbm_contour_gf_equality_(G1,C)
+  subroutine kbm_contour_gf_equality(G1,C)
     type(kbm_contour_gf),intent(inout) :: G1
     complex(8),intent(in) :: C
     G1%less(0:,0:) = C
@@ -401,6 +371,17 @@ contains
     G1%lmix(0:,0:) = C
     G1%gmix(0:,0:) = C
     G1%mats(0:,0:) = C
+  end subroutine kbm_contour_gf_equality
+
+  subroutine kbm_contour_gf_equality_(G1,G2)
+    type(kbm_contour_gf),intent(inout) :: G1
+    type(kbm_contour_gf),intent(in)    :: G2
+    if(G1%N/=G2%N .OR. G1%L/=G2%L)call error("ERROR contour_gf/kbm_contour_equality_: wrong dimensions")
+    G1%less(0:,0:)=G2%less(0:,0:)
+    G1%gtr(0:,0:)=G2%gtr(0:,0:)
+    G1%lmix(0:,0:)=G2%lmix(0:,0:)
+    G1%gmix(0:,0:)=G2%gmix(0:,0:)
+    G1%mats(0:,0:)=G2%mats(0:,0:)
   end subroutine kbm_contour_gf_equality_
 
   !******************************************************************
@@ -467,43 +448,6 @@ contains
   !******************************************************************
   !******************************************************************
 
-  !This a rough implementation: just a shortcut:
-  subroutine mpi_reduce_kbm_contour_gf(tmpG,G)
-    type(kbm_contour_gf) :: tmpG
-    type(kbm_contour_gf) :: G
-    if( .not.g%status )call error("ERROR contour_gf/mpi_reduce_kbm_contour_gf: object function not allocated.")
-    if( (G%N /= tmpG%N) .OR. (G%L /=tmpG%L) )call error("ERROR contour_gf/mpi_reduce_kbm_contour_gf: wrong dimensions.")
-    call MPI_REDUCE(tmpG%less(0:,0:),G%less(0:,0:),size(tmpG%less(0:,0:)),&
-         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpG%gtr(0:,0:),G%gtr(0:,0:),size(tmpG%gtr(0:,0:)),&
-         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpG%lmix(0:,0:),G%lmix(0:,0:),size(tmpG%lmix(0:,0:)),&
-         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpG%gmix(0:,0:),G%gmix(0:,0:),size(tmpG%gmix(0:,0:)),&
-         MPI_DOUBLE_COMPLEX,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_REDUCE(tmpG%mats(0:,0:),G%mats(0:,0:),size(tmpG%mats(0:,0:)),&
-         MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
-  end subroutine mpi_reduce_kbm_contour_gf
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-  subroutine mpi_bcast_kbm_contour_gf(G)
-    type(kbm_contour_gf),intent(inout) :: G
-    if( .not.g%status )call error("ERROR contour_gf/mpi_bcast_kbm_contour_gf: object function not allocated.")    
-    call MPI_BCAST(G%less(0:,0:),size(G%less(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BCAST(G%gtr(0:,0:) ,size(G%gtr(0:,0:)) ,MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BCAST(G%lmix(0:,0:),size(G%lmix(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BCAST(G%gmix(0:,0:),size(G%gmix(0:,0:)),MPI_DOUBLE_COMPLEX,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BCAST(G%mats(0:,0:),size(G%mats(0:,0:)),MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,MPIerr)
-    call MPI_BARRIER(MPI_COMM_WORLD,MPIerr)
-  end subroutine mpi_bcast_kbm_contour_gf
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
 
 
 END MODULE CONTOUR_GF

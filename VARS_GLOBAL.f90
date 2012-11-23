@@ -513,7 +513,7 @@ contains
     deallocate(tmpt,tmpGt)
   end subroutine fftgf_tau2iw_upm
 
-  
+
   subroutine fftgf_beta_sym(gt,L)
     real(8),dimension(-L:L) :: gt
     integer                 :: i,L

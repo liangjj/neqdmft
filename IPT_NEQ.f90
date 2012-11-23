@@ -10,6 +10,8 @@ module IPT_NEQ
   public  :: neq_init_run
   public  :: neq_solve_ipt
 
+
+
 contains
 
   !+-------------------------------------------------------------------+
@@ -41,31 +43,22 @@ contains
     real(8),dimension(0:Ltau) :: eqG0tau,eqStau
     call msg("Get Sigma(t,t')")
 
-    ! !alternativa 1: fit + IPT + fit back/FFT: non sono sicuro che questo funzioni in UPM (dovrebbe!)
-    ! call cubic_spline(eq_G0tau(0:),tau(0:),eqG0tau(0:),ftau(0:))
-    ! forall(i=1:Ltau)eqG0tau(-i)=-eqG0tau(Ltau-i)
-    ! forall(i=0:Ltau)eqStau(i)=(U**2)*(eqG0tau(i)**2)*eqG0tau(Ltau-i)
-    ! forall(i=1:Ltau)eqStau(-i)=-eqStau(Ltau-i)
-    ! call fftgf_tau2iw(eqStau,eq_Siw,beta)
-    ! call fftgf_iw2tau_upm(wm,eq_Siw,tau(0:),eq_Stau(0:),beta)
-    ! forall(i=1:Ltau)eq_Stau(-i)=-eq_Stau(Ltau-i)
-
-    !alternativa 2: work directly in UPM
-    forall(i=0:Ltau)eq_Stau(i)=U**2*(eq_G0tau(i))**2*eq_G0tau(Ltau-i) 
-    call fftgf_tau2iw_upm(wm,eq_Siw,tau(0:),eq_Stau(0:),beta)
+    forall(i=0:Ltau)eq_Stau(i)=(U**2)*(eq_G0tau(i)**2)*eq_G0tau(Ltau-i)
     forall(i=1:Ltau)eq_Stau(-i)=-eq_Stau(Ltau-i)
+    call fftgf_tau2iw(eq_Stau(0:),eq_Siw,beta)                   !Get S(iw) from S(tau)
 
-    forall(i=0:Ltau,j=0:Ltau)Sigma%mats(i,j)=eq_Stau(i-j)        !Get Sigma^M(tau,tau`)
+    forall(i=0:Ltau,j=0:Ltau)Sigma%mats(i,j)=eq_Stau(i-j)        !get Sigma^M(tau,tau`)
 
     forall(i=0:nstep,j=0:nstep)
-       Sigma%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)    !Get Sigma^<(t,t`)
-       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)    !Get Sigma^>(t,t`)
+       Sigma%less(i,j) = (U**2)*(G0%less(i,j)**2)*G0%gtr(j,i)    !get Sigma^<(t,t`)
+       Sigma%gtr (i,j) = (U**2)*(G0%gtr(i,j)**2)*G0%less(j,i)    !get Sigma^>(t,t`)
     end forall
 
-    forall(i=0:nstep,itau=0:Ltau)Sigma%lmix(i,itau)=&
-         (U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i)             !Get Sigma^\lmix(t,tau`)
-    forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))  !Get Sigma^\gmix(tau,t`)
-
+    forall(i=0:nstep,itau=0:Ltau)&
+         Sigma%lmix(i,itau)=(U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i) !get Sigma^\lmix(t,tau`)
+    !    Sigma%gmix(itau,i)=(U**2)*(G0%gmix(itau,i)**2)*G0%lmix(i,itau) !get Sigma^\gmix(t,tau`)
+    ! end forall
+    forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))    !get Sigma^\gmix(tau,t`)
 
     !Save data:
     if(mpiID==0)then
@@ -77,7 +70,7 @@ contains
        call splot("Sigma_lmix_tau0.ipt",t(0:),Sigma%lmix(0:,0))
        call splot("Sigma_lmix_t0_tau.ipt",tau(0:),Sigma%lmix(0,0:))
        forall(i=0:nstep)nt(i)=-xi*Sigma%less(i,i)
-       call splot("nsVStime.ipt",t(0:nstep),nt(0:nstep),append=TT)
+       call splot("nsVStime.ipt",t(0:),nt(0:),append=TT)
     endif
 
   end subroutine neq_solve_ipt
@@ -91,55 +84,6 @@ contains
 
 
 
-  ! !+-------------------------------------------------------------------+
-  ! !PURPOSE  : evaluate the impurity neq Green's functions
-  ! !+-------------------------------------------------------------------+
-  ! subroutine get_impuritygf()
-  !   integer                               :: i,j
-  !   real(8)                               :: A,w
-  !   complex(8),dimension(0:nstep,0:nstep) :: Uno,GammaRet,Gamma0Ret
-  !   complex(8),dimension(0:nstep,0:nstep) :: dG0ret,dGret,dSret
-  !   if(update_wfftw)then
-  !      call get_equilibrium_impuritygf !not tested!
-  !   else
-  !      dSret=zero ; dG0ret=zero ; dGret=zero
-  !      GammaRet=zero ; Gamma0Ret=zero
-  !      !1 - get the Ret components of G_0 && \Sigma:
-  !      forall(i=0:nstep,j=0:nstep)
-  !         dG0ret(i,j)=heaviside(t(i)-t(j))*(G0gtr(i,j) - G0less(i,j))
-  !         dSret(i,j) =heaviside(t(i)-t(j))*(Sgtr(i,j) - Sless(i,j))
-  !      end forall
-  !      !2 - get the  operator: \Gamma_0^R = \Id - \Sigma^R\circ G_0^R && invert it
-  !      Uno=zero  ; forall(i=0:nstep)Uno(i,i)=One/dt
-  !      Gamma0Ret(0:nstep,0:nstep) = Uno-matmul(dSret(0:nstep,0:nstep),dG0ret(0:nstep,0:nstep))*dt
-  !      Gamma0Ret(0:nstep,0:nstep)=Gamma0Ret(0:nstep,0:nstep)*dt**2
-  !      call mat_inversion_GJ(Gamma0Ret(0:nstep,0:nstep))
-  !      !3 - get G_imp^R, G_imp^{>,<} using Dyson equations:
-  !      dGret(0:nstep,0:nstep)    = matmul(dG0ret(0:nstep,0:nstep),Gamma0Ret(0:nstep,0:nstep))*dt 
-  !      GammaRet(0:nstep,0:nstep) = Uno + matmul(dGret(0:nstep,0:nstep),dSret(0:nstep,0:nstep))*dt
-
-  !      impGless(0:nstep,0:nstep) = matmul(GammaRet(0:nstep,0:nstep),&
-  !           matmul(G0less(0:nstep,0:nstep),conjg(transpose(GammaRet(0:nstep,0:nstep)))))*dt**2 +&
-  !           matmul(dGret(0:nstep,0:nstep),matmul(Sless(0:nstep,0:nstep),conjg(transpose(dGret(0:nstep,0:nstep)))))*dt**2
-
-  !      impGgtr(0:nstep,0:nstep)  = matmul(GammaRet(0:nstep,0:nstep),&
-  !           matmul(G0gtr(0:nstep,0:nstep),conjg(transpose(GammaRet(0:nstep,0:nstep)))))*dt**2  +&
-  !           matmul(dGret(0:nstep,0:nstep),matmul(Sgtr(0:nstep,0:nstep),conjg(transpose(dGret(0:nstep,0:nstep)))))*dt**2
-  !   endif
-  !   !Save data:
-  !   if(mpiID==0)then
-  !      call splot("impGless.data",impG%less(0:nstep,0:nstep))
-  !      call splot("impGgtr.data",impG%gtr(0:nstep,0:nstep))
-  !   endif
-  ! end subroutine get_impuritygf
-
-
-
-
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
 
 
 end module IPT_NEQ
