@@ -7,13 +7,14 @@
 MODULE VARS_GLOBAL
   !Local:
   USE CONTOUR_GF
- !SciFor library
-  USE PARSE_CMD
+  !SciFor library
   USE COMMON_VARS
+  USE PARSE_CMD
   USE GREENFUNX
   USE TIMER
   USE VECTORS
   USE SQUARE_LATTICE
+  USE INTEGRATE
   USE IOTOOLS
   USE FFTGF
   USE SPLINE
@@ -26,13 +27,22 @@ MODULE VARS_GLOBAL
 
   !Gloabl  variables
   !=========================================================
-  integer           :: L             !a big number
-  integer           :: Ltau          !Imaginary time slices
-  integer           :: Nstep         !Number of Time steps
-  integer           :: Lk            !total lattice  dimension
-  integer           :: Lkreduced     !reduced lattice dimension
-  integer           :: Nx,Ny         !lattice grid dimensions
+  integer                                :: nstep         !Number of Time steps
+  integer                                :: L             !a big number
+  integer                                :: Ltau          !Imaginary time slices
+  integer                                :: Lk            !total lattice  dimension
+  integer                                :: Lkreduced     !reduced lattice dimension
+  integer                                :: Nx,Ny         !lattice grid dimensions
+  integer                                :: iloop,nloop    !dmft loop variables
   integer           :: eqnloop       !Number of dmft loop for the equilibrium solution
+  real(8)                                :: ts             !n.n./n.n.n. hopping amplitude
+  real(8)                                :: u              !local,non-local interaction 
+  real(8)                                :: Vbath          !Hopping amplitude to the BATH
+  real(8)                                :: Wbath          !Width of the BATH DOS
+  real(8)                                :: dt,dtau        !time step
+  real(8)                                :: fmesh          !freq. step
+  real(8)                                :: beta           !inverse temperature
+  real(8)                                :: eps            !broadening
   real(8)           :: beta0,xmu0,U0 !quench variables
   logical           :: iquench       !initial quench
   logical           :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
@@ -40,8 +50,6 @@ MODULE VARS_GLOBAL
   character(len=6)  :: method        !choose the perturbation theory method: IPT,SPT
   character(len=16) :: bath_type     !choose the shape of the BATH
   character(len=16) :: field_profile !choose the profile of the electric field
-  real(8)           :: Vbath
-  real(8)           :: Wbath         !Width of the BATH DOS
   real(8)           :: eps_error     !convergence error threshold
   integer           :: Nsuccess      !number of convergence success
   real(8)           :: weight        !mixing weight parameter
@@ -55,7 +63,7 @@ MODULE VARS_GLOBAL
 
   !FILES and VARS TO RESTART
   !=========================================================
-  character(len=32)              :: irdFILE
+  character(len=32)                      :: irdFILE
 
 
   !FREQS & TIME ARRAYS:
@@ -72,50 +80,46 @@ MODULE VARS_GLOBAL
 
   !ELECTRIC FIELD VARIABLES (& NML):
   !=========================================================  
-  type(vect2D)    :: Ak,Ek         !Electric field vector potential and vector
-  real(8)         :: Efield        !Electric field strength
-  real(8)         :: Ex,Ey         !Electric field vectors as input
-  real(8)         :: t0,t1         !turn on/off time, t0 also center of the pulse
-  real(8)         :: w0,tau0       !parameters for pulsed light
-  real(8)         :: omega0        !parameter for the Oscilatting field
-  real(8)         :: E1            !Electric field strenght for the AC+DC case (tune to resonate)
+  type(vect2D)                           :: Ak,Ek         !Electric field vector potential and vector
+  real(8)                                :: Efield        !Electric field strength
+  real(8)                                :: Ex,Ey         !Electric field vectors as input
+  real(8)                                :: t0,t1         !turn on/off time, t0 also center of the pulse
+  real(8)                                :: w0,tau0       !parameters for pulsed light
+  real(8)                                :: omega0        !parameter for the Oscilatting field
+  real(8)                                :: E1            !Electric field strenght for the AC+DC case (tune to resonate)
 
   !EQUILIUBRIUM (and Wigner transformed) GREEN'S FUNCTION 
   !=========================================================
-  !Frequency domain:
-  type(keldysh_equilibrium_gf)        :: gf0
-  type(keldysh_equilibrium_gf)        :: gf
-  type(keldysh_equilibrium_gf)        :: sf
-  real(8),dimension(:),allocatable    :: exa
+  type(keldysh_equilibrium_gf)           :: gf0
+  type(keldysh_equilibrium_gf)           :: gf
+  type(keldysh_equilibrium_gf)           :: sf
+  real(8),dimension(:),allocatable       :: exa
 
 
   !MATSUBARA GREEN'S FUNCTION and n(k)
   !=========================================================
-  complex(8),allocatable,dimension(:)  :: eq_G0iw
-  real(8),allocatable,dimension(:)     :: eq_G0tau
-  complex(8),allocatable,dimension(:)  :: eq_Siw
-  real(8),allocatable,dimension(:)     :: eq_Stau
-  complex(8),allocatable,dimension(:)  :: eq_Giw
-  real(8),allocatable,dimension(:)     :: eq_Gtau
-  real(8),allocatable,dimension(:)     :: eq_nk
+  complex(8),allocatable,dimension(:)    :: eq_G0iw
+  real(8),allocatable,dimension(:)       :: eq_G0tau
+  complex(8),allocatable,dimension(:)    :: eq_Siw
+  real(8),allocatable,dimension(:)       :: eq_Stau
+  complex(8),allocatable,dimension(:)    :: eq_Giw
+  real(8),allocatable,dimension(:)       :: eq_Gtau
+  real(8),allocatable,dimension(:)       :: eq_nk
   !
 
 
   !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
   !WEISS-FIELDS
-  type(kbm_contour_gf) :: G0
+  type(kbm_contour_gf)                   :: G0
   !SELF-ENERGY
-  type(kbm_contour_gf) :: Sigma
+  type(kbm_contour_gf)                   :: Sigma
   !LOCAL GF
-  type(kbm_contour_gf) :: locG
+  type(kbm_contour_gf)                   :: locG
   !Bath SELF-ENERGY
-  type(kbm_contour_gf) :: S0
-  ! complex(8),allocatable,dimension(:)   :: S0gtr,S0less
-  ! complex(8),allocatable,dimension(:,:) :: S0gmix,S0lmix
+  type(kbm_contour_gf)                   :: S0
   !MOMENTUM-DISTRIBUTION
-  real(8),allocatable,dimension(:,:)    :: nk
-
+  real(8),allocatable,dimension(:,:)     :: nk
 
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
@@ -127,8 +131,7 @@ MODULE VARS_GLOBAL
 
   !DATA DIRECTORY:
   !=========================================================
-  character(len=32) :: data_dir,plot_dir
-
+  character(len=32)                      :: data_dir,plot_dir
 
 
   !NAMELISTS:
