@@ -56,8 +56,6 @@ contains
 
     forall(i=0:nstep,itau=0:Ltau)&
          Sigma%lmix(i,itau)=(U**2)*(G0%lmix(i,itau)**2)*G0%gmix(itau,i) !get Sigma^\lmix(t,tau`)
-    !    Sigma%gmix(itau,i)=(U**2)*(G0%gmix(itau,i)**2)*G0%lmix(i,itau) !get Sigma^\gmix(t,tau`)
-    ! end forall
     forall(j=0:Ltau)Sigma%gmix(j,:)=conjg(Sigma%lmix(:,Ltau-j))    !get Sigma^\gmix(tau,t`)
 
     !Save data:

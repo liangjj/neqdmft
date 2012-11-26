@@ -29,7 +29,7 @@ MODULE VARS_GLOBAL
   !=========================================================
   integer                                :: nstep         !Number of Time steps
   integer                                :: L             !a big number
-  integer                                :: Ltau          !Imaginary time slices
+  integer                                :: Ltau,Ntau     !Imaginary time slices
   integer                                :: Lk            !total lattice  dimension
   integer                                :: Lkreduced     !reduced lattice dimension
   integer                                :: Nx,Ny         !lattice grid dimensions
@@ -53,7 +53,7 @@ MODULE VARS_GLOBAL
   real(8)                                :: weight        !mixing weight parameter
   real(8)                                :: wmin,wmax     !min/max frequency
   real(8)                                :: tmin,tmax     !min/max time
-  logical                                :: plot3D,fchi
+  logical                                :: plot3D,fchi,upmflag
   logical                                :: solve_eq
   integer                                :: P,Q            !Uniform Power Mesh parameters
   !
@@ -143,6 +143,7 @@ MODULE VARS_GLOBAL
        ts           ,& 
        eps          ,& 
        L            ,& 
+       Ltau         ,& 
        Lkreduced    ,& 
                                 !DMFT
        nloop        ,& 
@@ -176,6 +177,7 @@ MODULE VARS_GLOBAL
        solve_wfftw  ,& 
        plot3D       ,& 
        fchi         ,& 
+       upmflag      ,&
                                 !FILES&DIR:
        irdFILE      ,& 
        data_dir     ,& 
@@ -244,6 +246,7 @@ contains
          ' plot_dir=[PLOT]          -- Name of the directory containing plot files',&
          ' fchi=[F]                 -- Flag for the calculation of the optical response',&
          ' L=[1024]                 -- A large number for whatever reason',&
+         ' Ltau=[200]               -- A large number for whatever reason',&
          ' P=[5]                    -- Uniform Power mesh power-mesh parameter',&
          ' Q=[5]                    -- Uniform Power mesh uniform-mesh parameter',&
          ' eps=[0.05d0]             -- Broadening on the real-axis',&
@@ -251,7 +254,6 @@ contains
          ' Ny=[50]                  -- Number of k-points along y-axis ',&
          ' solve_wfftw =[F]         -- ',&
          ' plot3D=[F]       -- ',&
-         ' L=[1024]         -- ',&
          ' Lkreduced=[200]  -- ',&
          ' eps=[0.05d0]         -- ',&
          ' irdFILE=[restartSigma]-- ',&
@@ -268,6 +270,7 @@ contains
     ts           = 1.d0
     eps          = 0.01d0
     L            = 2048  
+    Ltau         = 200
     Lkreduced    = 300
     !DMFT
     nloop        = 30
@@ -301,6 +304,7 @@ contains
     solve_wfftw  = .false.
     plot3D       = .false.
     fchi         = .false.
+    upmflag      = .false.
     !FILES&DIR:
     irdFILE      = 'restartSigma'
     data_dir     = 'DATAneq'
@@ -328,6 +332,7 @@ contains
     call parse_cmd_variable(ts           ,"TS")
     call parse_cmd_variable(eps          ,"EPS")
     call parse_cmd_variable(L            ,"L")
+    call parse_cmd_variable(Ltau         ,"LTAU")
     call parse_cmd_variable(Lkreduced    ,"LKREDUCED")
     !DMFT
     call parse_cmd_variable(nloop        ,"NLOOP")
@@ -361,12 +366,13 @@ contains
     call parse_cmd_variable(solve_wfftw  ,"SOLVE_WFFTW")
     call parse_cmd_variable(plot3D       ,"PLOT3D")
     call parse_cmd_variable(fchi         ,"FCHI")
+    call parse_cmd_variable(upmflag      ,"UPMFLAG")
     !FILES&DIR:
     call parse_cmd_variable(irdFILE      ,"IRDFILE")
     call parse_cmd_variable(data_dir     ,"DATA_DIR")
     call parse_cmd_variable(plot_dir     ,"PLOT_DIR")
-
-    Ltau=2*P*Q
+    
+    Ntau=2*P*Q
     if(int_method=="rect".AND.P/=1)call error("Integration method: +rect requires P=1: uniform mesh")
 
     if(mpiID==0)then
@@ -413,8 +419,6 @@ contains
     call allocate_kbm_contour_gf(locG,Nstep,Ltau)
     !Bath self-energies:
     call allocate_kbm_contour_gf(S0,Nstep,Ltau)
-    ! allocate(S0gtr(-nstep:nstep),S0less(-nstep:nstep))
-    ! allocate(S0gmix(0:Ltau,0:nstep),S0lmix(0:nstep,0:Ltau))
     !Momentum-distribution:
     allocate(nk(0:nstep,Lk),eq_nk(Lk))
     !Equilibrium/Wigner rotated Green's function

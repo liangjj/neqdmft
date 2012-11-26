@@ -11,10 +11,8 @@
   allocate(tau(-Ltau:Ltau),ftau(-Ltau:Ltau))
   tau(0:)  = linspace(0.d0,beta,Ltau+1,mesh=dtau)
   ftau(0:) = upminterval(0.d0,beta,beta/2.d0,P,Q,type=0)
-  forall(i=1:Ltau)
-     tau(-i)  =-tau(i)
-     ftau(-i) =-ftau(i)
-  end forall
+  forall(i=1:Ltau)tau(-i)  =-tau(i)
+  forall(i=1:Ntau)ftau(-i) =-ftau(i)
 
   if(mpiID==0)then
      call msg("dt   ="//txtfy(dt))

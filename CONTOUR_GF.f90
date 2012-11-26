@@ -376,7 +376,8 @@ contains
   subroutine kbm_contour_gf_equality_(G1,G2)
     type(kbm_contour_gf),intent(inout) :: G1
     type(kbm_contour_gf),intent(in)    :: G2
-    if(G1%N/=G2%N .OR. G1%L/=G2%L)call error("ERROR contour_gf/kbm_contour_equality_: wrong dimensions")
+    if(G1%N/=G2%N .OR. G1%L/=G2%L)&
+         call error("ERROR contour_gf/kbm_contour_equality_: wrong dimensions")
     G1%less(0:,0:)=G2%less(0:,0:)
     G1%gtr(0:,0:)=G2%gtr(0:,0:)
     G1%lmix(0:,0:)=G2%lmix(0:,0:)

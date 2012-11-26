@@ -19,15 +19,14 @@ contains
   subroutine neq_update_weiss_field
     integer                               :: i,j,k,itau,jtau
     real(8),dimension(0:nstep)            :: nt             !occupation(time)
-    real(8),dimension(-Ltau:Ltau)         :: tmpG0tau
     complex(8),dimension(:,:),allocatable :: mat_calG,mat_Sigma,mat_locG
     type(kbm_contour_gf),save             :: G0_old
     integer                               :: t1min,t1max,t2min,t2max,t3min,t3max
     complex(8),allocatable,dimension(:)   :: dtloc
 
 
-    ! if(G0_old%status.EQV..false.)call allocate_kbm_contour_gf(G0_old,Nstep,Ltau)
-    ! G0_old=G0    
+    if(G0_old%status.EQV..false.)call allocate_kbm_contour_gf(G0_old,Nstep,Ltau)
+    G0_old=G0    
 
 
     call msg("Update WF: Dyson (no mixing)")
@@ -74,11 +73,11 @@ contains
        forall(i=0:Ltau,j=0:Ltau)G0%mats(i,j)=eq_G0tau(i-j)
     endif
 
-    ! G0%less(0:,0:) = weight*G0%less(0:,0:) + (1.d0-weight)*G0_old%less(0:,0:)
-    ! G0%gtr(0:,0:)  = weight*G0%gtr(0:,0:)  + (1.d0-weight)*G0_old%gtr(0:,0:)
-    ! G0%lmix(0:,0:) = weight*G0%lmix(0:,0:) + (1.d0-weight)*G0_old%lmix(0:,0:)
-    ! G0%gmix(0:,0:) = weight*G0%gmix(0:,0:) + (1.d0-weight)*G0_old%gmix(0:,0:)
-    ! G0%mats(0:,0:) = weight*G0%mats(0:,0:) + (1.d0-weight)*G0_old%mats(0:,0:)
+    G0%less(0:,0:) = weight*G0%less(0:,0:) + (1.d0-weight)*G0_old%less(0:,0:)
+    G0%gtr(0:,0:)  = weight*G0%gtr(0:,0:)  + (1.d0-weight)*G0_old%gtr(0:,0:)
+    G0%lmix(0:,0:) = weight*G0%lmix(0:,0:) + (1.d0-weight)*G0_old%lmix(0:,0:)
+    G0%gmix(0:,0:) = weight*G0%gmix(0:,0:) + (1.d0-weight)*G0_old%gmix(0:,0:)
+    G0%mats(0:,0:) = weight*G0%mats(0:,0:) + (1.d0-weight)*G0_old%mats(0:,0:)
 
     !Save data:
     if(mpiID==0)then
@@ -136,19 +135,15 @@ contains
        matG(N+1+i,    j)   = G%gtr(i,j)
        matG(N+1+i,N+1+j)   = (step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
     end forall
-
     forall(i=0:N,j=0:L)
        matG(i    ,2*N+2+j) =  G%lmix(i,j)
        matG(N+1+i,2*N+2+j) =  G%lmix(i,j)
     end forall
-
     forall(i=0:L,j=0:N)
        matG(2*N+2+i,    j) =  conjg(G%lmix(j,L-i))  !=G%gmix
        matG(2*N+2+i,N+1+j) =  conjg(G%lmix(j,L-i))  !=G%gmix
     end forall
-
     forall(i=0:L,j=0:L)matG(2*N+2+i,2*N+2+j) = xi*G%mats(i,j)
-
   end function build_kbm_matrix_gf
 
   !********************************************************************
@@ -159,8 +154,8 @@ contains
     integer              :: i,j,N,L
     complex(8)           :: matG(0:2*N+L+2,0:2*N+L+2)
     type(kbm_contour_gf) :: G
-    complex(8)           :: Glmix(0:N,0:L)
-    real(8)              :: eqGtau(-L:L),upmGtau(0:L)
+    ! complex(8)           :: Glmix(0:N,0:L)
+    ! real(8)              :: eqGtau(-L:L),upmGtau(0:L)
     if(.not.G%status)call error("Error 1")
     if(G%N/=N)call error("Error 2: N")
     if(G%L/=L)call error("Error 3: L")
@@ -169,13 +164,12 @@ contains
        G%gtr(i,j)  =  matG(N+1+i,j) !matG21
     end forall
     G%lmix(0:N,0:L) =  matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
+    forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,L-i))
+    G%mats(0:L,0:L) = aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))
     ! Glmix(0:N,0:L) =  matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
     ! do i=0,N
     !    call cubic_spline(Glmix(i,0:),ftau(0:),G%lmix(i,0:),tau(0:))
     ! enddo
-    forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,L-i))
-
-    !G%mats(0:L,0:L) = aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))
     ! !This is an almost useless step: the ^M components are obtained
     ! !from the eq. Matsubara solution of the problem. Why bother? In any case:
     ! !Get the G(tau) from the first column of G%mats (suppose it's correct)
@@ -184,7 +178,6 @@ contains
     ! forall(i=1:L)upmGtau(-i)=-upmGtau(L-i)                     !get the (-beta:0) part
     ! forall(i=0:L,j=0:L)G%mats(i,j)=upmGtau(i-j)                !build G^M(tau,tau`) on linear Mesh
     !##################################################################
-
   end subroutine scatter_kbm_matrix_gf
 
   !******************************************************************
