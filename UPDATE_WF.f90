@@ -61,7 +61,7 @@ contains
        forall(i=t1min:t3max,j=t1min:t3max)mat_locG(i,j)=dtloc(i)*mat_locG(i,j)*dtloc(j)
        call matrix_inverse(mat_locG(0:,0:))
 
-       !====build calG_0^-1 = G_loc^-1 + Sigma==================================
+       !====build calG_0^-1 = G_loc^-1 + Sigma =================================
        mat_calG(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:)
 
        !====inversion of the KBM Contour calG_0 ================================
