@@ -223,8 +223,7 @@ contains
        call splot(trim(file)//"_gtr_t_t",t(0:),t(0:),KSigma%gtr(0:,0:))
        call splot(trim(file)//"_lmix_t_tau",t(0:),ftau(0:),KSigma%lmix(0:,0:))
        call splot(trim(file)//"_gmix_tau_t",ftau(0:),t(0:),KSigma%gmix(0:,0:))
-       call splot(trim(file)//"_mats_tau_tau",ftau(0:),ftau(0:),KSigma%mats(0:,0:))
-       call splot(trim(file)//"_lmix_t0_tau",ftau(0:),KSigma%lmix(0,0:))
+       call splot(trim(file)//"_mats_tau",ftau(0:),KSigma%lmix(0,0:))
        Ktau(0:)=ftau(0:)
     else
        Ktau(0:)=tau(0:)

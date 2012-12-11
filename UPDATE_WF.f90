@@ -73,12 +73,6 @@ contains
        forall(i=0:Ltau,j=0:Ltau)G0%mats(i,j)=eq_G0tau(i-j)
     endif
 
-    G0%less(0:,0:) = weight*G0%less(0:,0:) + (1.d0-weight)*G0_old%less(0:,0:)
-    G0%gtr(0:,0:)  = weight*G0%gtr(0:,0:)  + (1.d0-weight)*G0_old%gtr(0:,0:)
-    G0%lmix(0:,0:) = weight*G0%lmix(0:,0:) + (1.d0-weight)*G0_old%lmix(0:,0:)
-    G0%gmix(0:,0:) = weight*G0%gmix(0:,0:) + (1.d0-weight)*G0_old%gmix(0:,0:)
-    G0%mats(0:,0:) = weight*G0%mats(0:,0:) + (1.d0-weight)*G0_old%mats(0:,0:)
-
     !Save data:
     if(mpiID==0)then
        call write_kbm_contour_gf(G0,reg_filename(data_dir)//"/G0")
@@ -90,8 +84,15 @@ contains
        call splot("eq_G0_tau.ipt",tau,eq_G0tau,append=.true.)
        forall(i=0:nstep)nt(i)=-xi*G0%less(i,i)
        call splot("n0VStime.ipt",t(0:nstep),2.d0*nt(0:nstep),append=TT)
-
     end if
+
+
+    G0%less(0:,0:) = weight*G0%less(0:,0:) + (1.d0-weight)*G0_old%less(0:,0:)
+    G0%gtr(0:,0:)  = weight*G0%gtr(0:,0:)  + (1.d0-weight)*G0_old%gtr(0:,0:)
+    G0%lmix(0:,0:) = weight*G0%lmix(0:,0:) + (1.d0-weight)*G0_old%lmix(0:,0:)
+    G0%gmix(0:,0:) = weight*G0%gmix(0:,0:) + (1.d0-weight)*G0_old%gmix(0:,0:)
+    G0%mats(0:,0:) = weight*G0%mats(0:,0:) + (1.d0-weight)*G0_old%mats(0:,0:)
+
   end subroutine neq_update_weiss_field
 
   !********************************************************************

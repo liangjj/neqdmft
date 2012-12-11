@@ -371,8 +371,8 @@ contains
     call parse_cmd_variable(irdFILE      ,"IRDFILE")
     call parse_cmd_variable(data_dir     ,"DATA_DIR")
     call parse_cmd_variable(plot_dir     ,"PLOT_DIR")
-    
-    Ltau=2*P*Q
+
+    if(upmflag)Ltau=2*P*Q
 
     if(int_method=="rect".AND.P/=1)call error("Integration method: +rect requires P=1: uniform mesh")
 
