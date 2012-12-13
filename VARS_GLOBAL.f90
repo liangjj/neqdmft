@@ -29,7 +29,7 @@ MODULE VARS_GLOBAL
   !=========================================================
   integer                                :: nstep         !Number of Time steps
   integer                                :: L             !a big number
-  integer                                :: Ltau,Ntau     !Imaginary time slices
+  integer                                :: Ltau          !Imaginary time slices
   integer                                :: Lk            !total lattice  dimension
   integer                                :: Lkreduced     !reduced lattice dimension
   integer                                :: Nx,Ny         !lattice grid dimensions
@@ -93,16 +93,14 @@ MODULE VARS_GLOBAL
   real(8),dimension(:),allocatable       :: exa
 
 
-  !MATSUBARA GREEN'S FUNCTION and n(k)
+  !MATSUBARA GREEN'S FUNCTION
   !=========================================================
   complex(8),allocatable,dimension(:)    :: eq_G0iw
-  real(8),allocatable,dimension(:)       :: eq_G0tau
+  !real(8),allocatable,dimension(:)       :: eq_G0tau
   complex(8),allocatable,dimension(:)    :: eq_Siw
-  real(8),allocatable,dimension(:)       :: eq_Stau
+  !real(8),allocatable,dimension(:)       :: eq_Stau
   complex(8),allocatable,dimension(:)    :: eq_Giw
-  real(8),allocatable,dimension(:)       :: eq_Gtau
-  real(8),allocatable,dimension(:)       :: eq_nk
-  !
+  !real(8),allocatable,dimension(:)       :: eq_Gtau
 
 
   !NON-EQUILIBRIUM FUNCTIONS:
@@ -115,8 +113,12 @@ MODULE VARS_GLOBAL
   type(kbm_contour_gf)                   :: locG
   !Bath SELF-ENERGY
   type(kbm_contour_gf)                   :: S0
+
+
   !MOMENTUM-DISTRIBUTION
+  !=========================================================  
   real(8),allocatable,dimension(:,:)     :: nk
+  real(8),allocatable,dimension(:)       :: eq_nk
 
 
   !SUSCEPTIBILITY ARRAYS (in KADANOFF-BAYM)
@@ -427,8 +429,8 @@ contains
     call allocate_gf(gf,nstep)
     call allocate_gf(sf,nstep)
     !Matsubara Green's functions:
-    allocate(eq_Stau(-Ltau:Ltau),eq_G0tau(-Ltau:Ltau),eq_Gtau(-Ltau:Ltau))
     allocate(eq_Siw(L),eq_G0iw(L),eq_Giw(L))
+    !allocate(eq_Stau(-Ltau:Ltau),eq_G0tau(-Ltau:Ltau),eq_Gtau(-Ltau:Ltau))
     !Susceptibility/Optical response
     if(fchi)allocate(chi(2,2,0:nstep,0:nstep))
     !Other:
@@ -445,13 +447,60 @@ contains
   !******************************************************************
 
 
+  ! subroutine fftgf_iw2tau_upm(wm,gw,tm,gt,beta)
+  !   integer                             :: i,j,N,L
+  !   real(8),dimension(:)                :: wm
+  !   complex(8),dimension(size(wm))      :: gw
+  !   real(8),dimension(:)                :: tm
+  !   real(8),dimension(size(tm))         :: gt
+  !   real(8),dimension(2*size(wm))       :: tmpGw
+  !   complex(8)                          :: tail,fg
+  !   real(8)                             :: tau,beta,mues,At,foo
+  !   !
+  !   L=size(wm)
+  !   N=size(tm)
+  !   !
+  !   mues =-real(gw(L),8)*wm(L)**2
+  !   !
+  !   tmpGw=(0.d0,0.d0)
+  !   do i=1,L
+  !      tail=-cmplx(mues,wm(i),8)/(mues**2+wm(i)**2)
+  !      fg  = (0.d0,0.d0)
+  !      if(i<=N)fg  = gw(i)-tail
+  !      tmpGw(2*i)  = dimag(fg)
+  !      tmpGw(2*i-1)= dreal(fg)
+  !   enddo
+  !   do i=1,N-1
+  !      tau=tm(i)
+  !      if(mues > 0.d0)then          
+  !         if((mues*beta) > 30.d0)then
+  !            At = -exp(-mues*tau)
+  !         else
+  !            At = -exp(-mues*tau)/(1.d0 + exp(-beta*mues))
+  !         endif
+  !      else
+  !         if((mues*beta) < -30.d0)then
+  !            At = -exp(mues*(beta-tau))
+  !         else
+  !            At = -exp(-mues*tau)/(1.d0 + exp(-beta*mues))
+  !         endif
+  !      endif
+  !      foo=0.d0
+  !      do j=1,L
+  !         foo=foo + sin(wm(j)*tau)*tmpGw(2*j) + cos(wm(j)*tau)*tmpGw(2*j-1)
+  !      enddo
+  !      gt(i) = foo*2.d0/beta + At
+  !   enddo
+  !   gt(N)=-(gt(1)+1.d0)
+  ! end subroutine fftgf_iw2tau_upm
+
+
   subroutine fftgf_iw2tau_upm(wm,gw,tm,gt,beta)
     integer                             :: i,j,N,L
     real(8),dimension(:)                :: wm
-    complex(8),dimension(size(wm))      :: gw
+    complex(8),dimension(size(wm))      :: gw,tmpGw
     real(8),dimension(:)                :: tm
     real(8),dimension(size(tm))         :: gt
-    real(8),dimension(2*size(wm))       :: tmpGw
     complex(8)                          :: tail,fg
     real(8)                             :: tau,beta,mues,At,foo
     !
@@ -465,12 +514,11 @@ contains
        tail=-cmplx(mues,wm(i),8)/(mues**2+wm(i)**2)
        fg  = (0.d0,0.d0)
        if(i<=N)fg  = gw(i)-tail
-       tmpGw(2*i)  = dimag(fg)
-       tmpGw(2*i-1)= dreal(fg)
+       tmpGw(i)=fg
     enddo
     do i=1,N-1
        tau=tm(i)
-       if(mues > 0.d0)then          
+       if(mues >= 0.d0)then
           if((mues*beta) > 30.d0)then
              At = -exp(-mues*tau)
           else
@@ -483,15 +531,11 @@ contains
              At = -exp(-mues*tau)/(1.d0 + exp(-beta*mues))
           endif
        endif
-       foo=0.d0
-       do j=1,L
-          foo=foo + sin(wm(j)*tau)*tmpGw(2*j) + cos(wm(j)*tau)*tmpGw(2*j-1)
-       enddo
+       foo   = sum(cos(wm(:)*tau)*dreal(tmpGw(:))) + sum(sin(wm(:)*tau)*dimag(tmpGw(:)))
        gt(i) = foo*2.d0/beta + At
     enddo
     gt(N)=-(gt(1)+1.d0)
   end subroutine fftgf_iw2tau_upm
-
 
 
   subroutine fftgf_tau2iw_upm(wm,gw,tm,gt,beta)

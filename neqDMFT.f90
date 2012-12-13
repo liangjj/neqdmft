@@ -61,7 +61,7 @@ program neqDMFT
      call neq_get_localgf        !-|(in kadanoff-baym)
 
      call neq_update_weiss_field !-|SELF-CONSISTENCY (in funx_neq)
-     if(iloop==2)stop 
+     if(iloop==2)stop
      !
      call neq_solve_ipt          !-|IMPURITY SOLVER (in ipt_neq)
      !

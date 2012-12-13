@@ -8,11 +8,13 @@
   allocate(wm(L))
   wm   = pi/beta*real(2*arange(1,L)-1,8)
 
-  allocate(tau(-Ltau:Ltau),ftau(-Ltau:Ltau))
-  tau(0:)  = linspace(0.d0,beta,Ltau+1,mesh=dtau)
-  ftau(0:) = upminterval(0.d0,beta,beta/2.d0,P,Q,type=0)
+  allocate(tau(-Ltau:Ltau))
+  if(upmflag)then
+     tau(0:) = upminterval(0.d0,beta,beta/2.d0,P,Q,type=0)
+  else
+     tau(0:) = linspace(0.d0,beta,Ltau+1,mesh=dtau)
+  endif
   forall(i=1:Ltau)tau(-i)  =-tau(i)
-  forall(i=1:Ltau)ftau(-i) =-ftau(i)
 
   if(mpiID==0)then
      call msg("dt   ="//txtfy(dt))

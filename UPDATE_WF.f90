@@ -36,18 +36,23 @@ contains
        !==== Contour setup =====================================================
        !Contour indices
        t1min = 0         ; t1max=nstep          !size(nstep+1)
-       t2min = nstep+1   ; t2max=2*nstep+1      !size(nstep+1)
-       t3min = 2*nstep+2 ; t3max=2*nstep+Ltau+2 !size(Ltau+1)
+       t2min = nstep+1   ; t2max=nstep+1+nstep  !size(nstep+1)
+       t3min = 2*nstep+2 ; t3max=2*nstep+2+Ltau !size(Ltau+1)
        !Contour differential
        allocate(dtloc(t1min:t3max))
        dtloc(t1min:t1max)=  dt
        dtloc(t2min:t2max)= -dt
-       dtloc(t3min:t3max)= -xi*dtau
+       if(upmflag)then
+          dtloc(t3min)=tau(1)-tau(0)
+          do i=1,Ltau
+             dtloc(t3min+i)=tau(i)-tau(i-1)
+          enddo
+          dtloc(t3min:t3max)= -xi*dtloc(t3min:t3max)
+       else
+          dtloc(t3min:t3max)= -xi*dtau
+       endif
 
-       !====Update of the Matubara component first (stored in eq_G0tau)=========
-       eq_G0iw = one/(one/eq_Giw + eq_Siw)
-       call fftgf_iw2tau(eq_G0iw,eq_G0tau(0:),beta)
-       forall(i=1:Ltau)eq_G0tau(-i)=-eq_G0tau(Ltau-i)
+
 
        !====direct inversion of the KBM Contour gf (in G0 *kbm_contour_gf)======
        allocate(mat_locG(t1min:t3max,t1min:t3max))
@@ -70,18 +75,26 @@ contains
 
        !====scatter of the compontents into G0 *kbm_contour_gf)=================
        call scatter_kbm_matrix_gf(mat_calG(0:,0:),Nstep,Ltau,G0)
-       forall(i=0:Ltau,j=0:Ltau)G0%mats(i,j)=eq_G0tau(i-j)
+
+       !====Update of the Matubara component=========
+       eq_G0iw = one/(one/eq_Giw + eq_Siw)
+       ! if(upmflag)then
+       !    call fftgf_iw2tau_upm(wm,eq_G0iw,tau(0:),G0%mats(0:),beta)
+       ! else
+       !    call fftgf_iw2tau(eq_G0iw,G0%mats(0:),beta)
+       ! endif
+       ! forall(i=1:Ltau)G0%mats(-i)=-G0%mats(Ltau-i)
     endif
 
     !Save data:
     if(mpiID==0)then
        call write_kbm_contour_gf(G0,reg_filename(data_dir)//"/G0")
        if(plot3D)call plot_kbm_contour_gf(G0,t(0:),tau(0:),trim(plot_dir)//"/G0")
+       call splot("eq_G0_tau.ipt",tau,G0%mats,append=.true.)
+       call splot("eq_G0_iw.ipt",wm,eq_G0iw,append=.true.)
        call splot("G0_less_t0.ipt",t(0:),G0%less(0:,0))
        call splot("G0_lmix_tau0.ipt",t(0:),G0%lmix(0:,0))
        call splot("G0_lmix_t0_tau.ipt",tau(0:),G0%lmix(0,0:))
-       call splot("eq_G0_iw.ipt",wm,eq_G0iw,append=.true.)
-       call splot("eq_G0_tau.ipt",tau,eq_G0tau,append=.true.)
        forall(i=0:nstep)nt(i)=-xi*G0%less(i,i)
        call splot("n0VStime.ipt",t(0:nstep),2.d0*nt(0:nstep),append=TT)
     end if
@@ -91,13 +104,60 @@ contains
     G0%gtr(0:,0:)  = weight*G0%gtr(0:,0:)  + (1.d0-weight)*G0_old%gtr(0:,0:)
     G0%lmix(0:,0:) = weight*G0%lmix(0:,0:) + (1.d0-weight)*G0_old%lmix(0:,0:)
     G0%gmix(0:,0:) = weight*G0%gmix(0:,0:) + (1.d0-weight)*G0_old%gmix(0:,0:)
-    G0%mats(0:,0:) = weight*G0%mats(0:,0:) + (1.d0-weight)*G0_old%mats(0:,0:)
+    G0%mats(:)     = weight*G0%mats(:)     + (1.d0-weight)*G0_old%mats(:)
 
   end subroutine neq_update_weiss_field
 
   !********************************************************************
   !********************************************************************
   !********************************************************************
+
+  function build_kbm_matrix_gf(G,N,L) result(matG)
+    type(kbm_contour_gf)                      :: G
+    integer                                   :: i,j,N,L
+    complex(8),dimension(0:2*N+L+2,0:2*N+L+2) :: matG
+    matG=zero
+    forall(i=0:N,j=0:N)
+       matG(i,        j)   = step(t(i)-t(j))*G%gtr(i,j)  + step(t(j)-t(i))*G%less(i,j)
+       matG(i,    N+1+j)   = G%less(i,j)
+       matG(N+1+i,    j)   = G%gtr(i,j)
+       matG(N+1+i,N+1+j)   = (step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
+    end forall
+    forall(i=0:N,j=0:L)
+       matG(i    ,2*N+2+j) =  G%lmix(i,j)
+       matG(N+1+i,2*N+2+j) =  G%lmix(i,j)
+    end forall
+    forall(i=0:L,j=0:N)
+       matG(2*N+2+i,    j) =  conjg(G%lmix(j,L-i))
+       matG(2*N+2+i,N+1+j) =  conjg(G%lmix(j,L-i))
+    end forall
+    forall(i=0:L,j=0:L)matG(2*N+2+i,2*N+2+j) = xi*G%mats(i-j)
+  end function build_kbm_matrix_gf
+
+  !********************************************************************
+  !********************************************************************
+  !********************************************************************
+
+  subroutine scatter_kbm_matrix_gf(matG,N,L,G)
+    integer              :: i,j,N,L
+    complex(8)           :: matG(0:2*N+L+2,0:2*N+L+2)
+    type(kbm_contour_gf) :: G
+    if(.not.G%status)call error("Error 1")
+    if(G%N/=N)call error("Error 2: N")
+    if(G%L/=L)call error("Error 3: L")
+    forall(i=0:N,j=0:N)
+       G%less(i,j) =  matG(i,N+1+j) !matG12
+       G%gtr(i,j)  =  matG(N+1+i,j) !matG21
+    end forall
+    G%lmix(0:N,0:L) =  matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
+    forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,L-i))    
+    G%mats(0:L) = dimag(matG(2*N+2:2*N+2+L,2*N+2))!,2*N+2:2*N+2+L))
+    forall(i=1:L)G%mats(-i)=-G%mats(L-i)
+  end subroutine scatter_kbm_matrix_gf
+
+  !******************************************************************
+  !******************************************************************
+  !******************************************************************
 
   function build_keldysh_matrix_gf(G,N) result(matG)
     type(keldysh_contour_gf)              :: G
@@ -115,77 +175,6 @@ contains
   !********************************************************************
   !********************************************************************
   !********************************************************************
-
-  function build_kbm_matrix_gf(G,N,L) result(matG)
-    type(kbm_contour_gf)                      :: G
-    integer                                   :: i,j,N,L
-    complex(8),dimension(0:2*N+L+2,0:2*N+L+2) :: matG
-    ! complex(8)                                :: Glmix(0:N,0:L)
-    ! real(8)                                   :: eqGtau(-L:L),upmGtau(0:L)
-    ! forall(i=0:L)upmGtau(i) = G%mats(i,0)                      !get the eq. G(tau) on the UPM grid:
-    ! call cubic_spline(upmGtau(0:),tau(0:),eqGtau(0:),ftau(0:)) !interpolate to Linear Mesh (0:beta)    
-    ! forall(i=1:L)eqGtau(-i)=-eqGtau(L-i)                       !get the (-beta:0) part
-    ! do i=0,N                                                   !interpolate G^lmix(t,tau`)
-    !    call cubic_spline(G%lmix(i,0:),tau(0:),Glmix(i,0:),ftau(0:))
-    ! enddo
-    !
-    matG=zero
-    forall(i=0:N,j=0:N)
-       matG(i,        j)   = step(t(i)-t(j))*G%gtr(i,j)  + step(t(j)-t(i))*G%less(i,j)
-       matG(i,    N+1+j)   = G%less(i,j)
-       matG(N+1+i,    j)   = G%gtr(i,j)
-       matG(N+1+i,N+1+j)   = (step(t(i)-t(j))*G%less(i,j)+ step(t(j)-t(i))*G%gtr(i,j))
-    end forall
-    forall(i=0:N,j=0:L)
-       matG(i    ,2*N+2+j) =  G%lmix(i,j)
-       matG(N+1+i,2*N+2+j) =  G%lmix(i,j)
-    end forall
-    forall(i=0:L,j=0:N)
-       matG(2*N+2+i,    j) =  conjg(G%lmix(j,L-i))  !=G%gmix
-       matG(2*N+2+i,N+1+j) =  conjg(G%lmix(j,L-i))  !=G%gmix
-    end forall
-    forall(i=0:L,j=0:L)matG(2*N+2+i,2*N+2+j) = xi*G%mats(i,j)
-  end function build_kbm_matrix_gf
-
-  !********************************************************************
-  !********************************************************************
-  !********************************************************************
-
-  subroutine scatter_kbm_matrix_gf(matG,N,L,G)
-    integer              :: i,j,N,L
-    complex(8)           :: matG(0:2*N+L+2,0:2*N+L+2)
-    type(kbm_contour_gf) :: G
-    ! complex(8)           :: Glmix(0:N,0:L)
-    ! real(8)              :: eqGtau(-L:L),upmGtau(0:L)
-    if(.not.G%status)call error("Error 1")
-    if(G%N/=N)call error("Error 2: N")
-    if(G%L/=L)call error("Error 3: L")
-    forall(i=0:N,j=0:N)
-       G%less(i,j) =  matG(i,N+1+j) !matG12
-       G%gtr(i,j)  =  matG(N+1+i,j) !matG21
-    end forall
-    G%lmix(0:N,0:L) =  matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
-    forall(i=0:L)G%gmix(i,:)=conjg(G%lmix(:,L-i))
-    G%mats(0:L,0:L) = aimag(matG(2*N+2:2*N+2+L,2*N+2:2*N+2+L))
-    ! Glmix(0:N,0:L) =  matG(0:N,2*N+2:2*N+2+L) !matG13/matG23
-    ! do i=0,N
-    !    call cubic_spline(Glmix(i,0:),ftau(0:),G%lmix(i,0:),tau(0:))
-    ! enddo
-    ! !This is an almost useless step: the ^M components are obtained
-    ! !from the eq. Matsubara solution of the problem. Why bother? In any case:
-    ! !Get the G(tau) from the first column of G%mats (suppose it's correct)
-    ! forall(i=0:L)eqGtau(i) = dimag(matG(2*N+2+i,2*N+2))        !get the eq. G(tau) on the Linear grid:
-    ! call cubic_spline(eqGtau(0:),ftau(0:),upmGtau(0:),tau(0:)) !interpolate to UPmesh (0:beta)
-    ! forall(i=1:L)upmGtau(-i)=-upmGtau(L-i)                     !get the (-beta:0) part
-    ! forall(i=0:L,j=0:L)G%mats(i,j)=upmGtau(i-j)                !build G^M(tau,tau`) on linear Mesh
-    !##################################################################
-  end subroutine scatter_kbm_matrix_gf
-
-  !******************************************************************
-  !******************************************************************
-  !******************************************************************
-
-
 
   subroutine update_equilibrium_weiss_field
     integer :: M,i,j,k,itau,jtau,NN
