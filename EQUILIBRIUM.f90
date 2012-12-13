@@ -10,28 +10,15 @@ module EQUILIBRIUM
   implicit none
   private
 
-  !Equilibrium Function
-  complex(8),allocatable,dimension(:) :: sigma_,fg_,fg0_
-  complex(8),allocatable,dimension(:) :: fiw_,siw_,f0iw_
-  real(8),allocatable,dimension(:)    :: ftau_,stau_,f0tau_
-  real(8),allocatable,dimension(:)    :: wr_,wm_
-
   public  :: solve_equilibrium_ipt
 
 contains
 
   subroutine solve_equilibrium_ipt
-    integer    :: ik,i
-    real(8)    :: n
     if(mpiID==0)then
        call create_data_dir("Equilibrium")
        call solve_equilibrium_ipt_matsubara
        call solve_equilibrium_ipt_realaxis
-
-       deallocate(sigma_,fg_,fg0_)
-       deallocate(siw_,fiw_,f0iw_)
-       deallocate(stau_,ftau_,f0tau_)
-       deallocate(wr_,wm_)
     endif
   end subroutine solve_equilibrium_ipt
 
@@ -43,54 +30,48 @@ contains
 
 
   subroutine solve_equilibrium_ipt_matsubara()
-    integer    :: i,j,loop
-    logical    :: converged
-    complex(8) :: zeta
-    real(8)    :: n,z,wmax_
-    complex(8),allocatable,dimension(:) :: sold
+    integer                 :: i,j,loop
+    logical                 :: converged
+    complex(8)              :: zeta
+    real(8)                 :: n,z,wmax_
+    complex(8),dimension(L) :: fiw_,siw_,f0iw_,sold
+    real(8),dimension(0:L)  :: ftau_,stau_,f0tau_
+    real(8),dimension(L)    :: wm_
+    real(8),dimension(0:L)  :: tau_
     call msg("Solving  Equilibrium problem in Matsubara:")
     call create_data_dir("Equilibrium/Matsubara")
-    allocate(fiw_(L),siw_(L),f0iw_(L))
-    allocate(ftau_(0:Ltau),stau_(0:Ltau),f0tau_(0:Ltau))
-    allocate(sold(L))
-    allocate(wm_(L))
-    wm_ = pi/beta*real(2*arange(1,L)-1,8)
-    siw_=zero ; sold=siw_
-    loop=0 ; converged=.false.
+    wm_      = pi/beta*real(2*arange(1,L)-1,8)
+    tau_(0:) = linspace(0.d0,beta,L+1)
+    siw_     = zero
+    loop     = 0 ; converged=.false.
     do while (.not.converged)
        loop=loop+1
+       sold=f0iw_
        write(*,"(A,i5)",advance="no")"DMFT-loop",loop
        do i=1,L
           zeta    = xi*wm_(i) - siw_(i)
           fiw_(i) = sum_overk_zeta(zeta,epsik,wt)
        enddo
        call  fftgf_iw2tau(fiw_,ftau_(0:),beta)
-       n     =-real(ftau_(Ltau))
+       n     =-real(ftau_(L))
        f0iw_= one/(one/fiw_ + siw_)
-       siw_ = solve_ipt_matsubara(f0iw_)
-       siw_ = weight*siw_ + (1.d0-weight)*sold ; sold=siw_
-       converged=check_convergence(siw_,eps_error,Nsuccess,eqNloop)
+       !
+       call fftgf_iw2tau(f0iw_,f0tau_,beta)
+       forall(i=0:L)stau_(i)=U**2*(f0tau_(i))**2*f0tau_(L-i) 
+       call fftgf_tau2iw(stau_,siw_,beta)
+       !
+       f0iw_ = weight*f0iw_ + (1.d0-weight)*sold
+       converged=check_convergence(f0iw_,eps_error,Nsuccess,eqNloop)
        z=1.d0 - dimag(siw_(1))/wm_(1);z=1.d0/z
-       call splot("Equilibrium/Matsubara/observables_all.ipt",dble(loop),beta,u,n,z,append=TT)
+       call splot("Equilibrium/Matsubara/observables_all.ipt",&
+            dfloat(loop),beta,u,n,z,append=TT)
     enddo
-    !Use IPT to get S(tau).
-    call fftgf_iw2tau(f0iw_,f0tau_(0:),beta)
-    forall(i=0:Ltau)stau_(i)=U**2*(f0tau_(i))**2*f0tau_(Ltau-i) 
     call close_file("Equilibrium/Matsubara/observables_all.ipt")
     call splot("Equilibrium/Matsubara/G_iw.ipt",wm_,fiw_)
     call splot("Equilibrium/Matsubara/G0_iw.ipt",wm_,f0iw_)
     call splot("Equilibrium/Matsubara/Sigma_iw.ipt",wm_,siw_)
-    call splot("Equilibrium/Matsubara/G0_tau.ipt",tau(0:),f0tau_(0:))
-    call splot("Equilibrium/Matsubara/Sigma_tau.ipt",tau(0:),stau_(0:))
-  contains
-    function solve_ipt_matsubara(fg0_) result(sigma_)
-      complex(8),dimension(L)  :: fg0_
-      complex(8),dimension(L)  :: sigma_
-      real(8),dimension(0:L)   :: fg0tau_,sigmatau_
-      call fftgf_iw2tau(fg0_,fg0tau_,beta)
-      forall(i=0:L)sigmatau_(i)=U**2*(fg0tau_(i))**2*fg0tau_(L-i)
-      call fftgf_tau2iw(sigmatau_,sigma_,beta)
-    end function solve_ipt_matsubara
+    call splot("Equilibrium/Matsubara/G0_tau.ipt",tau_(0:),f0tau_(0:))
+    call splot("Equilibrium/Matsubara/Sigma_tau.ipt",tau_(0:),stau_(0:))
   end subroutine solve_equilibrium_ipt_matsubara
 
 
@@ -100,24 +81,20 @@ contains
 
 
   subroutine solve_equilibrium_ipt_realaxis()
-    integer                             :: i,j,loop
-    logical                             :: converged
-    complex(8)                          :: zeta
-    real(8)                             :: n,z,wmax_,mesh
-    complex(8),allocatable,dimension(:) :: sold,sigt
-    integer,allocatable,dimension(:,:)  :: iy_m_ix
-    real(8),dimension(:),allocatable    :: A0m,A0p,P1,P2
+    integer                 :: i,j,loop
+    logical                 :: converged
+    complex(8)              :: zeta
+    real(8)                 :: n,z,wmax_,mesh
+    complex(8),dimension(L) :: sigma_,fg_,fg0_,sold
+    real(8),dimension(L)    :: wr_
+    integer,dimension(L,L)  :: iy_m_ix
+    real(8),dimension(L)    :: A0m,A0p,P1,P2
     call msg("Solving  Equilibrium problem on Real-axis:")
     call create_data_dir("Equilibrium/Real")
-    allocate(fg_(L))
-    allocate(sigma_(L))
-    allocate(fg0_(L))
-    allocate(sold(L))
-    allocate(wr_(L))
     call get_frequency_index
-    wmax_= min(20.d0,wmax)
-    wr_ = linspace(-wmax_,wmax_,L,mesh=mesh)
-    sigma_=zero ; sold=sigma_
+    wmax_ = min(20.d0,wmax)
+    wr_   = linspace(-wmax_,wmax_,L,mesh=mesh)
+    sigma_= zero ; sold=sigma_
     loop=0 ; converged=.false.             
     do while (.not.converged)
        loop=loop+1
@@ -129,7 +106,9 @@ contains
        n      = sum(aimag(fg_)*fermi(wr_,beta))/sum(aimag(fg_))
        fg0_   = one/(one/fg_ + sigma_)
        sold  = sigma_
-       call solve_ipt_sopt()
+       call getAs
+       call getPolarization
+       call sopt
        sigma_= weight*sigma_ + (1.d0-weight)*sold
        converged=check_convergence(sigma_,eps_error,nsuccess,eqNloop)
        call splot("Equilibrium/Real/nVSiloop.ipt",loop,n,append=TT)
@@ -140,15 +119,8 @@ contains
     call splot("Equilibrium/Real/G0_realw.ipt",wr_,fg0_)
     call splot("Equilibrium/Real/Sigma_realw.ipt",wr_,sigma_)
   contains
-    subroutine solve_ipt_sopt()
-      call getAs
-      call getPolarization
-      call Sopt
-    end subroutine solve_ipt_sopt
-    !
     subroutine get_frequency_index()
       integer :: ix,iy,iz
-      if(.not.allocated(iy_m_ix))allocate(iy_m_ix(L,L))
       iy_m_ix=0
       do ix=1,L
          do iy=1,L
@@ -157,10 +129,6 @@ contains
             iy_m_ix(iy,ix)=iz
          enddo
       enddo
-      if(.not.allocated(A0m))allocate(A0m(L))
-      if(.not.allocated(A0p))allocate(A0p(L))
-      if(.not.allocated(P1)) allocate(P1(L))
-      if(.not.allocated(P2)) allocate(P2(L))
     end subroutine get_frequency_index
     !
     subroutine getAs
@@ -201,7 +169,7 @@ contains
          enddo
          imS(ix)=-(U**2)*(sum1+sum2)*pi
       enddo
-      reS = kronig(imS,wr_,size(ImS))
+      reS = kronig(imS,wr_,L)
       sigma_ = reS + xi*imS
     end subroutine Sopt
   end subroutine solve_equilibrium_ipt_realaxis

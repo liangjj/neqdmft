@@ -25,8 +25,10 @@ contains
     !Normalize the Electric Field components
     !Keep unaltered the Electric Field Strenght Efield=E0
     modulo=sqrt(Ex**2+Ey**2)
-    Ex=Ex/modulo
-    Ey=Ey/modulo
+    if(modulo/=0.d0)then
+       Ex=Ex/modulo
+       Ey=Ey/modulo
+    endif
     Ek%x=Ex;Ek%y=Ey
     call msg("|E|=E0="//trim(txtfy(Efield/modulo)),id=0)
     if(alat==0)call error("a_lat=0! EXIT")

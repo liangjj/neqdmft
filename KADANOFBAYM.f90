@@ -29,11 +29,7 @@ contains
   !PURPOSE  : Evaluate the k-sum to get the local Green's functions (R,>,<)
   !+-------------------------------------------------------------------+
   subroutine neq_get_localgf()
-    if(solve_wfftw)then
-       call get_equilibrium_localgf
-    else
-       call kadanoff_baym_to_localgf()
-    endif
+    call kadanoff_baym_to_localgf()
     if(fchi)call get_chi
     call print_out_Gloc()
   end subroutine neq_get_localgf
