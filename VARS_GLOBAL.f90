@@ -43,8 +43,8 @@ MODULE VARS_GLOBAL
   real(8)                                :: fmesh          !freq. step
   real(8)                                :: beta           !inverse temperature
   real(8)                                :: eps            !broadening
-  logical                                :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
-  logical                                :: solve_wfftw   !solve_wfftw=TT solve Kadanof-Baym equations using FFTw (iff Efield=0)
+  ! logical                                :: update_wfftw  !update_wfftw=TT update WF using FFTw (iff Efield=0)
+  ! logical                                :: solve_wfftw   !solve_wfftw=TT solve Kadanof-Baym equations using FFTw (iff Efield=0)
   character(len=16)                      :: int_method    !choose the integration method (rect,trapz,simps)
   character(len=16)                      :: bath_type     !choose the shape of the BATH
   character(len=16)                      :: field_type !choose the profile of the electric field
@@ -175,8 +175,8 @@ MODULE VARS_GLOBAL
                                 !FLAGS:
        int_method   ,& 
        solve_eq     ,& 
-       update_wfftw ,& 
-       solve_wfftw  ,& 
+       ! update_wfftw ,& 
+       ! solve_wfftw  ,& 
        plot3D       ,& 
        fchi         ,& 
        upmflag      ,&
@@ -254,7 +254,7 @@ contains
          ' eps=[0.05d0]             -- Broadening on the real-axis',&
          ' Nx=[50]                  -- Number of k-points along x-axis ',&
          ' Ny=[50]                  -- Number of k-points along y-axis ',&
-         ' solve_wfftw =[F]         -- ',&
+         ! ' solve_wfftw =[F]         -- ',&
          ' plot3D=[F]       -- ',&
          ' Lkreduced=[200]  -- ',&
          ' eps=[0.05d0]         -- ',&
@@ -302,8 +302,8 @@ contains
     !FLAGS:
     int_method   = 'trapz'
     solve_eq     = .false. 
-    update_wfftw = .false.
-    solve_wfftw  = .false.
+    ! update_wfftw = .false.
+    ! solve_wfftw  = .false.
     plot3D       = .false.
     fchi         = .false.
     upmflag      = .false.
@@ -364,8 +364,8 @@ contains
     !FLAGS:
     call parse_cmd_variable(int_method   ,"INT_METHOD")
     call parse_cmd_variable(solve_eq     ,"SOLVE_EQ")
-    call parse_cmd_variable(update_wfftw ,"UPDATE_WFFTW")
-    call parse_cmd_variable(solve_wfftw  ,"SOLVE_WFFTW")
+    ! call parse_cmd_variable(update_wfftw ,"UPDATE_WFFTW")
+    ! call parse_cmd_variable(solve_wfftw  ,"SOLVE_WFFTW")
     call parse_cmd_variable(plot3D       ,"PLOT3D")
     call parse_cmd_variable(fchi         ,"FCHI")
     call parse_cmd_variable(upmflag      ,"UPMFLAG")

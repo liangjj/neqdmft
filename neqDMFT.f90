@@ -90,9 +90,7 @@ contains
     real(8),dimension(0:nstep)      :: test_func
     integer                         :: selector
     if(mpiID==0)then
-       if(solve_wfftw)then
-          forall(i=0:nstep)test_func(i)=-xi*locG%less(i,i)
-       elseif(Efield/=0.d0)then
+       if(Efield/=0.d0)then
           Jloc=Vzero
           do ik=1,Lk
              ix=ik2ix(ik);iy=ik2iy(ik)

@@ -30,61 +30,57 @@ contains
 
 
     call msg("Update WF: Dyson (no mixing)")
-    if(update_wfftw)then
-       call update_equilibrium_weiss_field
+    !==== Contour setup =====================================================
+    !Contour indices
+    t1min = 0         ; t1max=nstep          !size(nstep+1)
+    t2min = nstep+1   ; t2max=nstep+1+nstep  !size(nstep+1)
+    t3min = 2*nstep+2 ; t3max=2*nstep+2+Ltau !size(Ltau+1)
+    !Contour differential
+    allocate(dtloc(t1min:t3max))
+    dtloc(t1min:t1max)=  dt
+    dtloc(t2min:t2max)= -dt
+    if(upmflag)then
+       dtloc(t3min)=tau(1)-tau(0)
+       do i=1,Ltau
+          dtloc(t3min+i)=tau(i)-tau(i-1)
+       enddo
+       dtloc(t3min:t3max)= -xi*dtloc(t3min:t3max)
     else
-       !==== Contour setup =====================================================
-       !Contour indices
-       t1min = 0         ; t1max=nstep          !size(nstep+1)
-       t2min = nstep+1   ; t2max=nstep+1+nstep  !size(nstep+1)
-       t3min = 2*nstep+2 ; t3max=2*nstep+2+Ltau !size(Ltau+1)
-       !Contour differential
-       allocate(dtloc(t1min:t3max))
-       dtloc(t1min:t1max)=  dt
-       dtloc(t2min:t2max)= -dt
-       if(upmflag)then
-          dtloc(t3min)=tau(1)-tau(0)
-          do i=1,Ltau
-             dtloc(t3min+i)=tau(i)-tau(i-1)
-          enddo
-          dtloc(t3min:t3max)= -xi*dtloc(t3min:t3max)
-       else
-          dtloc(t3min:t3max)= -xi*dtau
-       endif
-
-
-
-       !====direct inversion of the KBM Contour gf (in G0 *kbm_contour_gf)======
-       allocate(mat_locG(t1min:t3max,t1min:t3max))
-       allocate(mat_Sigma(t1min:t3max,t1min:t3max))
-       allocate(mat_calG(t1min:t3max,t1min:t3max))
-
-       mat_locG(0:,0:) = build_kbm_matrix_gf(locG,Nstep,Ltau)
-       mat_Sigma(0:,0:)= build_kbm_matrix_gf(Sigma,Nstep,Ltau)
-
-       !====inversion of the KBM Contour local GF ==============================
-       forall(i=t1min:t3max,j=t1min:t3max)mat_locG(i,j)=dtloc(i)*mat_locG(i,j)*dtloc(j)
-       call matrix_inverse(mat_locG(0:,0:))
-
-       !====build calG_0^-1 = G_loc^-1 + Sigma =================================
-       mat_calG(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:)
-
-       !====inversion of the KBM Contour calG_0 ================================
-       forall(i=t1min:t3max,j=t1min:t3max)mat_calG(i,j)=dtloc(i)*mat_calG(i,j)*dtloc(j)
-       call matrix_inverse(mat_calG(0:,0:))
-
-       !====scatter of the compontents into G0 *kbm_contour_gf)=================
-       call scatter_kbm_matrix_gf(mat_calG(0:,0:),Nstep,Ltau,G0)
-
-       !====Update of the Matubara component=========
-       eq_G0iw = one/(one/eq_Giw + eq_Siw)
-       ! if(upmflag)then
-       !    call fftgf_iw2tau_upm(wm,eq_G0iw,tau(0:),G0%mats(0:),beta)
-       ! else
-       !    call fftgf_iw2tau(eq_G0iw,G0%mats(0:),beta)
-       ! endif
-       ! forall(i=1:Ltau)G0%mats(-i)=-G0%mats(Ltau-i)
+       dtloc(t3min:t3max)= -xi*dtau
     endif
+
+
+
+    !====direct inversion of the KBM Contour gf (in G0 *kbm_contour_gf)======
+    allocate(mat_locG(t1min:t3max,t1min:t3max))
+    allocate(mat_Sigma(t1min:t3max,t1min:t3max))
+    allocate(mat_calG(t1min:t3max,t1min:t3max))
+
+    mat_locG(0:,0:) = build_kbm_matrix_gf(locG,Nstep,Ltau)
+    mat_Sigma(0:,0:)= build_kbm_matrix_gf(Sigma,Nstep,Ltau)
+
+    !====inversion of the KBM Contour local GF ==============================
+    forall(i=t1min:t3max,j=t1min:t3max)mat_locG(i,j)=dtloc(i)*mat_locG(i,j)*dtloc(j)
+    call matrix_inverse(mat_locG(0:,0:))
+
+    !====build calG_0^-1 = G_loc^-1 + Sigma =================================
+    mat_calG(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:)
+
+    !====inversion of the KBM Contour calG_0 ================================
+    forall(i=t1min:t3max,j=t1min:t3max)mat_calG(i,j)=dtloc(i)*mat_calG(i,j)*dtloc(j)
+    call matrix_inverse(mat_calG(0:,0:))
+
+    !====scatter of the compontents into G0 *kbm_contour_gf)=================
+    call scatter_kbm_matrix_gf(mat_calG(0:,0:),Nstep,Ltau,G0)
+
+    !====Update of the Matubara component=========
+    eq_G0iw = one/(one/eq_Giw + eq_Siw)
+    ! if(upmflag)then
+    !    call fftgf_iw2tau_upm(wm,eq_G0iw,tau(0:),G0%mats(0:),beta)
+    ! else
+    !    call fftgf_iw2tau(eq_G0iw,G0%mats(0:),beta)
+    ! endif
+    ! forall(i=1:Ltau)G0%mats(-i)=-G0%mats(Ltau-i)
 
     !Save data:
     if(mpiID==0)then
