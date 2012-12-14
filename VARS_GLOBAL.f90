@@ -92,14 +92,15 @@ MODULE VARS_GLOBAL
   !NON-EQUILIBRIUM FUNCTIONS:
   !=========================================================  
   !WEISS-FIELDS
-  type(keldysh_contour_gf) :: G0
+  type(keldysh_contour_gf)               :: G0
   !SELF-ENERGY
-  type(keldysh_contour_gf) :: Sigma
+  type(keldysh_contour_gf)               :: Sigma
   !LOCAL GF
-  type(keldysh_contour_gf) :: locG
+  type(keldysh_contour_gf)               :: locG
   !Bath SELF-ENERGY
-  type(keldysh_contour_gf) :: S0
-
+  type(keldysh_contour_gf)               :: S0
+  !HF SELF-ENERGY
+  real(8),allocatable,dimension(:)       :: SigmaHF
 
 
   !MOMENTUM-DISTRIBUTION
@@ -395,6 +396,8 @@ contains
     call allocate_keldysh_contour_gf(locG,Nstep)
     !Bath self-energies:
     call allocate_keldysh_contour_gf(S0,Nstep)
+    !Hartree-Fock Self-energy:
+    allocate(SigmaHF(0:Nstep))
     !Momentum-distribution:
     allocate(nk(0:nstep,Lk),eq_nk(Lk))
     !Equilibrium/Wigner rotated Green's function

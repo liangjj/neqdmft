@@ -27,7 +27,7 @@ contains
        call read_keldysh_contour_gf(Sigma,trim(irdSFILE))
     else
        call msg(bold("Start from the Hartree-Fock self-energy"))
-       Sigma=zero
+       Sigma=zero               !U*(n-0.5d0), n=0.5d0
     endif
 
     inquire(file=trim(irdnkfile),exist=checkNk)
