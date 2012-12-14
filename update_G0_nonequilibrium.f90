@@ -1,5 +1,6 @@
   !=======Component by component inversion==========================
-  if(TT)then
+  if(FF)then
+     call msg("update with method 1: equations for <,>")
      forall(i=0:nstep,j=0:nstep)
         locGret(i,j)= heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
         Sret(i,j)   = heaviside(t(i)-t(j))*(Sigma%gtr(i,j) - Sigma%less(i,j))
@@ -31,6 +32,7 @@
 
   !Matrix update, from testKELDYSHMATGF3
   if(FF)then
+     call msg("update with method 2: inversion and matrix-multiplication")
      !Build Gloc matrix
      allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
@@ -58,7 +60,8 @@
 
 
   !Matrix update, from testKELDYSHMATGF4
-  if(FF)then
+  if(TT)then
+     call msg("update with method 3: direct inversion of keldysh matrix GF")
      !Build Gloc matrix
      allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
