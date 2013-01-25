@@ -1,29 +1,26 @@
 #=========================================================================
-include lib.mk
+include sfmake.inc
 #=========================================================================
 FC=$(SFMPI)/mpif90
 EXE   = neqDMFT
 DIREXE= $(HOME)/.bin
-
+BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
 .SUFFIXES: .f90 
-OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o UPDATE_WF.o KADANOFBAYM.o
+OBJS =  CONTOUR_GF.o VARS_GLOBAL.o ELECTRIC_FIELD.o BATH.o EQUILIBRIUM.o IPT_NEQ.o UPDATE_WF.o KADANOFBAYM.o RESULTS.o
 
 #=================STANDARD COMPILATION====================================
 all:FLAG=$(STD)
     ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
-    BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
 all:compile
 
 #================OPTIMIZED COMPILATION====================================
 opt:FLAG=$(OPT)
     ARGS=$(LIBDMFT) $(SFMODS) $(SFLIBS)
-    BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
 opt:compile
 
 #================DEBUGGIN COMPILATION=====================================
 debug:FLAG=$(DEB)
       ARGS=$(LIBDMFT_DEB) $(SFMODS_DEB) $(SFLIBS_DEB)
-      BRANCH=  $(shell git rev-parse --abbrev-ref HEAD)
 debug:compile
 
 
@@ -48,18 +45,12 @@ data: 	version $(OBJS)
 	@echo " ...................... done .............................. "
 
 
-
 .f90.o:	
 	$(FC) $(FLAG) -c $< $(SFMODS) 
 
-
-
-#=============CLEAN ALL===================================================
 clean: 
 	@echo "Cleaning:"
 	@rm -f *.mod *.o *~ revision.inc
 
-
-#=========================================================================
-include version.mk
-#=========================================================================
+version:
+	@echo $(VER)

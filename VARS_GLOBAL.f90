@@ -51,6 +51,8 @@ MODULE VARS_GLOBAL
   real(8)                                :: weight        !mixing weight parameter
   real(8)                                :: wmin,wmax     !min/max frequency
   real(8)                                :: tmin,tmax     !min/max time
+  real(8)                                :: Walpha         !exponent of the pseudo-gapped bath.
+  real(8)                                :: Wgap          !gap of the gapped bath
   logical                                :: plot3D,fchi
   logical                                :: solve_eq
   !
@@ -139,6 +141,8 @@ MODULE VARS_GLOBAL
        bath_type    ,& 
        Vbath        ,& 
        Wbath        ,& 
+       Walpha       ,&
+       Wgap         ,&
                                 !FIELD:
        Efield       ,& 
        field_type   ,& 
@@ -263,6 +267,8 @@ contains
     bath_type    = 'flat'
     Vbath        = 0.d0
     Wbath        = 20.d0
+    Walpha       = 1.d0
+    Wgap         = 5.d0
     !FIELD:
     Efield       = 0.d0
     field_type   = 'dc'
@@ -319,8 +325,10 @@ contains
     call parse_cmd_variable(eqnloop      ,"EQNLOOP")
     !BATH
     call parse_cmd_variable(Vbath        ,"VBATH")
-    call parse_cmd_variable(wbath        ,"WBATH")
     call parse_cmd_variable(bath_type    ,"BATH_TYPE")
+    call parse_cmd_variable(wbath        ,"WBATH")
+    call parse_cmd_variable(walpha       ,"WALPHA")
+    call parse_cmd_variable(wgap         ,"WGAP")
     !EFIELD
     call parse_cmd_variable(field_type   ,"FIELD_TYPE")
     call parse_cmd_variable(Efield       ,"EFIELD")
@@ -350,6 +358,7 @@ contains
     call parse_cmd_variable(data_dir     ,"DATA_DIR")
     call parse_cmd_variable(plot_dir     ,"PLOT_DIR")
 
+    if(U==0.d0)Nloop=1
 
     if(mpiID==0)then
        write(*,*)"CONTROL PARAMETERS"

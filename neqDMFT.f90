@@ -12,6 +12,7 @@ program neqDMFT
   USE IPT_NEQ                     !performs the non-eq. IPT. Write Sigma
   USE UPDATE_WF                   !contains routines for WF update and printing.
   USE KADANOFBAYM                 !solves KB equations numerically to get k-sum
+  USE RESULTS
   implicit none
 
   integer :: i
@@ -69,6 +70,10 @@ program neqDMFT
      !
      call end_loop()
   enddo
+
+  !EVALUATE AND PRINT THE RESULTS OF THE CALCULATION
+  call plot_results
+
   call msg("BRAVO")
   call MPI_BARRIER(MPI_COMM_WORLD,mpiERR)
   call MPI_FINALIZE(mpiERR)
