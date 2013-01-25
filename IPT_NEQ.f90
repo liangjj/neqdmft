@@ -37,7 +37,7 @@ contains
     else
        !Get non-interacting n(k):
        do ik=1,Lk
-          eq_nk(ik)=fermi((epsik(ik)),beta)
+          eq_nk(ik)=fermi((epsik(ik))-xmu,beta)
        enddo
     endif
     if(mpiID==0)call splot("ic_nkVSepsk.ipt",epsik,eq_nk)

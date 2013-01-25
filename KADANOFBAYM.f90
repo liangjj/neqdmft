@@ -28,7 +28,6 @@ contains
   !+-------------------------------------------------------------------+
   subroutine neq_get_localgf()
     call kadanoff_baym_to_localgf()
-
     call print_out_Gloc()
   end subroutine neq_get_localgf
 
@@ -60,7 +59,7 @@ contains
 
        call step_keldysh_contour_gf(istep)
 
-       call eta(istep+1,nstep)
+       call eta(istep,nstep-1)
     enddo
     call stop_timer
     !=============END T-STEP LOOP======================    
@@ -90,6 +89,7 @@ contains
     !Predictor-corrector solver arrays: store the time-step
     allocate(Ikless(Lk,0:nstep),Ikgtr(Lk,0:nstep))
     allocate(Ikless0(Lk,0:nstep),Ikgtr0(Lk,0:nstep))
+    allocate(Ikdiag(Lk))
     !Chi
     if(fchi)allocate(chi_dia(2,2,0:nstep),chi_pm(2,2,0:nstep,0:nstep))
   end subroutine allocate_funx
@@ -99,6 +99,7 @@ contains
     deallocate(Gk)
     deallocate(Ikless,Ikgtr)
     deallocate(Ikless0,Ikgtr0)
+    deallocate(Ikdiag)
     if(fchi)deallocate(chi_dia,chi_pm)
   end subroutine deallocate_funx
 
@@ -146,7 +147,7 @@ contains
        call get_Ikcollision(ik,Nt)
        Ikless0(ik,:) = Ikless(ik,:)
        Ikgtr0(ik,:)  = Ikgtr(ik,:)
-       Ikdiag(ik)    = -2.d0*dreal(Ikless(ik,Nt))
+       Ikdiag(ik)    =-2.d0*dreal(Ikless(ik,Nt))
        !
        call evolve_gk(ik,Nt)
        !
@@ -370,7 +371,7 @@ contains
     j=ik2iy(ik)
     Ak=Afield(tbar,Ek)
     kt=kgrid(i,j) - Ak
-    Hbar=square_lattice_dispersion(kt)+SigmaHF(Nt)
+    Hbar=square_lattice_dispersion(kt)+SigmaHF(Nt)-xmu
   end function Hbar
 
 
@@ -569,7 +570,7 @@ contains
        call splot("locGret_t.ipt",t,gf%ret%t,append=TT)
        call splot("locGret_realw.ipt",wr,gf%ret%w,append=TT)
        call splot("locDOS.ipt",wr,-aimag(gf%ret%w)/pi,append=TT)
-
+       call splot("SigmaHF_t.ipt",t(0:),SigmaHF(0:),append=TT)
        ! if(fchi)then
        !    call splot(trim(data_dir)//"/locChi_11.data",chi(1,1,0:,0:))
        !    call splot(trim(data_dir)//"/locChi_12.data",chi(1,2,0:,0:))

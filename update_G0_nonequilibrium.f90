@@ -1,5 +1,6 @@
   !=======Component by component inversion==========================
   if(FF)then
+     call msg("update with method 1: equations for <,>")
      forall(i=0:nstep,j=0:nstep)
         locGret(i,j)= heaviside(t(i)-t(j))*(locG%gtr(i,j) - locG%less(i,j))
         Sret(i,j)   = heaviside(t(i)-t(j))*(Sigma%gtr(i,j) - Sigma%less(i,j))
@@ -31,6 +32,7 @@
 
   !Matrix update, from testKELDYSHMATGF3
   if(FF)then
+     call msg("update with method 2: inversion and matrix-multiplication")
      !Build Gloc matrix
      allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
@@ -58,20 +60,27 @@
 
 
   !Matrix update, from testKELDYSHMATGF4
-  if(FF)then
+  if(TT)then
+     call msg("update with method 3: direct inversion of keldysh matrix GF")
      !Build Gloc matrix
      allocate(mat_locG(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = build_keldysh_matrix_gf(locG,nstep)
 
      !Build Sigma matrix
      allocate(mat_Sigma(0:2*nstep+1,0:2*nstep+1))
+     allocate(mat_SigmaHF(0:2*nstep+1,0:2*nstep+1))
      mat_Sigma(0:,0:) = build_keldysh_matrix_gf(Sigma,nstep)
+
+     forall(i=0:nstep)
+        mat_SigmaHF(i,i)                 = SigmaHF(i)/dt
+        mat_SigmaHF(nstep+1+i,nstep+1+i )= SigmaHF(i)/dt
+     end forall
 
      !Get G0 matrix:
      allocate(mat_G0(0:2*nstep+1,0:2*nstep+1))
      mat_locG(0:,0:) = mat_locG(0:,0:)*dt**2
      call matrix_inverse(mat_locG(0:,0:))
-     mat_G0(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:)
+     mat_G0(0:,0:) = mat_locG(0:,0:) + mat_Sigma(0:,0:) - mat_SigmaHF(0:,0:)
      mat_G0(0:,0:) = mat_G0(0:,0:)*dt**2
      call matrix_inverse(mat_G0(0:,0:))
 

@@ -37,6 +37,7 @@ MODULE VARS_GLOBAL
   integer                                :: eqnloop        !dmft loop of the equilibrium solution
   real(8)                                :: ts             !n.n./n.n.n. hopping amplitude
   real(8)                                :: u              !local,non-local interaction 
+  real(8)                                :: xmu            !chemical potential
   real(8)                                :: Vbath          !Hopping amplitude to the BATH
   real(8)                                :: Wbath          !Width of the BATH DOS
   real(8)                                :: dt,dtau        !time step
@@ -100,7 +101,7 @@ MODULE VARS_GLOBAL
   !Bath SELF-ENERGY
   type(keldysh_contour_gf)               :: S0
   !HF SELF-ENERGY
-  real(8),allocatable,dimension(:)       :: SigmaHF
+  complex(8),allocatable,dimension(:)       :: SigmaHF
 
 
   !MOMENTUM-DISTRIBUTION
@@ -130,6 +131,7 @@ MODULE VARS_GLOBAL
        U            ,& 
        ts           ,& 
        eps          ,& 
+       xmu          ,& 
        L            ,& 
        Ltau         ,& 
        Lkreduced    ,& 
@@ -254,6 +256,7 @@ contains
     U            = 4.d0
     ts           = 1.d0
     eps          = 0.01d0
+    xmu          = 0.d0
     L            = 2048  
     Ltau         = 200
     Lkreduced    = 300
@@ -310,6 +313,7 @@ contains
     call parse_cmd_variable(beta         ,"BETA")
     call parse_cmd_variable(nstep        ,"NSTEP")
     call parse_cmd_variable(U            ,"U")
+    call parse_cmd_variable(xmu          ,"XMU")
     call parse_cmd_variable(ts           ,"TS")
     call parse_cmd_variable(eps          ,"EPS")
     call parse_cmd_variable(L            ,"L")
